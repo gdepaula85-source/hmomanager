@@ -1190,10 +1190,20 @@ function getFullPaymentPool() {
     if(!t.paymentHistory) return;
     t.paymentHistory.forEach(function(h) {
       if(h.type!=='history') return;
-      var parts=h.date.split(' ');
       var months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-      var d=new Date(+parts[2],months[parts[1]],+parts[0]);
-      var raw=d.getTime();
+      var d;
+      try {
+        var parts=h.date.split(' ');
+        if(parts.length===3 && months[parts[1]]!==undefined) {
+          // "25 Mar 2026" format
+          d=new Date(+parts[2],months[parts[1]],+parts[0]);
+        } else {
+          // ISO "2026-03-25" or other format
+          var isoParts=h.date.split('T')[0].split('-');
+          d = isoParts.length===3 ? new Date(+isoParts[0],+isoParts[1]-1,+isoParts[2]) : new Date(h.date);
+        }
+      } catch(e) { d=new Date(h.date); }
+      var raw=isNaN(d.getTime()) ? 0 : d.getTime();
       var key=t.name+'|'+raw+'|'+h.amount;
       if(!seen.has(key)){seen.add(key);pool.push({id:'h_'+t.id+'_'+raw,tenant:t.name,property:t.property,room:t.room,amount:h.amount,method:h.method,status:h.status,_dueDateRaw:raw,_fromHistory:true});}
     });
@@ -1317,7 +1327,9 @@ function calcLateFee(p) {
   var due = getDueDateObj(p);
   var daysLate = Math.floor((TODAY - due) / 86400000);
   if(daysLate <= cfg.graceDays) return 0;
-  return cfg.feeType==='fixed' ? cfg.feeAmount : Math.round(p.amount * cfg.feeAmount / 100);
+  // For partial payments, charge fee on the outstanding shortfall only
+  var base = (p.isPartial && p.shortfall > 0) ? p.shortfall : p.amount;
+  return cfg.feeType==='fixed' ? cfg.feeAmount : Math.round(base * cfg.feeAmount / 100);
 }
 
 function togglePaymentMethod(payId) {
@@ -1485,7 +1497,12 @@ function renderRent() {
     .filter(function(t){return t.status!=='inactive' && (t.arrears||0)>0;})
     .filter(function(t){
       // Only add if not already represented in overdue (to avoid double-counting)
-      return !overdue.some(function(o){return o.tenant===t.name;});
+      // Match by tenant ID when available, fall back to name comparison
+      return !overdue.some(function(o){
+        var idMatch = o.tenantId && o.tenantId === t.id;
+        var nameMatch = o.tenant === t.name;
+        return idMatch || nameMatch;
+      });
     })
     .map(function(t){
       return {
@@ -2752,7 +2769,7 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
   // Countdown calculation
   var countdownHtml = '';
   if(t.status==='notice_given' && t.moveOutDate){
-    var daysLeft = Math.ceil((new Date(t.moveOutDate)-TODAY)/86400000);
+    var daysLeft = Math.max(0, Math.ceil((new Date(t.moveOutDate)-TODAY)/86400000));
     var countColor = daysLeft<=7?'var(--red)':daysLeft<=14?'var(--amber)':'var(--green)';
     countdownHtml = '<div style="margin-top:12px;padding:12px;background:#fff;border-radius:9px;border:1px solid '+noticeBorder+';text-align:center">'
       +'<div style="font-size:28px;font-weight:800;color:'+countColor+';font-family:monospace">'+(daysLeft>0?daysLeft+'d':'Today')+'</div>'
@@ -2770,7 +2787,7 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
       ? '<button onclick="cancelTenantNotice(\''+t.id+'\')" style="margin-top:10px;width:100%;padding:9px;border-radius:9px;border:1px solid #FDE68A;background:#fff;color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel Notice</button>'
       : '<div style="margin-top:10px">'
         +'<label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Move-out Date</label>'
-        +'<input type="date" id="notice-moveout-'+t.id+'" class="inp" style="margin:6px 0 10px" min="'+new Date('2026-03-21').toISOString().split('T')[0]+'">'
+        +'<input type="date" id="notice-moveout-'+t.id+'" class="inp" style="margin:6px 0 10px" min="'+new Date().toISOString().split('T')[0]+'">'
         +'<button onclick="giveTenantNotice(\''+t.id+'\')" style="width:100%;padding:9px;border-radius:9px;border:none;background:var(--amber);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Give Notice</button>'
         +'</div>'
     )
@@ -2871,8 +2888,13 @@ function saveTenantDetail(id){
   if(g('td-prop'))t.property=g('td-prop');
   var newRoom = +g('td-room')||t.room;
   var newProp = g('td-prop')||t.property;
-  // Check room isn't taken by another active tenant
+  // Check room exists on the selected property and isn't taken by another active tenant
   if(newRoom !== t.room || newProp !== t.property) {
+    var destProp = state.properties.find(function(x){return x.name===newProp;});
+    if(destProp && destProp.roomList && !destProp.roomList.find(function(r){return r.n===newRoom;})) {
+      alert('⚠️ Room '+newRoom+' does not exist at '+newProp+'. Please check the room number.');
+      return;
+    }
     var roomTaken2 = state.tenants.find(function(x){
       return x.property===newProp && x.room===newRoom && x.status!=='inactive' && x.id!==t.id;
     });
@@ -2980,6 +3002,7 @@ function moveTenantToRoom(tenantId, newPropId, newPropName, newRoomN, newPrice) 
 
 function moveTenantOut(id){
   var t=state.tenants.find(function(x){return x.id===id;});if(!t)return;
+  if(!confirm('Move out '+t.name+'?\n\nThis will free Room '+t.room+' at '+t.property+' and archive this tenant. This cannot be undone easily.'))return;
   var prop=t.property;var room=t.room;
   t.status='inactive';freeRoom(prop,room);rebuildAllSchedules();
   state.tenantDetailTab=null;closeModal();saveState();
@@ -3736,7 +3759,7 @@ function renderRooms(){
       media.photos.forEach(function(ph,pi){
         html+='<div style="flex-shrink:0;width:100%;height:100%;scroll-snap-align:start;position:relative">';
         html+='<img src="'+ph.src+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\"none\";this.nextSibling&&(this.nextSibling.style.display=\"flex\")" onload="console.log(\"Photo loaded OK\")">';
-        html+='<button id="rm-"+_eid+"-delpic-"+pi+"" onclick="removeRoomPhotoByEid(this)" style="position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#x2715;</button>';
+        html+='<button id="rm-'+_eid+'-delpic-'+pi+'" onclick="removeRoomPhotoByEid(this)" style="position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center">&#x2715;</button>';
         html+='</div>';
       });
       html+='</div>';
@@ -3746,7 +3769,7 @@ function renderRooms(){
     }
     if(media.photos.length<4){
       html+='<label style="position:absolute;bottom:8px;left:8px;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.93);border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:4px">';
-      html+='&#x1F4F7; Add Photo<input type="file" accept="image/*" multiple style="display:none" id="rm-"+_eid+"-photo" onchange="handleRoomPhotoChange(this)">';
+      html+='&#x1F4F7; Add Photo<input type="file" accept="image/*" multiple style="display:none" id="rm-'+_eid+'-photo" onchange="handleRoomPhotoChange(this)">';
       html+='</label>';
     }
     html+='</div>';
@@ -3770,23 +3793,23 @@ function renderRooms(){
 
     // Notes
     html+='<div><label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Description</label>';
-    html+='<textarea id="room-notes-'+p.id+'-'+r.n+'" rows="2" class="inp" style="margin-top:4px;resize:vertical;font-size:12px" placeholder="Bright south-facing room, newly decorated, double bed..." id="rm-"+_eid+"-notes" onblur="saveRoomNotesByEid(this)">'+(media.notes||'')+'</textarea></div>';
+    html+='<textarea id="rm-'+_eid+'-notes" rows="2" class="inp" style="margin-top:4px;resize:vertical;font-size:12px" placeholder="Bright south-facing room, newly decorated, double bed..." onblur="saveRoomNotesByEid(this)">'+(media.notes||'')+'</textarea></div>';
 
     // Video
     if(media.video){
       html+='<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:8px;padding:8px 11px">';
       html+='<span>&#x1F3A5;</span><span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+media.video.name+'</span>';
-      html+='<button id="rm-"+_eid+"-delvid" onclick="removeRoomVideoByEid(this)" style="padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)">Remove</button>';
+      html+='<button id="rm-'+_eid+'-delvid" onclick="removeRoomVideoByEid(this)" style="padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)">Remove</button>';
       html+='</div>';
     } else {
       html+='<label style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:9px;border:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--muted)">';
       html+='<span>&#x1F3A5;</span><span>Add video tour <span style="font-size:10px">(max 50MB)</span></span>';
-      html+='<input type="file" accept="video/*" style="display:none" id="rm-"+_eid+"-video" onchange="handleRoomVideoChange(this)">';
+      html+='<input type="file" accept="video/*" style="display:none" id="rm-'+_eid+'-video" onchange="handleRoomVideoChange(this)">';
       html+='</label>';
     }
 
     // Share button
-    html+='<button id="rm-"+_eid+"-share" onclick="shareRoomWAByEid(this)" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:auto">&#x1F4AC; Share on WhatsApp</button>';
+    html+='<button id="rm-'+_eid+'-share" onclick="shareRoomWAByEid(this)" style="display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:auto">&#x1F4AC; Share on WhatsApp</button>';
 
     html+='</div></div>';
   });
