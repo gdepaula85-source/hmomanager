@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropManager — Log in</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --ink:#0A0A0F; --ink2:#13131A; --ink3:#1E1E2A;
+  --silver:#8B8B9A; --dim:#5A5A6E; --line:rgba(255,255,255,.08);
+  --white:#FFFFFF; --green:#00D897; --red:#FF5252; --amber:#F5A623;
+  --grad:linear-gradient(135deg,#00D897,#4B9EFF);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+
+body {
+  font-family:'Plus Jakarta Sans',-apple-system,sans-serif;
+  background:var(--ink);
+  color:var(--white);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:20px;
+  position:relative;
+  overflow:hidden;
+}
+
+/* Background */
+.bg-glow {
+  position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 50%, rgba(0,216,151,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(75,158,255,.06) 0%, transparent 60%);
+}
+.bg-grid {
+  position:fixed; inset:0; pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent);
+}
+
+/* Card */
+.card {
+  position:relative; z-index:1;
+  width:100%; max-width:420px;
+  background:var(--ink2);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:40px;
+  box-shadow:0 32px 80px rgba(0,0,0,.6);
+  animation:slideUp .5s ease both;
+}
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+/* Logo */
+.logo {
+  font-family:'Playfair Display',Georgia,serif;
+  font-size:24px; letter-spacing:-.5px;
+  text-align:center; margin-bottom:8px;
+}
+.logo span { color:var(--green); }
+.tagline { text-align:center; font-size:13px; color:var(--dim); margin-bottom:32px; }
+
+/* Tabs */
+.tabs {
+  display:flex; gap:0;
+  background:var(--ink3); border-radius:10px; padding:4px;
+  margin-bottom:28px;
+}
+.tab {
+  flex:1; padding:9px; text-align:center;
+  font-size:13px; font-weight:600; cursor:pointer;
+  border-radius:7px; transition:all .2s;
+  color:var(--silver); border:none; background:none; font-family:inherit;
+}
+.tab.active { background:var(--ink2); color:var(--white); box-shadow:0 1px 4px rgba(0,0,0,.4); }
+
+/* Form */
+.field { margin-bottom:16px; }
+label { display:block; font-size:12px; font-weight:600; color:var(--silver); margin-bottom:6px; letter-spacing:.04em; text-transform:uppercase; }
+input[type=email], input[type=password], input[type=text] {
+  width:100%; padding:12px 14px;
+  background:var(--ink3); border:1px solid var(--line);
+  border-radius:10px; color:var(--white);
+  font-size:15px; font-family:inherit;
+  transition:border-color .2s, box-shadow .2s;
+  outline:none;
+}
+input:focus { border-color:rgba(0,216,151,.4); box-shadow:0 0 0 3px rgba(0,216,151,.08); }
+input::placeholder { color:var(--dim); }
+
+/* Password toggle */
+.pw-wrap { position:relative; }
+.pw-toggle {
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  background:none; border:none; cursor:pointer; color:var(--dim);
+  font-size:16px; padding:2px; transition:color .2s;
+}
+.pw-toggle:hover { color:var(--silver); }
+
+/* Submit */
+.btn-submit {
+  width:100%; padding:14px;
+  background:var(--green); color:var(--ink);
+  border:none; border-radius:100px;
+  font-size:15px; font-weight:700; font-family:inherit;
+  cursor:pointer; transition:all .2s;
+  margin-top:8px;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.btn-submit:hover { box-shadow:0 8px 28px rgba(0,216,151,.35); transform:translateY(-1px); }
+.btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; box-shadow:none; }
+
+/* Error / success */
+.msg {
+  padding:12px 14px; border-radius:10px;
+  font-size:13px; font-weight:500;
+  margin-bottom:16px; display:none;
+  animation:fadeIn .3s ease;
+}
+.msg.error { background:rgba(255,82,82,.1); border:1px solid rgba(255,82,82,.2); color:#ff8a8a; display:block; }
+.msg.success { background:rgba(0,216,151,.1); border:1px solid rgba(0,216,151,.2); color:var(--green); display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+/* Divider */
+.divider { display:flex; align-items:center; gap:12px; margin:20px 0; }
+.divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--line); }
+.divider span { font-size:12px; color:var(--dim); white-space:nowrap; }
+
+/* Forgot */
+.forgot {
+  text-align:right; margin-top:-10px; margin-bottom:16px;
+}
+.forgot a { font-size:12px; color:var(--dim); text-decoration:none; transition:color .2s; }
+.forgot a:hover { color:var(--silver); }
+
+/* Back link */
+.back { text-align:center; margin-top:24px; font-size:13px; color:var(--dim); }
+.back a { color:var(--silver); text-decoration:none; transition:color .2s; }
+.back a:hover { color:var(--white); }
+
+/* Loading spinner */
+.spinner {
+  width:16px; height:16px;
+  border:2px solid rgba(10,10,15,.3);
+  border-top-color:var(--ink);
+  border-radius:50%;
+  animation:spin .6s linear infinite;
+  display:none;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* Plan selector */
+.plan-banner {
+  display:none; margin-bottom:20px;
+  background:rgba(0,216,151,.08); border:1px solid rgba(0,216,151,.2);
+  border-radius:10px; padding:12px 14px;
+  display:flex; align-items:center; gap:10px;
+}
+.plan-banner-icon { font-size:20px; flex-shrink:0; }
+.plan-banner-text { flex:1; font-size:12px; color:var(--silver); line-height:1.4; }
+.plan-banner-name { font-weight:700; color:var(--white); font-size:13px; }
+.plan-change { font-size:11px; color:var(--green); cursor:pointer; text-decoration:underline; background:none; border:none; font-family:inherit; padding:0; }
+
+.plan-selector { margin-bottom:18px; }
+.plan-selector label { display:block; font-size:12px; font-weight:600; color:var(--silver); margin-bottom:8px; letter-spacing:.04em; text-transform:uppercase; }
+.plan-options { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.plan-opt { position:relative; cursor:pointer; }
+.plan-opt input { position:absolute; opacity:0; width:0; height:0; }
+.plan-opt-box {
+  display:flex; flex-direction:column; padding:10px 12px;
+  border-radius:9px; border:1.5px solid var(--line);
+  background:var(--ink3); transition:all .15s; cursor:pointer;
+}
+.plan-opt input:checked + .plan-opt-box {
+  border-color:var(--green); background:rgba(0,216,151,.08);
+}
+.plan-opt-box:hover { border-color:rgba(0,216,151,.3); }
+.plan-opt-name { font-size:12px; font-weight:700; color:var(--white); margin-bottom:1px; }
+.plan-opt-price { font-size:11px; color:var(--silver); }
+.plan-opt-badge { font-size:9px; font-weight:800; background:var(--green); color:var(--ink); padding:1px 5px; border-radius:4px; display:inline-block; margin-bottom:3px; }
+
+.reset-icon { font-size:48px; margin-bottom:16px; }
+.reset-title { font-size:18px; font-weight:700; margin-bottom:8px; }
+.reset-sub { font-size:14px; color:var(--silver); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+<div class="bg-grid"></div>
+
+<div class="card">
+  <div class="logo">Prop<span>Manager</span></div>
+  <p class="tagline">South London HMOs</p>
+
+  <!-- Auth tabs -->
+  <div class="tabs" id="auth-tabs">
+    <button class="tab active" onclick="switchTab('login')">Log in</button>
+    <button class="tab" onclick="switchTab('signup')">Sign up</button>
+  </div>
+
+  <!-- Message -->
+  <div class="msg" id="msg"></div>
+
+  <!-- LOGIN FORM -->
+  <form id="login-form" onsubmit="handleLogin(event)">
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="login-password" placeholder="Your password" autocomplete="current-password" required>
+        <button type="button" class="pw-toggle" onclick="togglePw('login-password',this)">👁</button>
+      </div>
+    </div>
+    <div class="forgot"><a href="#" onclick="showForgot(event)">Forgot password?</a></div>
+    <button type="submit" class="btn-submit" id="login-btn">
+      <div class="spinner" id="login-spinner"></div>
+      <span id="login-btn-text">Log in</span>
+    </button>
+  </form>
+
+  <!-- SIGNUP FORM -->
+  <form id="signup-form" style="display:none" onsubmit="handleSignup(event)">
+
+    <!-- Plan banner (shown when arriving from pricing page) -->
+    <div class="plan-banner" id="plan-banner" style="display:none">
+      <div class="plan-banner-icon">🎯</div>
+      <div class="plan-banner-text">
+        Starting with <span class="plan-banner-name" id="plan-banner-name">Professional</span> trial
+        <br><span style="font-size:11px">14 days free · No card required</span>
+      </div>
+      <button type="button" class="plan-change" onclick="showPlanPicker()">Change</button>
+    </div>
+
+    <!-- Plan selector (shown when no plan pre-selected or user clicks Change) -->
+    <div class="plan-selector" id="plan-picker" style="display:none">
+      <label>Choose your plan (14-day free trial)</label>
+      <div class="plan-options">
+        <label class="plan-opt">
+          <input type="radio" name="signup-plan" value="starter" onchange="onPlanChange()">
+          <div class="plan-opt-box">
+            <div class="plan-opt-name">Starter</div>
+            <div class="plan-opt-price">£49/mo after trial</div>
+          </div>
+        </label>
+        <label class="plan-opt">
+          <input type="radio" name="signup-plan" value="professional" onchange="onPlanChange()">
+          <div class="plan-opt-box">
+            <div class="plan-opt-badge">Popular</div>
+            <div class="plan-opt-name">Professional</div>
+            <div class="plan-opt-price">£89/mo after trial</div>
+          </div>
+        </label>
+        <label class="plan-opt">
+          <input type="radio" name="signup-plan" value="business" onchange="onPlanChange()">
+          <div class="plan-opt-box">
+            <div class="plan-opt-name">Business</div>
+            <div class="plan-opt-price">£149/mo after trial</div>
+          </div>
+        </label>
+        <label class="plan-opt">
+          <input type="radio" name="signup-plan" value="trial" checked onchange="onPlanChange()">
+          <div class="plan-opt-box">
+            <div class="plan-opt-name">Just exploring</div>
+            <div class="plan-opt-price">Free trial only</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="signup-name" placeholder="Gleydson De Paula" autocomplete="name" required>
+    </div>
+    <div class="field">
+      <label>Company / portfolio name</label>
+      <input type="text" id="signup-company" placeholder="e.g. Reservations Direct" autocomplete="organization">
+    </div>
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="signup-email" placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signup-password" placeholder="Min 8 characters" autocomplete="new-password" required minlength="8">
+        <button type="button" class="pw-toggle" onclick="togglePw('signup-password',this)">👁</button>
+      </div>
+    </div>
+    <button type="submit" class="btn-submit" id="signup-btn">
+      <div class="spinner" id="signup-spinner"></div>
+      <span id="signup-btn-text">Start free trial</span>
+    </button>
+    <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--dim)">
+      No credit card required · Cancel anytime
+    </div>
+  </form>
+
+  <!-- RESET FORM -->
+  <div id="forgot-title" style="display:none;margin-bottom:24px">
+    <div style="font-size:18px;font-weight:700;color:var(--white);margin-bottom:6px">Reset your password</div>
+    <div style="font-size:13px;color:var(--silver)">Enter your email and we'll send a reset link.</div>
+  </div>
+  <form id="reset-form" onsubmit="handleReset(event)">
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="reset-email" placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <button type="submit" class="btn-submit" id="reset-btn">
+      <div class="spinner" id="reset-spinner"></div>
+      <span id="reset-btn-text">Send reset link</span>
+    </button>
+    <div style="text-align:center;margin-top:14px">
+      <a href="#" onclick="hideForgot()" style="font-size:13px;color:var(--silver);text-decoration:none">← Back to log in</a>
+    </div>
+  </form>
+
+  <!-- RESET SUCCESS -->
+  <div id="reset-success">
+    <div class="reset-icon">📬</div>
+    <div class="reset-title">Check your email</div>
+    <p class="reset-sub">We've sent a password reset link to your email. Click the link to set a new password.</p>
+    <button class="btn-submit" onclick="showReset(null,false)" style="margin-top:24px">Back to log in</button>
+  </div>
+
+  <div class="back" id="back-link">
+    <a href="propmanager-landing.html">← Back to home</a>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = 'https://kzumoubhxdoqqcucdact.supabase.co';
+const SUPA_KEY = 'sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const PLAN_LABELS = { trial:'Free Trial', starter:'Starter', professional:'Professional', business:'Business' };
+
+// ── On load: check session + read URL params ───────────────────
+(async function() {
+  try {
+    const { data: { session } } = await supa.auth.getSession();
+    if (session) { window.location.href = 'index.html'; return; }
+  } catch(e) {}
+
+  // Read URL params
+  var params = new URLSearchParams(location.search);
+  var planParam = params.get('plan');
+  var tabParam  = params.get('tab');
+
+  if(tabParam === 'signup' || planParam) {
+    switchTab('signup');
+  }
+
+  if(planParam && PLAN_LABELS[planParam]) {
+    // Pre-select plan from pricing page
+    selectPlan(planParam);
+    // Show banner, hide picker
+    document.getElementById('plan-banner').style.display = 'flex';
+    document.getElementById('plan-banner-name').textContent = PLAN_LABELS[planParam];
+    document.getElementById('plan-picker').style.display = 'none';
+  } else if(tabParam === 'signup') {
+    // No plan — show picker
+    document.getElementById('plan-banner').style.display = 'none';
+    document.getElementById('plan-picker').style.display = 'block';
+  }
+})();
+
+function selectPlan(plan) {
+  var radios = document.querySelectorAll('input[name="signup-plan"]');
+  radios.forEach(function(r){ r.checked = r.value === plan; });
+}
+
+function getSelectedPlan() {
+  var checked = document.querySelector('input[name="signup-plan"]:checked');
+  return checked ? checked.value : 'trial';
+}
+
+function showPlanPicker() {
+  document.getElementById('plan-banner').style.display = 'none';
+  document.getElementById('plan-picker').style.display = 'block';
+}
+
+function onPlanChange() {
+  var plan = getSelectedPlan();
+  document.getElementById('plan-banner-name').textContent = PLAN_LABELS[plan] || plan;
+}
+
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('login-form').style.display   = tab==='login'   ? '' : 'none';
+  document.getElementById('signup-form').style.display  = tab==='signup'  ? '' : 'none';
+  document.getElementById('reset-form').style.display   = 'none';
+  document.getElementById('reset-success').style.display= 'none';
+  document.getElementById('auth-tabs').style.display    = '';
+  document.getElementById('back-link').style.display    = '';
+  clearMsg();
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', (tab==='login'&&i===0)||(tab==='signup'&&i===1));
+  });
+}
+
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  inp.type = inp.type==='password' ? 'text' : 'password';
+  btn.textContent = inp.type==='password' ? '👁' : '🙈';
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text; el.className = 'msg ' + type;
+}
+function clearMsg() {
+  const el = document.getElementById('msg');
+  el.className = 'msg'; el.textContent = '';
+}
+function setLoading(prefix, loading) {
+  const btn     = document.getElementById(prefix+'-btn');
+  const spinner = document.getElementById(prefix+'-spinner');
+  const text    = document.getElementById(prefix+'-btn-text');
+  if(btn)     btn.disabled = loading;
+  if(spinner) spinner.style.display = loading ? 'block' : 'none';
+  if(text)    text.style.opacity = loading ? '.5' : '1';
+}
+
+// ── Login ──────────────────────────────────────────────────────
+async function handleLogin(e) {
+  e.preventDefault(); clearMsg();
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password) { showMsg('Please enter your email and password.', 'error'); return; }
+  setLoading('login', true);
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if(error) { showMsg(friendlyError(error.message), 'error'); setLoading('login', false); return; }
+  showMsg('✓ Logged in — loading dashboard…', 'success');
+  setTimeout(() => { window.location.href = 'index.html'; }, 600);
+}
+
+// ── Sign up (with plan + company) ─────────────────────────────
+async function handleSignup(e) {
+  e.preventDefault(); clearMsg();
+  const name     = document.getElementById('signup-name').value.trim();
+  const company  = document.getElementById('signup-company').value.trim();
+  const email    = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const plan     = getSelectedPlan();
+
+  if(!name || !email || !password) { showMsg('Please fill in all required fields.', 'error'); return; }
+
+  setLoading('signup', true);
+  const { data, error } = await supa.auth.signUp({
+    email, password,
+    options: {
+      data: {
+        full_name:    name,
+        company_name: company || name + "'s Properties",
+        selected_plan: plan,   // stored in user metadata, read by resolveOrg()
+      }
+    }
+  });
+  if(error) { showMsg(friendlyError(error.message), 'error'); setLoading('signup', false); return; }
+
+  if(data.user && !data.session) {
+    // Email confirmation required
+    showMsg('✓ Account created! Check your email to confirm, then log in.', 'success');
+    document.getElementById('signup-form').style.display = 'none';
+  } else {
+    showMsg('✓ Account created — loading your dashboard…', 'success');
+    setTimeout(() => { window.location.href = 'index.html'; }, 800);
+  }
+  setLoading('signup', false);
+}
+
+// ── Forgot password ────────────────────────────────────────────
+function showForgot(e) {
+  if(e) e.preventDefault();
+  document.getElementById('login-form').style.display    = 'none';
+  document.getElementById('signup-form').style.display   = 'none';
+  document.getElementById('auth-tabs').style.display     = 'none';
+  document.getElementById('back-link').style.display     = 'none';
+  document.getElementById('reset-form').style.display    = '';
+  document.getElementById('reset-success').style.display = 'none';
+  document.getElementById('forgot-title').style.display  = '';
+  clearMsg();
+}
+function hideForgot() {
+  document.getElementById('reset-form').style.display    = 'none';
+  document.getElementById('reset-success').style.display = 'none';
+  document.getElementById('forgot-title').style.display  = 'none';
+  document.getElementById('auth-tabs').style.display     = '';
+  document.getElementById('back-link').style.display     = '';
+  switchTab('login');
+}
+async function handleReset(e) {
+  e.preventDefault(); clearMsg();
+  const email = document.getElementById('reset-email').value.trim();
+  if(!email) { showMsg('Please enter your email address.', 'error'); return; }
+  setLoading('reset', true);
+  const { error } = await supa.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://calm-cell-1923.g-depaula85.workers.dev/index.html'
+  });
+  setLoading('reset', false);
+  if(error) { showMsg(friendlyError(error.message), 'error'); return; }
+  document.getElementById('reset-form').style.display    = 'none';
+  document.getElementById('reset-success').style.display = 'block';
+}
+
+function friendlyError(msg) {
+  if(msg.includes('Invalid login'))      return '❌ Wrong email or password. Please try again.';
+  if(msg.includes('Email not confirmed'))return '📬 Please confirm your email first — check your inbox.';
+  if(msg.includes('already registered')) return '⚠️ This email is already registered. Try logging in instead.';
+  if(msg.includes('Password should'))    return '⚠️ Password must be at least 8 characters.';
+  if(msg.includes('rate limit'))         return '⏳ Too many attempts. Please wait a moment.';
+  return '❌ ' + msg;
+}
+
+function showReset(e, show=true) { if(show) showForgot(e); else hideForgot(); }
+</script>
+
+
+</body>
+</html>
