@@ -4542,21 +4542,53 @@ function renderPropertiesDealView() {
 
   html+=scBar;
 
-  // Deal type toggle
+  var isWhole=(d.lettingType||'hmo')==='whole';
+
+  // Deal type toggle (R2R / Owned) — single row
   html+='<div style="display:flex;gap:0;background:var(--bg);border:1.5px solid var(--border);border-radius:11px;padding:3px;margin-bottom:18px;width:fit-content">';
   ['r2r','owned'].forEach(function(t){var active=(d.dealType||'r2r')===t;
     html+='<button data-dt="'+t+'" onclick="switchDealType(this.dataset.dt)" style="padding:9px 22px;border-radius:8px;border:none;background:'+(active?'var(--surface)':'transparent')+';box-shadow:'+(active?'0 1px 4px rgba(0,0,0,.1)':'none')+';font-size:13px;font-weight:'+(active?700:500)+';color:'+(active?'var(--text)':'var(--muted)')+';cursor:pointer;font-family:inherit">'+(t==='r2r'?'Rent-to-Rent (R2R)':'Owned / BTL')+'</button>';});
   html+='</div>';
 
-  // ── INPUTS: full-width horizontal rows (NO side-by-side with results) ────────
+  var rentPeriod=d.rentPeriod||'wk';
+
+  // ── INPUTS ─────────────────────────────────────────────────────────────────
   html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:18px">';
 
-  // Row 1: Core deal numbers
-  html+='<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Deal Inputs</div>';
+  // Header row: title + whole-property toggle
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Deal Inputs</div>';
+  html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);">'
+    +'<span>Whole Property</span>'
+    +'<div data-lt="'+(isWhole?'hmo':'whole')+'" onclick="switchLettingType(this.dataset.lt)" style="width:36px;height:20px;border-radius:10px;background:'+(isWhole?'var(--accent)':'var(--border)')+';position:relative;cursor:pointer;transition:background .2s">'
+    +'<div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:'+(isWhole?'18px':'2px')+';transition:left .2s"></div></div>'
+    +'</label></div>';
+
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">';
-  html+=inp('Rooms','da-rooms',d.rooms||4,'#');
+
+  // Rooms — greyed + disabled for whole property
+  html+='<div style="opacity:'+(isWhole?'0.35':'1')+';pointer-events:'+(isWhole?'none':'auto')+'">'
+    +'<label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:3px">Rooms</label>'
+    +'<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">'
+    +'<span style="padding:0 8px;font-size:12px;color:var(--muted);background:var(--bg);border-right:1px solid var(--border);height:34px;display:flex;align-items:center;flex-shrink:0">#</span>'
+    +'<input type="number" id="da-rooms" value="'+(d.rooms||4)+'" oninput="recalcDealPage()" '+(isWhole?'disabled':'')+' style="flex:1;border:none;padding:7px 9px;font-size:13px;font-family:monospace;background:transparent;outline:none;min-width:0;color:var(--text);width:100%">'
+    +'</div></div>';
+
   html+=isOwned?inp('Purchase Price','da-price',d.price||'','£'):inp('LL Rent /mo','da-llrent',d.llrent||'','£');
-  html+=inp('Avg Rent /wk','da-wkrent',d.wkrent||150,'£');
+
+  // Rent per room — with wk/mo toggle in the label
+  html+='<div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+    +'<label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">'+(isWhole?'Tenant Rent':'Rent / Room')+'</label>'
+    +'<div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">'
+    +'<button onclick="switchRentPeriod(\'wk\')" style="padding:2px 7px;border:none;background:'+(rentPeriod==='wk'?'var(--accent)':'var(--bg)')+';color:'+(rentPeriod==='wk'?'#fff':'var(--muted)')+';font-size:9px;font-weight:700;cursor:pointer;font-family:inherit">wk</button>'
+    +'<button onclick="switchRentPeriod(\'mo\')" style="padding:2px 7px;border:none;background:'+(rentPeriod==='mo'?'var(--accent)':'var(--bg)')+';color:'+(rentPeriod==='mo'?'#fff':'var(--muted)')+';font-size:9px;font-weight:700;cursor:pointer;font-family:inherit">mo</button>'
+    +'</div></div>'
+    +'<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">'
+    +'<span style="padding:0 8px;font-size:12px;color:var(--muted);background:var(--bg);border-right:1px solid var(--border);height:34px;display:flex;align-items:center;flex-shrink:0">&pound;</span>'
+    +'<input type="number" id="da-wkrent" value="'+(d.wkrent||'')+'" oninput="recalcDealPage()" style="flex:1;border:none;padding:7px 9px;font-size:13px;font-family:monospace;background:transparent;outline:none;min-width:0;color:var(--text);width:100%">'
+    +'</div></div>';
+
   html+=inp('Occupancy','da-occ',d.occ||85,'%');
   html+=inp('Bills','da-bills',d.bills||'','£');
   html+=inp('Maintenance','da-maint',d.maint||'','£');
@@ -4595,15 +4627,21 @@ function recalcDealPage(){
   if(!state.dealInputs)state.dealInputs={};
   if(!document.getElementById('da-rooms'))return;
   function gv(id,def){var el=document.getElementById(id);return el?(parseFloat(el.value)||0):(def||0);}
-  var dealType=(state.dealInputs._scratch&&state.dealInputs._scratch.dealType)||'r2r';
+  var sc=state.dealInputs._scratch||{};
+  var dealType=sc.dealType||'r2r';
   var isOwned=dealType==='owned';
-  var rooms=Math.max(1,gv('da-rooms',1)),wkRent=gv('da-wkrent',0),occ=gv('da-occ',85);
+  var isWhole=(sc.lettingType||'hmo')==='whole';
+  var rooms=isWhole?1:Math.max(1,gv('da-rooms',1));
+  var wkRent=gv('da-wkrent',0); // same field for both HMO and whole property
+  var occ=gv('da-occ',85);
   var llRent=isOwned?0:gv('da-llrent',0),bills=gv('da-bills',0),maint=gv('da-maint',0),insur=gv('da-insur',0),mgmt=gv('da-mgmt',0),voidC=gv('da-void',0),other=gv('da-other',0);
   var price=isOwned?gv('da-price',0):0,dep=isOwned?gv('da-dep',25):0,reno=isOwned?gv('da-reno',0):0,mrate=isOwned?gv('da-mrate',4.5):0,mterm=isOwned?gv('da-mterm',25):0;
   var mortPayment=0;
   if(isOwned&&price&&mrate&&mterm){var loan=price*(1-dep/100),mr=mrate/100/12,n=mterm*12;mortPayment=mr>0?Math.round(loan*mr*Math.pow(1+mr,n)/(Math.pow(1+mr,n)-1)):0;var mcEl=document.getElementById('da-calc-mortgage');if(mcEl)mcEl.innerHTML=mortPayment?'Est. mortgage: <strong>'+fmt(mortPayment)+'/mo</strong>':'';}
   var primaryCost=isOwned?mortPayment:llRent;
-  var grossIncome=Math.round(rooms*wkRent*52/12*occ/100);
+  var rentPeriod=sc.rentPeriod||'wk';
+  var rentMo=rentPeriod==='mo'?wkRent:wkRent*52/12; // wkRent field holds the value regardless of period
+  var grossIncome=isWhole?Math.round(rentMo*occ/100):Math.round(rooms*rentMo*occ/100);
   var runningCosts=bills+maint+insur+mgmt+voidC+other;
   var totalCosts=primaryCost+runningCosts,net=grossIncome-totalCosts,margin=grossIncome>0?Math.round(net/grossIncome*100):0,annualNet=net*12;
   var cashIn=isOwned?Math.max(1,price*dep/100+reno):0;
@@ -4612,13 +4650,21 @@ function recalcDealPage(){
   var roi=(isOwned&&price>0&&cashIn>100&&annualNet>0)?+(annualNet/cashIn*100).toFixed(1):0;
   var payback=(isOwned&&price>0&&cashIn>100&&net>0)?+(cashIn/net/12).toFixed(1):0;
   var breakEven=(!isOwned&&grossIncome>0)?Math.ceil(totalCosts/(grossIncome/rooms)):0;
-  state.dealInputs._scratch={dealType:dealType,rooms:rooms,wkrent:wkRent,occ:occ,llrent:llRent,bills:bills,maint:maint,insur:insur,mgmt:mgmt,voidCost:voidC,other:other,price:price,dep:dep,reno:reno,mrate:mrate,mterm:mterm,_grossIncome:grossIncome,_totalCosts:totalCosts};
+  state.dealInputs._scratch={dealType:dealType,lettingType:sc.lettingType||'hmo',rentPeriod:sc.rentPeriod||'wk',rooms:rooms,wkrent:wkRent,occ:occ,llrent:llRent,bills:bills,maint:maint,insur:insur,mgmt:mgmt,voidCost:voidC,other:other,price:price,dep:dep,reno:reno,mrate:mrate,mterm:mterm,_grossIncome:grossIncome,_totalCosts:totalCosts};
   clearTimeout(window._dealSaveTimer);window._dealSaveTimer=setTimeout(function(){saveState();},800);
   function col(v,g,a){return v>=g?'var(--green)':v>=a?'var(--amber)':'var(--red)';}
   var nc=net>=0?'var(--green)':'var(--red)';
   function kpic(lbl,val,c,sub){return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+lbl+'</div><div style="font-size:22px;font-weight:800;font-family:monospace;color:'+c+'">'+val+'</div>'+(sub?'<div style="font-size:10px;color:var(--dim);margin-top:3px">'+sub+'</div>':'')+'</div>';}
   var kpiHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+kpic('Monthly Net',fmt(net),nc)+kpic('Annual Net',fmt(annualNet),nc);
-  if(!isOwned){kpiHtml+=kpic('Profit Margin',margin+'%',col(margin,20,10),'net / income')+kpic('Break-even',breakEven?breakEven+' rooms':'—',breakEven&&breakEven<=Math.floor(rooms*0.75)?'var(--green)':'var(--amber)','rooms to cover costs');}
+  if(!isOwned){
+    kpiHtml+=kpic('Profit Margin',margin+'%',col(margin,20,10),'net / income');
+    if(isWhole){
+      var voidMonths=net>0&&totalCosts>0?Math.floor(net*12/totalCosts*10)/10:0;
+      kpiHtml+=kpic('Void Buffer',voidMonths>0?voidMonths+' mo':'—',col(voidMonths,3,1),'months surplus covers void');
+    } else {
+      kpiHtml+=kpic('Break-even',breakEven?breakEven+' rooms':'—',breakEven&&breakEven<=Math.floor(rooms*0.75)?'var(--green)':'var(--amber)','rooms to cover costs');
+    }
+  }
   else{kpiHtml+=kpic('Gross Yield',grossYield>0?grossYield+'%':'—',col(grossYield,8,5),'annual rent / price')+kpic('Net Yield',netYield>0?netYield+'%':'—',col(netYield,5,3))+kpic('Cash ROI',roi>0?roi+'%':'—',col(roi,10,5),'net / cash in')+kpic('Payback',payback>0?payback+' yrs':'—',payback&&payback<10?'var(--green)':'var(--amber)');}
   kpiHtml+='</div>';
   var bp=grossIncome>0?Math.min(100,Math.round(totalCosts/grossIncome*100)):100;
@@ -4653,6 +4699,20 @@ function recalcDealPage(){
 
 function propViewList(){state.filters.propView='list';render();}
 function propViewDeal(){state.filters.propView='deal';render();}
+function switchRentPeriod(period){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  state.dealInputs._scratch.rentPeriod=period;
+  state.filters.propView='deal';
+  saveState();render();
+}
+function switchLettingType(lt){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  state.dealInputs._scratch.lettingType=lt;
+  state.filters.propView='deal';
+  saveState();render();
+}
 function switchDealType(t){if(!state.dealInputs)state.dealInputs={};if(!state.dealInputs._scratch)state.dealInputs._scratch={};state.dealInputs._scratch.dealType=t;state.filters.propView='deal';saveState();render();}
 function resetDealPage(){if(!state.dealInputs)state.dealInputs={};delete state.dealInputs._scratch;state.filters.propView='deal';saveState();render();}
 function saveDealScenario(){if(!state.dealInputs||!state.dealInputs._scratch){showToast('Enter some figures first','error');return;}var name=prompt('Name this scenario:');if(!name)return;var id='sc_'+Date.now();state.dealInputs[id]=Object.assign({},state.dealInputs._scratch,{_name:name,_id:id});state.filters.propView='deal';saveState();render();showToast('Saved: '+name,'success');}
@@ -4691,6 +4751,49 @@ async function runDealAI(){
     function li(arr,icon,c){return(arr||[]).map(function(s){return '<div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:rgba(255,255,255,.75);margin-bottom:5px;line-height:1.45"><span style="color:'+c+';flex-shrink:0;margin-top:1px">'+icon+'</span>'+s+'</div>';}).join('');}
     outEl.innerHTML='<div style="padding:12px 0"><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)"><div style="width:52px;height:52px;border-radius:50%;border:2.5px solid '+vCol+';display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="font-size:18px;font-weight:800;color:'+vCol+'">'+r.score+'</div></div><div><div style="font-size:15px;font-weight:800;color:'+vCol+';margin-bottom:3px">'+r.verdict+'</div><div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.4">'+r.headline+'</div></div></div>'+(r.strengths&&r.strengths.length?'<div style="margin-bottom:10px">'+li(r.strengths,'&#x2713;','#00D897')+'</div>':'')+(r.risks&&r.risks.length?'<div style="margin-bottom:10px">'+li(r.risks,'!','#FF4D6A')+'</div>':'')+(r.suggestions&&r.suggestions.length?'<div>'+li(r.suggestions,'&#x2192;','#F5A623')+'</div>':'')+'</div>';
   }catch(err){outEl.innerHTML='<div style="padding:8px 0;font-size:12px;color:#FF4D6A">Error: '+err.message+'</div>';}
+}
+
+
+// ── Room photo sync — runs in background, does NOT block startup ──────────────
+async function syncRoomPhotosBackground() {
+  try {
+    var storageResult = await supa.storage.from('room-media').list('rooms', { limit: 500 });
+    if (storageResult.error || !storageResult.data || storageResult.data.length === 0) return;
+
+    // Use Promise.all to fetch all property folders in parallel instead of sequential
+    var propFolders = storageResult.data.filter(function(f){ return f && f.name; });
+    var roomFetches = propFolders.map(function(_propFolder) {
+      var _spid = _propFolder.name;
+      return supa.storage.from('room-media').list('rooms/' + _spid, { limit: 100 })
+        .then(function(_roomsResult) {
+          if (_roomsResult.error || !_roomsResult.data) return Promise.resolve();
+          var roomFolders = _roomsResult.data.filter(function(r){ return r && r.name && !isNaN(parseInt(r.name)); });
+          return Promise.all(roomFolders.map(function(_roomFolder) {
+            var _srn = parseInt(_roomFolder.name);
+            return supa.storage.from('room-media').list('rooms/' + _spid + '/' + _srn, { limit: 20 })
+              .then(function(_photosResult) {
+                if (_photosResult.error || !_photosResult.data || _photosResult.data.length === 0) return;
+                var _media = getMedia(_spid, _srn);
+                var added = false;
+                _photosResult.data.forEach(function(_file) {
+                  if (!_file || !_file.name) return;
+                  var _path = 'rooms/' + _spid + '/' + _srn + '/' + _file.name;
+                  var _urlData = supa.storage.from('room-media').getPublicUrl(_path);
+                  var _url = _urlData.data.publicUrl;
+                  var _exists = _media.photos.some(function(ph){ return ph.src === _url || ph.path === _path; });
+                  if (!_exists) { _media.photos.push({ src: _url, name: _file.name, path: _path }); added = true; }
+                });
+                return added;
+              });
+          }));
+        });
+    });
+
+    await Promise.all(roomFetches);
+    // Save updated cache to localStorage (no render needed — photos show on next open)
+    try { localStorage.setItem('pm_local_roomMedia', JSON.stringify(state.roomMedia)); } catch(e) {}
+    console.log('Room photos synced in background');
+  } catch(_se) { console.warn('Background room sync error:', _se); }
 }
 
 function renderPropFinanceTab(p, propTenants) {
@@ -6793,7 +6896,9 @@ function renderAgentResult(d,dateStr){
 // ── DEAL ANALYZER: local scoring engine ───────────────────────────────────────
 function analyzeLocalDeal() {
   var d=(state.dealInputs&&state.dealInputs._scratch)||{};
-  if(!d.rooms&&!d.wkrent) return null;
+  var isWhole=(d.lettingType||'hmo')==='whole';
+  if(!isWhole&&!d.rooms&&!d.wkrent) return null;
+  if(isWhole&&!d.monthRent) return null;
   var isOwned=d.dealType==='owned';
   var grossIncome=d._grossIncome||0;
   var totalCosts=d._totalCosts||0;
@@ -6836,7 +6941,7 @@ function analyzeLocalDeal() {
     if(!(d.maint>0))suggestions.push('No maintenance reserve — budget at least '+fmt(rooms*50)+'/mo (£50/room) for repairs and upkeep');
 
     // Room rate sense check (South London HMO)
-    if((d.wkrent||0)>0){
+    if(!isWhole&&(d.wkrent||0)>0){
       if(d.wkrent<120)risks.push('Weekly rate of £'+d.wkrent+'/room is below South London HMO market (typically £130–180/wk) — verify comparables');
       else if(d.wkrent>=130&&d.wkrent<=180){score+=5;strengths.push('Room rate of £'+d.wkrent+'/wk is within typical South London HMO range');}
       else if(d.wkrent>220)risks.push('Weekly rate of £'+d.wkrent+'/room is high — confirm rooms will let at this price before committing');
@@ -7661,39 +7766,8 @@ async function loadState(){
       var savedPage = localStorage.getItem('pm_local_page');
       if(savedPage && savedPage !== 'dashboard') state.page = savedPage;
     } catch(e) {}
-    // Load room photos from Supabase Storage (source of truth across devices/sessions)
-    try {
-      var storageResult = await supa.storage.from('room-media').list('rooms', { limit: 500 });
-      if (!storageResult.error && storageResult.data && storageResult.data.length > 0) {
-        for (var _si = 0; _si < storageResult.data.length; _si++) {
-          var _propFolder = storageResult.data[_si];
-          if (!_propFolder || !_propFolder.name) continue;
-          var _spid = _propFolder.name;
-          var _roomsResult = await supa.storage.from('room-media').list('rooms/' + _spid, { limit: 100 });
-          if (_roomsResult.error || !_roomsResult.data) continue;
-          for (var _ri = 0; _ri < _roomsResult.data.length; _ri++) {
-            var _roomFolder = _roomsResult.data[_ri];
-            var _srn = parseInt(_roomFolder.name);
-            if (isNaN(_srn)) continue;
-            var _photosResult = await supa.storage.from('room-media').list('rooms/' + _spid + '/' + _srn, { limit: 20 });
-            if (_photosResult.error || !_photosResult.data || _photosResult.data.length === 0) continue;
-            var _media = getMedia(_spid, _srn);
-            _photosResult.data.forEach(function(_file) {
-              if (!_file || !_file.name) return;
-              var _path = 'rooms/' + _spid + '/' + _srn + '/' + _file.name;
-              var _urlData = supa.storage.from('room-media').getPublicUrl(_path);
-              var _url = _urlData.data.publicUrl;
-              var _exists = _media.photos.some(function(ph) { return ph.src === _url || ph.path === _path; });
-              if (!_exists) {
-                _media.photos.push({ src: _url, name: _file.name, path: _path });
-              }
-            });
-          }
-        }
-        console.log('Room photos loaded from Supabase Storage');
-        try { localStorage.setItem('pm_local_roomMedia', JSON.stringify(state.roomMedia)); } catch(e) {}
-      }
-    } catch(_se) { console.warn('Room storage load error:', _se); }
+    // Room photos loaded from localStorage cache — full sync runs in background after first render
+    // (syncRoomPhotosBackground is called via setTimeout in the render chain)
 
     // Load property docs from Supabase Storage (refresh signed URLs)
     try {
@@ -8611,6 +8685,14 @@ render=function(){
   if(state.page==='properties'&&(state.filters.propView||'list')==='deal'){
     clearTimeout(window._dealCalcTimer);
     window._dealCalcTimer=setTimeout(recalcDealPage,80);
+  }
+  // Trigger room photo background sync once, 3s after first render
+  if(!window._roomSyncDone){
+    clearTimeout(window._roomSyncTimer);
+    window._roomSyncTimer=setTimeout(function(){
+      window._roomSyncDone=true;
+      syncRoomPhotosBackground();
+    },3000);
   }
 };
 loadState().then(function(){
