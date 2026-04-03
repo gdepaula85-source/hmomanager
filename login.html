@@ -312,7 +312,8 @@ input::placeholder { color:var(--dim); }
     <div style="font-size:18px;font-weight:700;color:var(--white);margin-bottom:6px">Reset your password</div>
     <div style="font-size:13px;color:var(--silver)">Enter your email and we'll send a reset link.</div>
   </div>
-  <form id="reset-form" onsubmit="handleReset(event)">
+  <!-- Hidden by default; only shown when "Forgot password?" is clicked -->
+  <form id="reset-form" style="display:none" onsubmit="handleReset(event)">
     <div class="field">
       <label>Email address</label>
       <input type="email" id="reset-email" placeholder="you@example.com" autocomplete="email" required>
@@ -326,8 +327,8 @@ input::placeholder { color:var(--dim); }
     </div>
   </form>
 
-  <!-- RESET SUCCESS -->
-  <div id="reset-success">
+  <!-- RESET SUCCESS (hidden until a reset link is successfully sent) -->
+  <div id="reset-success" style="display:none">
     <div class="reset-icon">📬</div>
     <div class="reset-title">Check your email</div>
     <p class="reset-sub">We've sent a password reset link to your email. Click the link to set a new password.</p>
@@ -440,6 +441,8 @@ async function handleLogin(e) {
   const password = document.getElementById('login-password').value;
   if(!email || !password) { showMsg('Please enter your email and password.', 'error'); return; }
   setLoading('login', true);
+  // Ensure no stale session from another account (fixes wrong user on index.html)
+  try { await supa.auth.signOut({ scope: 'local' }); } catch(e) {}
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if(error) { showMsg(friendlyError(error.message), 'error'); setLoading('login', false); return; }
   showMsg('✓ Logged in — loading dashboard…', 'success');
@@ -458,6 +461,8 @@ async function handleSignup(e) {
   if(!name || !email || !password) { showMsg('Please fill in all required fields.', 'error'); return; }
 
   setLoading('signup', true);
+  // Ensure signup is not contaminated by another active local session.
+  try { await supa.auth.signOut({ scope: 'local' }); } catch(e) {}
   const { data, error } = await supa.auth.signUp({
     email, password,
     options: {

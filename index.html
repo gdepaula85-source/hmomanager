@@ -223,11 +223,25 @@ select option{background:#fff;color:var(--text)}
   0%,100%{opacity:.3;transform:scale(1)}
   50%{opacity:1;transform:scale(1.3)}
 }
+
+/* Boot / org resolution — hide main UI until workspace is ready */
+#app-boot-overlay{position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+#app-boot-overlay.app-boot--hide{display:none}
+.app-boot-inner{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;max-width:320px}
+.app-boot-spinner{width:44px;height:44px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:app-boot-spin .75s linear infinite}
+@keyframes app-boot-spin{to{transform:rotate(360deg)}}
+.app-boot-text{font-size:14px;color:var(--muted);font-weight:600;line-height:1.45}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
+<div id="app-boot-overlay" aria-busy="true" aria-live="polite">
+  <div class="app-boot-inner">
+    <div class="app-boot-spinner" role="status"></div>
+    <div class="app-boot-text" id="app-boot-overlay-msg">Loading your workspace…</div>
+  </div>
+</div>
 <div id="app">
   <div id="sidebar">
     <div class="sb-logo">
@@ -291,13 +305,8 @@ const state = {
   voidDates:{},
   propDocs:{},
   lateFeeConfig:{graceDays:3, feeType:'fixed', feeAmount:25, enabled:true},
-  currentUser:{id:1, name:'Gleydson De Paula', initials:'G', role:'admin', email:'gleydson@reservationsdirect.co.uk'},
-  users:[
-    {id:1,name:'Gleydson De Paula',initials:'G',email:'gleydson@reservationsdirect.co.uk',phone:'07700100001',role:'admin',status:'active',lastLogin:'Today'},
-    {id:2,name:'Fred Mensah',initials:'FM',email:'fred@reservationsdirect.co.uk',phone:'07700100002',role:'maintenance',status:'active',lastLogin:'Today'},
-    {id:3,name:'Gabriela Costa',initials:'GC',email:'gabriela@reservationsdirect.co.uk',phone:'07700100003',role:'admin',status:'active',lastLogin:'Yesterday'},
-    {id:4,name:'Lucas Oliveira',initials:'LO',email:'lucas@reservationsdirect.co.uk',phone:'07700100004',role:'manager',status:'active',lastLogin:'2 days ago'},
-  ],
+  currentUser:{id:'', name:'Loading...', initials:'U', role:'viewer', email:''},
+  users:[],
   roles:{
     admin:    {label:'Admin',   color:'#8B5CF6',bg:'#F5F3FF',icon:'👑',
                pages:['dashboard','properties','tenants','rent','expenses','maintenance','landlords','rooms','reports','settings','users'],
@@ -323,15 +332,13 @@ const state = {
 // ── Restore persisted user data immediately (before async loadState) ──────────
 // This runs synchronously so saved users/companies/config win over hardcoded defaults
 (function _restoreLocalState() {
-  var keys = ['users', 'companies', 'config'];
+  var keys = ['companies', 'config'];
   keys.forEach(function(k) {
     try {
       var raw = localStorage.getItem('pm_local_' + k);
       if (raw) {
         var parsed = JSON.parse(raw);
-        // Only override if we have real saved data
-        if (k === 'users' && Array.isArray(parsed) && parsed.length > 0) state[k] = parsed;
-        else if (k !== 'users' && parsed !== null && parsed !== undefined) state[k] = parsed;
+        if (parsed !== null && parsed !== undefined) state[k] = parsed;
       }
     } catch(e) {}
   });
@@ -457,18 +464,127 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Auth & Org provisioning ───────────────────────────────────
 var _authReady = false;
+var _appBootPending = true; // block render/saveState until org resolved + loadState (prevents demo/other-org flash)
 var _currentOrgId = null;   // set once org is resolved
+var _currentMemberRole = 'viewer'; // last known org_members.role (app role key)
+
+function setAppBootMessage(msg) {
+  var el = document.getElementById('app-boot-overlay-msg');
+  if (el && msg) el.textContent = msg;
+}
+function hideAppBootOverlay() {
+  var el = document.getElementById('app-boot-overlay');
+  if (el) {
+    el.classList.add('app-boot--hide');
+    el.setAttribute('aria-busy', 'false');
+  }
+}
+
+function normalizeRole(role) {
+  var r = String(role || '').toLowerCase().trim();
+  if (r === 'owner') r = 'admin';
+  return state.roles && state.roles[r] ? r : 'viewer';
+}
+
+/** Bind Supabase session to state.users / state.currentUser (always use session.user.id). */
+function upsertSessionUser(session, roleHint) {
+  if (!session || !session.user) return null;
+  var authId = session.user.id;
+  var authEmail = (session.user.email || '').trim();
+  var authName = (session.user.user_metadata && session.user.user_metadata.full_name)
+    ? String(session.user.user_metadata.full_name).trim()
+    : (authEmail ? authEmail.split('@')[0] : 'User');
+  var role = normalizeRole(roleHint != null ? roleHint : _currentMemberRole);
+  var initials = (authName || 'U').split(/\s+/).map(function(w){ return w[0]||''; }).join('').toUpperCase().slice(0,2) || 'U';
+
+  var matched = state.users.find(function(u){ return String(u.id) === String(authId); });
+  if (!matched && authEmail) {
+    matched = state.users.find(function(u){
+      return u.email && u.email.toLowerCase() === authEmail.toLowerCase();
+    });
+  }
+  if (matched) {
+    matched.id = authId;
+    matched.name = authName || matched.name || 'User';
+    matched.email = authEmail || matched.email || '';
+    matched.initials = initials;
+    matched.role = role;
+    matched.status = matched.status || 'active';
+    matched.lastLogin = 'Today';
+    state.currentUser = matched;
+  } else {
+    state.currentUser = {
+      id: authId, name: authName, initials: initials,
+      email: authEmail, phone: '', role: role, status: 'active', lastLogin: 'Today'
+    };
+    state.users.push(state.currentUser);
+  }
+  return state.currentUser;
+}
+
+async function syncUsersFromOrgMembers(session){
+  if(!_currentOrgId) return;
+  try{
+    var existingById = {};
+    (state.users||[]).forEach(function(u){ existingById[String(u.id)] = u; });
+    var pendingInvites = (state.users||[]).filter(function(u){ return u && u.status === 'pending'; });
+    var currentId = String(session && session.user ? session.user.id : '');
+    var currentEmail = session && session.user ? (session.user.email||'') : '';
+    var currentName = session && session.user && session.user.user_metadata && session.user.user_metadata.full_name
+      ? session.user.user_metadata.full_name
+      : (state.currentUser && state.currentUser.name ? state.currentUser.name : 'User');
+
+    var q = await supa.from('org_members')
+      .select('user_id, role, created_at')
+      .eq('org_id', _currentOrgId)
+      .order('created_at', {ascending:true});
+    if(q.error) {
+      console.warn('syncUsersFromOrgMembers:', q.error);
+      return;
+    }
+
+    var mapped = (q.data||[]).map(function(m){
+      var uid = String(m.user_id||'');
+      var prev = existingById[uid] || {};
+      var isMe = uid === currentId;
+      var name = prev.name || (isMe ? currentName : ('User ' + uid.slice(-6)));
+      var email = prev.email || (isMe ? currentEmail : '');
+      var initials = (name||'U').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || 'U';
+      return {
+        id: uid,
+        name: name,
+        initials: initials,
+        email: email,
+        phone: prev.phone || '',
+        role: normalizeRole(m.role),
+        status: 'active',
+        lastLogin: isMe ? 'Today' : (prev.lastLogin || '—')
+      };
+    });
+
+    state.users = mapped.concat(pendingInvites);
+    var me = state.users.find(function(u){ return String(u.id) === currentId; });
+    if(me) state.currentUser = me;
+  }catch(e){
+    console.warn('syncUsersFromOrgMembers failed:', e);
+  }
+}
 
 async function resolveOrg(session) {
-  // 1. Look up org_members for this user
-  var { data: membership } = await supa.from('org_members')
+  _currentMemberRole = 'viewer';
+  setAppBootMessage('Preparing your workspace…');
+  // 1. Look up org_members for this user (maybeSingle: no row is OK)
+  var { data: membership, error: memberErr } = await supa.from('org_members')
     .select('org_id, role, organisations(id,name,plan,status,trial_ends_at)')
     .eq('user_id', session.user.id)
-    .limit(1)
-    .single();
+    .maybeSingle();
+  if (memberErr && memberErr.code !== 'PGRST116') {
+    console.warn('org_members lookup:', memberErr);
+  }
 
-  if (membership) {
+  if (membership && membership.org_id) {
     _currentOrgId = membership.org_id;
+    _currentMemberRole = normalizeRole(membership.role);
     var org = membership.organisations;
     state._currentOrg = org; // store for Settings page
 
@@ -498,14 +614,16 @@ async function resolveOrg(session) {
   }
 
   // 2. No org found — this is a brand new user. Provision their org.
+  setAppBootMessage('Creating your organisation…');
   var email     = session.user.email || '';
   var name      = (session.user.user_metadata && session.user.user_metadata.full_name) || email.split('@')[0];
   var companyName = (session.user.user_metadata && session.user.user_metadata.company_name) || name + "'s Properties";
+  companyName = String(companyName).trim() || (name + "'s Properties");
   var selectedPlan = (session.user.user_metadata && session.user.user_metadata.selected_plan) || 'trial';
   var slug      = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
   var trialEnd  = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  // Create organisation
+  // Create organisation (owner_email = account email; creator becomes admin in org_members)
   var { data: newOrg, error: orgErr } = await supa.from('organisations').insert([{
     name:          companyName,
     slug:          slug,
@@ -517,17 +635,24 @@ async function resolveOrg(session) {
 
   if (orgErr || !newOrg) {
     console.error('Failed to create org:', orgErr);
+    showToast && showToast('Could not create your organisation. Check console / Supabase policies.', 'error');
     return false;
   }
 
-  // Link user to org
-  await supa.from('org_members').insert([{
+  // Link user to org — first user is organisation admin (owner)
+  var { error: omErr } = await supa.from('org_members').insert([{
     org_id:  newOrg.id,
     user_id: session.user.id,
     role:    'admin',
   }]);
+  if (omErr) {
+    console.error('Failed to create org_members:', omErr);
+    showToast && showToast('Organisation created but membership failed. Contact support.', 'error');
+    return false;
+  }
 
   _currentOrgId = newOrg.id;
+  _currentMemberRole = 'admin';
   state._currentOrg = newOrg; // store for Settings page
   console.log('New org provisioned:', newOrg.name, newOrg.id);
   return true;
@@ -606,29 +731,40 @@ supa.auth.onAuthStateChange(function(event, session) {
   _authReady = true;
 
   if (!session) {
+    _appBootPending = false;
+    hideAppBootOverlay();
     window.location.href = 'login.html';
     return;
   }
 
-  // Resolve org (provisions new org if first login) then load data
-  resolveOrg(session).then(function(ok) {
-    if (!ok) return; // trial expired or inactive — screen already replaced
+  setAppBootMessage('Signing you in…');
+  // Update session user in state only — do not render() yet (avoids flashing demo / other-org data).
+  upsertSessionUser(session, 'viewer');
 
-    // Sync user identity
-    var authEmail = session.user.email || '';
-    var authName  = (session.user.user_metadata && session.user.user_metadata.full_name)
-                    ? session.user.user_metadata.full_name
-                    : authEmail.split('@')[0];
-    var matched = state.users.find(function(u){ return u.email && u.email.toLowerCase() === authEmail.toLowerCase(); });
-    if (matched) {
-      state.currentUser = matched;
-      matched.lastLogin = 'Today';
-    } else {
-      var initials = authName.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)||'U';
-      state.currentUser = { id: session.user.id, name: authName, initials: initials,
-                            email: authEmail, phone: '', role: 'admin', status: 'active', lastLogin: 'Today' };
-      state.users.push(state.currentUser);
+  // Resolve org (provisions new org if first login) then load org-scoped data, then render.
+  resolveOrg(session).then(function(ok) {
+    if (!ok) {
+      // Trial/inactive screens replace body; provisioning errors keep page — always unlock boot UI.
+      _appBootPending = false;
+      hideAppBootOverlay();
+      return;
     }
+
+    upsertSessionUser(session, _currentMemberRole);
+    syncUsersFromOrgMembers(session).then(function(){
+    setAppBootMessage('Loading your data…');
+    loadState().then(function(loaded){
+      _appBootPending = false;
+      hideAppBootOverlay();
+      if (!loaded) {
+        showToast && showToast('Could not load workspace data.', 'error');
+        return;
+      }
+      if (!canSee(state.page)) state.page = 'dashboard';
+      render();
+      try { saveState(); } catch(e2) {}
+    });
+    });
   });
 });
 
@@ -7723,16 +7859,22 @@ async function _doSupaSave(){
 }
 // ── loadState: fetch all data from Supabase ───────────────
 async function loadState(){
+  if(!_currentOrgId){
+    // Do not load unscoped data before auth/org resolution.
+    console.warn('loadState skipped: org not resolved yet');
+    return false;
+  }
+  setAppBootMessage('Loading your data…');
   try{
     var results = await Promise.all([
-      supa.from('landlords').select('*'),
-      supa.from('properties').select('*'),
-      supa.from('tenants').select('*'),
-      supa.from('payments').select('*'),
-      supa.from('expenses').select('*'),
-      supa.from('maintenance').select('*'),
-      supa.from('landlord_payments').select('*'),
-      supa.from('contractors').select('*')
+      supa.from('landlords').select('*').eq('org_id', _currentOrgId),
+      supa.from('properties').select('*').eq('org_id', _currentOrgId),
+      supa.from('tenants').select('*').eq('org_id', _currentOrgId),
+      supa.from('payments').select('*').eq('org_id', _currentOrgId),
+      supa.from('expenses').select('*').eq('org_id', _currentOrgId),
+      supa.from('maintenance').select('*').eq('org_id', _currentOrgId),
+      supa.from('landlord_payments').select('*').eq('org_id', _currentOrgId),
+      supa.from('contractors').select('*').eq('org_id', _currentOrgId)
     ]);
     var errors = results.filter(function(r){ return r.error; });
     if(errors.length){ console.warn('Supabase load errors:', errors); }
@@ -7757,7 +7899,7 @@ async function loadState(){
     });
     // Restore local-only state from localStorage
     try {
-      var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','users','companies','config','roles','maintExtras','dealInputs'];
+      var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','companies','config','roles','maintExtras','dealInputs'];
       localKeys.forEach(function(k){
         var raw = localStorage.getItem('pm_local_'+k);
         if(raw) { try{ state[k]=JSON.parse(raw); }catch(e){} }
@@ -7836,21 +7978,22 @@ async function loadState(){
       }
     });
     console.log('Loaded from Supabase:', state.landlords.length, 'landlords,', state.properties.length, 'props,', state.tenants.length, 'tenants');
-    // Re-apply companies/config/users from localStorage AFTER Supabase load
+    // Re-apply companies/config from localStorage AFTER Supabase load
     // (Supabase doesn't store these, so localStorage is the source of truth)
-    ['companies','config','users'].forEach(function(k){
+    ['companies','config'].forEach(function(k){
       try {
         var raw = localStorage.getItem('pm_local_'+k);
         if(raw){
           var parsed = JSON.parse(raw);
-          if(k==='users' && Array.isArray(parsed) && parsed.length>0) state[k]=parsed;
-          else if(k!=='users' && parsed) state[k]=parsed;
+          if(parsed) state[k]=parsed;
         }
       } catch(e2){}
     });
+    return true;
   }catch(e){
     console.error('loadState error:', e);
     showToast && showToast('Database error — running in offline mode', 'error');
+    return false;
   }
 }
 async function backfillPaymentDueDates() {
@@ -8672,6 +8815,7 @@ function clearSavedState(){
 }
 var _origRender=render;
 render=function(){
+  if(_appBootPending) return;
   _origRender();
   // Debounce saveState — prevents expensive serialisation on every rapid render
   clearTimeout(window._renderSaveTimer);
@@ -8695,7 +8839,8 @@ render=function(){
     },3000);
   }
 };
-loadState().then(function(){
+loadState().then(function(loaded){
+if(!loaded) return;
 // ALWAYS resync property occupancy, room prices and income from tenants.
 // This runs after loadState() so it corrects any stale localStorage data too.
 (function syncPropertiesFromTenants() {
