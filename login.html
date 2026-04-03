@@ -441,6 +441,8 @@ async function handleLogin(e) {
   const password = document.getElementById('login-password').value;
   if(!email || !password) { showMsg('Please enter your email and password.', 'error'); return; }
   setLoading('login', true);
+  // Ensure no stale session from another account (fixes wrong user on index.html)
+  try { await supa.auth.signOut({ scope: 'local' }); } catch(e) {}
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if(error) { showMsg(friendlyError(error.message), 'error'); setLoading('login', false); return; }
   showMsg('✓ Logged in — loading dashboard…', 'success');
@@ -459,6 +461,8 @@ async function handleSignup(e) {
   if(!name || !email || !password) { showMsg('Please fill in all required fields.', 'error'); return; }
 
   setLoading('signup', true);
+  // Ensure signup is not contaminated by another active local session.
+  try { await supa.auth.signOut({ scope: 'local' }); } catch(e) {}
   const { data, error } = await supa.auth.signUp({
     email, password,
     options: {

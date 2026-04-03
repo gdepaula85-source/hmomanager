@@ -223,11 +223,25 @@ select option{background:#fff;color:var(--text)}
   0%,100%{opacity:.3;transform:scale(1)}
   50%{opacity:1;transform:scale(1.3)}
 }
+
+/* Boot / org resolution — hide main UI until workspace is ready */
+#app-boot-overlay{position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+#app-boot-overlay.app-boot--hide{display:none}
+.app-boot-inner{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;max-width:320px}
+.app-boot-spinner{width:44px;height:44px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:app-boot-spin .75s linear infinite}
+@keyframes app-boot-spin{to{transform:rotate(360deg)}}
+.app-boot-text{font-size:14px;color:var(--muted);font-weight:600;line-height:1.45}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
+<div id="app-boot-overlay" aria-busy="true" aria-live="polite">
+  <div class="app-boot-inner">
+    <div class="app-boot-spinner" role="status"></div>
+    <div class="app-boot-text" id="app-boot-overlay-msg">Loading your workspace…</div>
+  </div>
+</div>
 <div id="app">
   <div id="sidebar">
     <div class="sb-logo">
@@ -291,13 +305,8 @@ const state = {
   voidDates:{},
   propDocs:{},
   lateFeeConfig:{graceDays:3, feeType:'fixed', feeAmount:25, enabled:true},
-  currentUser:{id:1, name:'Gleydson De Paula', initials:'G', role:'admin', email:'gleydson@reservationsdirect.co.uk'},
-  users:[
-    {id:1,name:'Gleydson De Paula',initials:'G',email:'gleydson@reservationsdirect.co.uk',phone:'07700100001',role:'admin',status:'active',lastLogin:'Today'},
-    {id:2,name:'Fred Mensah',initials:'FM',email:'fred@reservationsdirect.co.uk',phone:'07700100002',role:'maintenance',status:'active',lastLogin:'Today'},
-    {id:3,name:'Gabriela Costa',initials:'GC',email:'gabriela@reservationsdirect.co.uk',phone:'07700100003',role:'admin',status:'active',lastLogin:'Yesterday'},
-    {id:4,name:'Lucas Oliveira',initials:'LO',email:'lucas@reservationsdirect.co.uk',phone:'07700100004',role:'manager',status:'active',lastLogin:'2 days ago'},
-  ],
+  currentUser:{id:'', name:'Loading...', initials:'U', role:'viewer', email:''},
+  users:[],
   roles:{
     admin:    {label:'Admin',   color:'#8B5CF6',bg:'#F5F3FF',icon:'👑',
                pages:['dashboard','properties','tenants','rent','expenses','maintenance','landlords','rooms','reports','settings','users'],
@@ -316,20 +325,20 @@ const state = {
   landlordPayments:[],
   companies:[],
   config:{},
+  maintExtras:{},
+  dealInputs:{},
 };
 
 // ── Restore persisted user data immediately (before async loadState) ──────────
 // This runs synchronously so saved users/companies/config win over hardcoded defaults
 (function _restoreLocalState() {
-  var keys = ['users', 'companies', 'config'];
+  var keys = ['companies', 'config'];
   keys.forEach(function(k) {
     try {
       var raw = localStorage.getItem('pm_local_' + k);
       if (raw) {
         var parsed = JSON.parse(raw);
-        // Only override if we have real saved data
-        if (k === 'users' && Array.isArray(parsed) && parsed.length > 0) state[k] = parsed;
-        else if (k !== 'users' && parsed !== null && parsed !== undefined) state[k] = parsed;
+        if (parsed !== null && parsed !== undefined) state[k] = parsed;
       }
     } catch(e) {}
   });
@@ -415,13 +424,6 @@ function switchUser(uid){var u=state.users.find(function(x){return x.id===uid;})
 const TODAY = new Date();
 const PORTAL_PASSWORD = 'Welcome2024!';
 
-function generatePortalPassword() {
-  var chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  var pwd = '';
-  for(var i=0;i<8;i++) pwd += chars[Math.floor(Math.random()*chars.length)];
-  return pwd;
-}
-
 function getPortalUsername(t) {
   if(t.portalUsername) return t.portalUsername;
   var first = (t.name||'tenant').split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -462,18 +464,127 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Auth & Org provisioning ───────────────────────────────────
 var _authReady = false;
+var _appBootPending = true; // block render/saveState until org resolved + loadState (prevents demo/other-org flash)
 var _currentOrgId = null;   // set once org is resolved
+var _currentMemberRole = 'viewer'; // last known org_members.role (app role key)
+
+function setAppBootMessage(msg) {
+  var el = document.getElementById('app-boot-overlay-msg');
+  if (el && msg) el.textContent = msg;
+}
+function hideAppBootOverlay() {
+  var el = document.getElementById('app-boot-overlay');
+  if (el) {
+    el.classList.add('app-boot--hide');
+    el.setAttribute('aria-busy', 'false');
+  }
+}
+
+function normalizeRole(role) {
+  var r = String(role || '').toLowerCase().trim();
+  if (r === 'owner') r = 'admin';
+  return state.roles && state.roles[r] ? r : 'viewer';
+}
+
+/** Bind Supabase session to state.users / state.currentUser (always use session.user.id). */
+function upsertSessionUser(session, roleHint) {
+  if (!session || !session.user) return null;
+  var authId = session.user.id;
+  var authEmail = (session.user.email || '').trim();
+  var authName = (session.user.user_metadata && session.user.user_metadata.full_name)
+    ? String(session.user.user_metadata.full_name).trim()
+    : (authEmail ? authEmail.split('@')[0] : 'User');
+  var role = normalizeRole(roleHint != null ? roleHint : _currentMemberRole);
+  var initials = (authName || 'U').split(/\s+/).map(function(w){ return w[0]||''; }).join('').toUpperCase().slice(0,2) || 'U';
+
+  var matched = state.users.find(function(u){ return String(u.id) === String(authId); });
+  if (!matched && authEmail) {
+    matched = state.users.find(function(u){
+      return u.email && u.email.toLowerCase() === authEmail.toLowerCase();
+    });
+  }
+  if (matched) {
+    matched.id = authId;
+    matched.name = authName || matched.name || 'User';
+    matched.email = authEmail || matched.email || '';
+    matched.initials = initials;
+    matched.role = role;
+    matched.status = matched.status || 'active';
+    matched.lastLogin = 'Today';
+    state.currentUser = matched;
+  } else {
+    state.currentUser = {
+      id: authId, name: authName, initials: initials,
+      email: authEmail, phone: '', role: role, status: 'active', lastLogin: 'Today'
+    };
+    state.users.push(state.currentUser);
+  }
+  return state.currentUser;
+}
+
+async function syncUsersFromOrgMembers(session){
+  if(!_currentOrgId) return;
+  try{
+    var existingById = {};
+    (state.users||[]).forEach(function(u){ existingById[String(u.id)] = u; });
+    var pendingInvites = (state.users||[]).filter(function(u){ return u && u.status === 'pending'; });
+    var currentId = String(session && session.user ? session.user.id : '');
+    var currentEmail = session && session.user ? (session.user.email||'') : '';
+    var currentName = session && session.user && session.user.user_metadata && session.user.user_metadata.full_name
+      ? session.user.user_metadata.full_name
+      : (state.currentUser && state.currentUser.name ? state.currentUser.name : 'User');
+
+    var q = await supa.from('org_members')
+      .select('user_id, role, created_at')
+      .eq('org_id', _currentOrgId)
+      .order('created_at', {ascending:true});
+    if(q.error) {
+      console.warn('syncUsersFromOrgMembers:', q.error);
+      return;
+    }
+
+    var mapped = (q.data||[]).map(function(m){
+      var uid = String(m.user_id||'');
+      var prev = existingById[uid] || {};
+      var isMe = uid === currentId;
+      var name = prev.name || (isMe ? currentName : ('User ' + uid.slice(-6)));
+      var email = prev.email || (isMe ? currentEmail : '');
+      var initials = (name||'U').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || 'U';
+      return {
+        id: uid,
+        name: name,
+        initials: initials,
+        email: email,
+        phone: prev.phone || '',
+        role: normalizeRole(m.role),
+        status: 'active',
+        lastLogin: isMe ? 'Today' : (prev.lastLogin || '—')
+      };
+    });
+
+    state.users = mapped.concat(pendingInvites);
+    var me = state.users.find(function(u){ return String(u.id) === currentId; });
+    if(me) state.currentUser = me;
+  }catch(e){
+    console.warn('syncUsersFromOrgMembers failed:', e);
+  }
+}
 
 async function resolveOrg(session) {
-  // 1. Look up org_members for this user
-  var { data: membership } = await supa.from('org_members')
+  _currentMemberRole = 'viewer';
+  setAppBootMessage('Preparing your workspace…');
+  // 1. Look up org_members for this user (maybeSingle: no row is OK)
+  var { data: membership, error: memberErr } = await supa.from('org_members')
     .select('org_id, role, organisations(id,name,plan,status,trial_ends_at)')
     .eq('user_id', session.user.id)
-    .limit(1)
-    .single();
+    .maybeSingle();
+  if (memberErr && memberErr.code !== 'PGRST116') {
+    console.warn('org_members lookup:', memberErr);
+  }
 
-  if (membership) {
+  if (membership && membership.org_id) {
     _currentOrgId = membership.org_id;
+    _currentMemberRole = normalizeRole(membership.role);
     var org = membership.organisations;
     state._currentOrg = org; // store for Settings page
 
@@ -503,14 +614,16 @@ async function resolveOrg(session) {
   }
 
   // 2. No org found — this is a brand new user. Provision their org.
+  setAppBootMessage('Creating your organisation…');
   var email     = session.user.email || '';
   var name      = (session.user.user_metadata && session.user.user_metadata.full_name) || email.split('@')[0];
   var companyName = (session.user.user_metadata && session.user.user_metadata.company_name) || name + "'s Properties";
+  companyName = String(companyName).trim() || (name + "'s Properties");
   var selectedPlan = (session.user.user_metadata && session.user.user_metadata.selected_plan) || 'trial';
   var slug      = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
   var trialEnd  = new Date(Date.now() + 14 * 86400000).toISOString();
 
-  // Create organisation
+  // Create organisation (owner_email = account email; creator becomes admin in org_members)
   var { data: newOrg, error: orgErr } = await supa.from('organisations').insert([{
     name:          companyName,
     slug:          slug,
@@ -522,17 +635,24 @@ async function resolveOrg(session) {
 
   if (orgErr || !newOrg) {
     console.error('Failed to create org:', orgErr);
+    showToast && showToast('Could not create your organisation. Check console / Supabase policies.', 'error');
     return false;
   }
 
-  // Link user to org
-  await supa.from('org_members').insert([{
+  // Link user to org — first user is organisation admin (owner)
+  var { error: omErr } = await supa.from('org_members').insert([{
     org_id:  newOrg.id,
     user_id: session.user.id,
     role:    'admin',
   }]);
+  if (omErr) {
+    console.error('Failed to create org_members:', omErr);
+    showToast && showToast('Organisation created but membership failed. Contact support.', 'error');
+    return false;
+  }
 
   _currentOrgId = newOrg.id;
+  _currentMemberRole = 'admin';
   state._currentOrg = newOrg; // store for Settings page
   console.log('New org provisioned:', newOrg.name, newOrg.id);
   return true;
@@ -611,29 +731,40 @@ supa.auth.onAuthStateChange(function(event, session) {
   _authReady = true;
 
   if (!session) {
+    _appBootPending = false;
+    hideAppBootOverlay();
     window.location.href = 'login.html';
     return;
   }
 
-  // Resolve org (provisions new org if first login) then load data
-  resolveOrg(session).then(function(ok) {
-    if (!ok) return; // trial expired or inactive — screen already replaced
+  setAppBootMessage('Signing you in…');
+  // Update session user in state only — do not render() yet (avoids flashing demo / other-org data).
+  upsertSessionUser(session, 'viewer');
 
-    // Sync user identity
-    var authEmail = session.user.email || '';
-    var authName  = (session.user.user_metadata && session.user.user_metadata.full_name)
-                    ? session.user.user_metadata.full_name
-                    : authEmail.split('@')[0];
-    var matched = state.users.find(function(u){ return u.email && u.email.toLowerCase() === authEmail.toLowerCase(); });
-    if (matched) {
-      state.currentUser = matched;
-      matched.lastLogin = 'Today';
-    } else {
-      var initials = authName.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)||'U';
-      state.currentUser = { id: session.user.id, name: authName, initials: initials,
-                            email: authEmail, phone: '', role: 'admin', status: 'active', lastLogin: 'Today' };
-      state.users.push(state.currentUser);
+  // Resolve org (provisions new org if first login) then load org-scoped data, then render.
+  resolveOrg(session).then(function(ok) {
+    if (!ok) {
+      // Trial/inactive screens replace body; provisioning errors keep page — always unlock boot UI.
+      _appBootPending = false;
+      hideAppBootOverlay();
+      return;
     }
+
+    upsertSessionUser(session, _currentMemberRole);
+    syncUsersFromOrgMembers(session).then(function(){
+    setAppBootMessage('Loading your data…');
+    loadState().then(function(loaded){
+      _appBootPending = false;
+      hideAppBootOverlay();
+      if (!loaded) {
+        showToast && showToast('Could not load workspace data.', 'error');
+        return;
+      }
+      if (!canSee(state.page)) state.page = 'dashboard';
+      render();
+      try { saveState(); } catch(e2) {}
+    });
+    });
   });
 });
 
@@ -1143,6 +1274,7 @@ function renderDashboard() {
 
 
 function renderProperties() {
+  if((state.filters.propView||'list')==='deal') return renderPropertiesDealView();
   const f = state.filters.props||'all';
   const q = (state.filters.propQ||'').toLowerCase();
   const pco = state.filters.propCompany||'';
@@ -1161,6 +1293,7 @@ function renderProperties() {
     <div class="page-header">
       <div><div class="page-title">Properties</div><div class="page-sub">${data.length} of ${state.properties.length} properties</div></div>
       <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="propViewDeal()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Deal Analyzer</button>
         <select onchange="state.filters.propCompany=this.value;render()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">${coOpts}</select>
         ${btn('+ Add Property',"openModal('addProp')")}
       </div>
@@ -1608,6 +1741,9 @@ function renderRentRow(p) {
   } else {
     h += '<span style="font-size:12px;color:var(--green);font-weight:700">&#x2713; Collected &mdash; '
       +(p.paidMethod==='cash'?'Cash':'Bank')+'</span>';
+    h += '<button data-pid="'+String(p.id)+'" onclick="openEditPaymentModal(this.dataset.pid)" '
+      +'style="margin-left:auto;padding:5px 11px;border-radius:8px;border:1px solid var(--border);'
+      +'background:var(--bg);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Fix</button>';
   }
   h += '</div></div>';
   return h;
@@ -2174,24 +2310,28 @@ function renderMaintenance() {
         const waNum = (m.tenant
           ? (state.tenants.find(t=>t.name===m.tenant&&t.status!=='inactive')||{}).whatsapp
           : null) || '';
+        const mx = (state.maintExtras && state.maintExtras[m.id]) || {};
+        const allPhotos = [m.photo].filter(Boolean).concat((mx.photos||[]).map(function(p){return p.src;}));
         return `<div class="maint-card${m.priority==='urgent'&&m.status!=='resolved'?' urgent-open':''}">
-          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
-            ${badge(m.priority)} ${badge(m.status.replace('_',' '))}
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+            <div style="display:flex;gap:5px;flex-wrap:wrap">${badge(m.priority)} ${badge(m.status.replace('_',' '))}</div>
+            <button data-mid="${m.id}" onclick="openEditMaintModal(this.dataset.mid)" style="padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted);flex-shrink:0;margin-left:6px">Edit</button>
           </div>
           <div style="font-size:15px;font-weight:700;margin-bottom:6px">${m.issue}</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:2px">📍 ${m.property}${m.room?' · Room '+m.room:''}</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:2px">👤 ${m.tenant||'—'}</div>
-          <div style="font-size:11px;color:var(--dim);margin-bottom:${m.photo?'8px':'14px'}">📅 ${m.date} · ${m.cat}</div>
-          ${m.photo?`<img src="${m.photo}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-bottom:10px">`:''}
-          ${m.notes?`<div style="font-size:12px;color:var(--muted);background:var(--bg);padding:7px 10px;border-radius:7px;margin-bottom:10px">📝 ${m.notes}</div>`:''}
+          <div style="font-size:12px;color:var(--muted);margin-bottom:2px">${m.property}${m.room?' · Room '+m.room:''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:2px">Tenant: ${m.tenant||'—'}</div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Logged: ${m.date} · ${m.cat}</div>
+          ${allPhotos.length?`<div style="display:grid;grid-template-columns:${allPhotos.length>1?'1fr 1fr':'1fr'};gap:4px;margin-bottom:10px">${allPhotos.map(function(src){return '<img src="'+src+'" style="width:100%;height:90px;object-fit:cover;border-radius:7px">';}).join('')}</div>`:''}
+          ${m.notes?`<div style="font-size:12px;color:var(--muted);background:var(--bg);padding:7px 10px;border-radius:7px;margin-bottom:10px">Notes: ${m.notes}</div>`:''}
+          ${mx.cost||mx.invoiceName?`<div style="display:flex;align-items:center;gap:8px;background:var(--green-light);border:1px solid #A7F3D0;border-radius:8px;padding:7px 10px;margin-bottom:8px">${mx.cost?'<span style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">£'+mx.cost+'</span><span style="font-size:11px;color:var(--muted)"> job cost</span>':''}${mx.invoiceName?'<a href="'+(mx.invoiceUrl||'#')+'" download="'+mx.invoiceName+'" style="margin-left:auto;font-size:11px;font-weight:700;color:var(--blue);text-decoration:none">Invoice</a>':''}</div>`:''}
           ${m.status!=='resolved'
             ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
-                ${m.status==='open'?btn('▶ Start',`updMaint('${m.id}','in_progress')`,'secondary',true):''}
+                ${m.status==='open'?btn('&#x25B6; Start',`updMaint('${m.id}','in_progress')`,'secondary',true):''}
                 ${btn('✓ Resolve',`updMaint('${m.id}','resolved')`,m.status==='open'?'secondary':'primary',true)}
-                <button onclick="shareMaintWA(event,'${m.id}')" style="padding:5px 10px;border-radius:8px;border:1px solid #25D366;background:#F0FDF4;color:#16A34A;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📲 WA</button>
-                <button onclick="sendToContractorModal('${m.id}')" style="padding:5px 10px;border-radius:8px;border:1px solid var(--blue);background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔧 Contractor</button>
+                <button data-mid="${m.id}" onclick="shareMaintWA(event,this.dataset.mid)" style="padding:5px 10px;border-radius:8px;border:1px solid #25D366;background:#F0FDF4;color:#16A34A;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">WA</button>
+                <button data-mid="${m.id}" onclick="sendToContractorModal(this.dataset.mid)" style="padding:5px 10px;border-radius:8px;border:1px solid var(--blue);background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Contractor</button>
               </div>`
-            : `<span style="font-size:12px;color:var(--green);font-weight:600">✓ Resolved</span>`}
+            : `<span style="font-size:12px;color:var(--green);font-weight:600">Resolved</span>`}
         </div>`;
       }).join('')}
       ${data.length===0?'<div class="empty" style="grid-column:1/-1">No maintenance requests found</div>':''}
@@ -2300,8 +2440,7 @@ function rebuildTenantSchedule(tenantId){
   }
 }
 
-  saveState();
-  render();function markSchedulePaid(schedId,method){
+function markSchedulePaid(schedId,method){
   var s=state.rentSchedule.find(function(x){return String(x.id)===String(schedId);});if(!s)return;s.status='paid';
   var t=state.tenants.find(function(x){return x.id===s.tenantId;});
   if(t){t.paid=new Date(s.dueDateRaw).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});var dueDateISO=new Date(s.dueDateRaw).toISOString().split('T')[0];state.payments.push({id:crypto.randomUUID(),tenant:s.tenantName,tenantName:s.tenantName,tenantId:s.tenantId,property:s.property,propertyName:s.property,amount:s.amount,date:t.paid,dueDate:dueDateISO,paidDate:t.paid,method:method,status:'paid',_dueDateRaw:s.dueDateRaw});}
@@ -4323,6 +4462,476 @@ async function openPropDetail(id) {
     </div>`;
 }
 
+
+// ── MAINTENANCE EDIT ──────────────────────────────────────────────────────────
+function openEditMaintModal(id) {
+  var m=state.maintenance.find(function(x){return String(x.id)===String(id);});
+  if(!m) return;
+  if(!state.maintExtras) state.maintExtras={};
+  if(!state.maintExtras[id]) state.maintExtras[id]={photos:[]};
+  var mx=state.maintExtras[id];
+  var CATS=['Plumbing','Electrical','Heating / Boiler','Windows / Doors','Damp / Mould','Kitchen','Bathroom','Appliances','Pest Control - Bed Bugs','Pest Control - Cockroaches','Pest Control - Mice','Pest Control - Rats','General'];
+  var catOpts=CATS.map(function(c){return '<option '+(c===(m.cat||m.category||'General')?'selected':'')+'>'+c+'</option>';}).join('');
+  var photosHtml='';
+  if(m.photo) photosHtml+='<div style="position:relative;display:inline-block;margin:3px"><img src="'+m.photo+'" style="width:76px;height:76px;object-fit:cover;border-radius:7px"><span style="position:absolute;bottom:2px;left:2px;font-size:8px;background:rgba(0,0,0,.55);color:#fff;border-radius:3px;padding:1px 4px">Original</span></div>';
+  (mx.photos||[]).forEach(function(ph,i){
+    photosHtml+='<div data-eid="emph'+i+'" style="position:relative;display:inline-block;margin:3px"><img src="'+ph.src+'" style="width:76px;height:76px;object-fit:cover;border-radius:7px"><button data-mid="'+id+'" data-idx="'+i+'" onclick="removeMaintExtraPhoto(this.dataset.mid,this.dataset.idx);var _p=this.parentNode;if(_p)_p.remove()" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;padding:0">&times;</button></div>';
+  });
+  var invHtml='';
+  if(mx.invoiceName) invHtml='<div id="em-inv-curr" style="display:flex;align-items:center;gap:7px;background:var(--blue-light);border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;margin-bottom:6px"><span style="font-size:11px;font-weight:600;color:var(--blue);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+mx.invoiceName+'</span><button data-mid="'+id+'" onclick="clearMaintInvoice(this.dataset.mid)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;font-weight:700;flex-shrink:0">Remove</button></div>';
+  invHtml+='<div id="em-inv-prev" style="display:none;align-items:center;gap:7px;background:var(--blue-light);border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;margin-bottom:6px"><span id="em-inv-name" style="font-size:11px;font-weight:600;color:var(--blue);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><button onclick="clearPendingInvoicePreview()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;font-weight:700;flex-shrink:0">Remove</button></div>';
+  window._pendingMaintInvoice=null;
+  document.getElementById('modal-container').innerHTML=
+    '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
+    +'<div class="modal" style="max-width:500px">'
+    +'<div class="modal-header"><span class="modal-title">Edit Maintenance Job</span><button class="modal-close" onclick="closeModal()">&times;</button></div>'
+    +'<div class="modal-body">'
+    +'<div class="field"><label class="field-label">Issue Description</label><textarea class="inp" id="em-issue" rows="2" style="resize:vertical">'+m.issue+'</textarea></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Category</label><select class="inp" id="em-cat">'+catOpts+'</select></div>'
+    +'<div class="field"><label class="field-label">Priority</label><select class="inp" id="em-pri">'
+    +'<option value="urgent"'+(m.priority==='urgent'?' selected':'')+'>Urgent</option>'
+    +'<option value="high"'+(m.priority==='high'?' selected':'')+'>High</option>'
+    +'<option value="medium"'+(m.priority==='medium'?' selected':'')+'>Medium</option>'
+    +'<option value="low"'+(m.priority==='low'?' selected':'')+'>Low</option>'
+    +'</select></div></div>'
+    +'<div class="field"><label class="field-label">Status</label><select class="inp" id="em-status">'
+    +'<option value="open"'+(m.status==='open'?' selected':'')+'>Open</option>'
+    +'<option value="in_progress"'+(m.status==='in_progress'?' selected':'')+'>In Progress</option>'
+    +'<option value="resolved"'+(m.status==='resolved'?' selected':'')+'>Resolved</option>'
+    +'</select></div>'
+    +'<div class="field"><label class="field-label">Notes</label><input class="inp" id="em-notes" value="'+(m.notes||'').replace(/"/g,'&quot;')+'" placeholder="Access details, follow-up notes"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Job Cost (£)</label><input class="inp" id="em-cost" type="number" step="0.01" min="0" placeholder="0.00" value="'+(mx.cost||'')+'"></div>'
+    +'<div class="field"><label class="field-label">Invoice / Receipt</label>'
+    +'<input type="file" id="em-inv-inp" accept="image/*,.pdf" style="display:none" onchange="previewMaintInvoice(this)">'
+    +invHtml
+    +'<button onclick="clickMaintInvInput()" style="display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:8px;border:2px dashed var(--border);background:var(--bg);cursor:pointer;width:100%;font-family:inherit;font-size:12px;color:var(--muted)">+ Upload Invoice</button>'
+    +'</div></div>'
+    +'<div class="field"><label class="field-label">Photos</label>'
+    +'<div id="em-photos-grid" style="line-height:0;margin-bottom:8px">'+photosHtml+'</div>'
+    +'<input type="file" id="em-photos-inp" accept="image/*" multiple data-mid="'+id+'" style="display:none" onchange="addMaintExtraPhotos(this)">'
+    +'<button onclick="clickMaintPhotosInput()" style="display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:8px;border:2px dashed var(--border);background:var(--bg);cursor:pointer;width:100%;font-family:inherit;font-size:12px;color:var(--muted)">+ Add Photos</button>'
+    +'</div>'
+    +'</div>'
+    +'<div class="modal-footer">'
+    +'<button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<button data-mid="'+id+'" onclick="saveEditMaint(this.dataset.mid)" style="padding:9px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Changes</button>'
+    +'</div></div></div>';
+}
+function saveEditMaint(id) {
+  var m=state.maintenance.find(function(x){return String(x.id)===String(id);});if(!m)return;
+  var issue=(document.getElementById('em-issue').value||'').trim();if(issue)m.issue=issue;
+  m.cat=document.getElementById('em-cat').value;m.category=m.cat;
+  m.priority=document.getElementById('em-pri').value;
+  var ns=document.getElementById('em-status').value;
+  if(ns==='resolved'&&m.status!=='resolved')m.resolvedDate=new Date().toISOString().split('T')[0];
+  m.status=ns;m.notes=document.getElementById('em-notes').value;
+  if(!state.maintExtras)state.maintExtras={};
+  if(!state.maintExtras[id])state.maintExtras[id]={photos:[]};
+  var mx=state.maintExtras[id],prevCost=mx.cost||0;
+  var cv=parseFloat(document.getElementById('em-cost').value)||0;
+  if(cv>0)mx.cost=Math.round(cv*100)/100;else delete mx.cost;
+  if(window._pendingMaintInvoice){mx.invoiceUrl=window._pendingMaintInvoice.url;mx.invoiceName=window._pendingMaintInvoice.name;window._pendingMaintInvoice=null;}
+  if(cv>0&&cv!==prevCost){
+    if(!state.expenses)state.expenses=[];
+    state.expenses=state.expenses.filter(function(e){return e._maintId!==id;});
+    var _prop=state.properties.find(function(p){return p.name===m.property;});
+    state.expenses.push({id:crypto.randomUUID(),_maintId:id,category:'Maintenance',description:m.issue+(m.room?' (Room '+m.room+')':'')+' - '+(m.cat||'General'),amount:cv,type:'actual',status:'actual',freq:'one-off',recurring:false,startDate:new Date().toISOString().split('T')[0],propertyId:_prop?_prop.id:null,propertyName:m.property||''});
+    showToast('Job updated - cost added to Expenses','success');
+  } else {showToast('Job updated','success');}
+  saveState();closeModal();render();
+}
+function previewMaintInvoice(input){
+  var file=input.files[0];if(!file)return;
+  if(file.size>2*1024*1024){showToast('File too large - max 2MB','error');input.value='';return;}
+  var pd=document.getElementById('em-inv-prev'),ne=document.getElementById('em-inv-name');
+  if(pd)pd.style.display='flex';if(ne)ne.textContent=file.name;
+  var reader=new FileReader();
+  reader.onload=function(e){window._pendingMaintInvoice={url:e.target.result,name:file.name};};
+  reader.readAsDataURL(file);
+}
+function addMaintExtraPhotos(input){
+  var maintId=input.dataset.mid;
+  if(!state.maintExtras)state.maintExtras={};
+  if(!state.maintExtras[maintId])state.maintExtras[maintId]={photos:[]};
+  var mx=state.maintExtras[maintId],grid=document.getElementById('em-photos-grid');
+  Array.from(input.files).forEach(function(file){
+    if(file.size>3*1024*1024){showToast('Photo too large (max 3MB) - skipped','error');return;}
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var photo={src:e.target.result,name:file.name};
+      mx.photos.push(photo);
+      if(grid){
+        var idx=mx.photos.length-1;
+        var div=document.createElement('div');
+        div.id='emph'+idx;div.style.cssText='position:relative;display:inline-block;margin:3px';
+        var btn=document.createElement('button');
+        btn.dataset.mid=maintId;btn.dataset.idx=String(idx);
+        btn.innerHTML='&times;';
+        btn.style.cssText='position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;padding:0';
+        btn.onclick=function(){removeMaintExtraPhoto(this.dataset.mid,this.dataset.idx);var el=document.getElementById('emph'+this.dataset.idx);if(el)el.remove();};
+        var img=document.createElement('img');img.src=photo.src;img.style.cssText='width:76px;height:76px;object-fit:cover;border-radius:7px';
+        div.appendChild(img);div.appendChild(btn);grid.appendChild(div);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value='';
+}
+function removeMaintExtraPhoto(maintId,idx){
+  if(state.maintExtras&&state.maintExtras[maintId])state.maintExtras[maintId].photos.splice(Number(idx),1);
+}
+
+function clearPendingInvoicePreview(){var pd=document.getElementById('em-inv-prev');if(pd)pd.style.display='none';var inp=document.getElementById('em-inv-inp');if(inp)inp.value='';window._pendingMaintInvoice=null;}
+function clickMaintInvInput(){var el=document.getElementById('em-inv-inp');if(el)el.click();}
+function clickMaintPhotosInput(){var el=document.getElementById('em-photos-inp');if(el)el.click();}
+function clearMaintInvoice(maintId){
+  if(state.maintExtras&&state.maintExtras[maintId]){delete state.maintExtras[maintId].invoiceUrl;delete state.maintExtras[maintId].invoiceName;}
+  var el=document.getElementById('em-inv-curr');if(el)el.style.display='none';saveState();
+}
+
+// ── PAYMENT EDIT ──────────────────────────────────────────────────────────────
+function openEditPaymentModal(payId){
+  var idStr=String(payId);
+  var p=state.payments.find(function(x){return String(x.id)===idStr;});
+  var sc=!p?state.rentSchedule.find(function(x){return String(x.id)===idStr;}):null;
+  var entry=p||sc;if(!entry)return;
+  var tenantName=entry.tenant||entry.tenantName||'';
+  var amount=entry.amount||0;
+  var method=p?(p.paidMethod||p.method||'bank'):(sc?(sc.method||'bank'):'bank');
+  var propRoom=(entry.property||entry.propertyName||'')+(entry.room?' - Rm '+(entry.room||''):'');
+  document.getElementById('modal-container').innerHTML=
+    '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
+    +'<div class="modal" style="max-width:400px">'
+    +'<div class="modal-header"><span class="modal-title">Fix Payment</span><button class="modal-close" onclick="closeModal()">&times;</button></div>'
+    +'<div class="modal-body">'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px"><div style="font-size:13px;font-weight:700">'+tenantName+'</div><div style="font-size:12px;color:var(--muted)">'+propRoom+'</div></div>'
+    +'<div class="field"><label class="field-label">Amount (£)</label><input class="inp" id="ep-amount" type="number" step="0.01" min="0" value="'+amount+'"></div>'
+    +'<div class="field"><label class="field-label">Method</label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:9px;border:2px solid '+(method==='bank'?'var(--accent)':'var(--border)')+';cursor:pointer"><input type="radio" name="ep-method" value="bank"'+(method==='bank'?' checked':'')+' style="accent-color:var(--accent)"> Bank</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:9px;border:2px solid '+(method==='cash'?'var(--accent)':'var(--border)')+';cursor:pointer"><input type="radio" name="ep-method" value="cash"'+(method==='cash'?' checked':'')+' style="accent-color:var(--accent)"> Cash</label>'
+    +'</div></div>'
+    +'<div style="margin-top:8px;padding:12px;background:var(--red-light);border:1px solid #FECDD3;border-radius:10px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px">Revert to Unpaid</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Marks this entry as outstanding again.</div>'
+    +'<button data-pid="'+idStr+'" onclick="revertPayment(this.dataset.pid)" style="padding:7px 14px;border-radius:8px;border:1px solid var(--red);background:#fff;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Revert to Outstanding</button>'
+    +'</div></div>'
+    +'<div class="modal-footer">'
+    +'<button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<button data-pid="'+idStr+'" onclick="saveEditPayment(this.dataset.pid)" style="padding:9px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Fix</button>'
+    +'</div></div></div>';
+}
+function saveEditPayment(payId){
+  var idStr=String(payId),found=false;
+  var newAmt=parseFloat(document.getElementById('ep-amount').value)||0;
+  var newMeth=(document.querySelector('input[name="ep-method"]:checked')||{value:'bank'}).value;
+  state.payments=state.payments.map(function(p){if(String(p.id)===idStr){found=true;return Object.assign({},p,{amount:newAmt,method:newMeth,paidMethod:newMeth});}return p;});
+  if(!found){var sc=state.rentSchedule.find(function(x){return String(x.id)===idStr;});if(sc){sc.amount=newAmt;sc.method=newMeth;sc.paidMethod=newMeth;}}
+  saveState();closeModal();render();showToast('Payment updated','success');
+}
+function revertPayment(payId){
+  var idStr=String(payId);
+  if(!confirm('Revert this payment to outstanding?')) return;
+  state.payments=state.payments.filter(function(p){return String(p.id)!==idStr;});
+  var sc=state.rentSchedule.find(function(x){return String(x.id)===idStr;});
+  if(sc){sc.status='pending';delete sc.paidDate;delete sc.paidMethod;}
+  saveState();closeModal();render();showToast('Payment reverted','success');
+}
+
+
+// ── DEAL ANALYZER ─────────────────────────────────────────────────────────────
+function renderPropertiesDealView() {
+  if(!state.dealInputs) state.dealInputs={};
+  var d=state.dealInputs._scratch||{};
+  var isOwned=(d.dealType||'r2r')==='owned';
+  var scenarios=Object.keys(state.dealInputs).filter(function(k){return k!=='_scratch'&&state.dealInputs[k]&&state.dealInputs[k]._name;}).map(function(k){return state.dealInputs[k];});
+
+  // Compact inline input (no card wrapper — just label + input field)
+  function inp(label,id,val,pfx){
+    return '<div>'
+      +'<label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:3px">'+label+'</label>'
+      +'<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">'
+      +(pfx?'<span style="padding:0 8px;font-size:12px;color:var(--muted);background:var(--bg);border-right:1px solid var(--border);height:34px;display:flex;align-items:center;flex-shrink:0">'+pfx+'</span>':'')
+      +'<input type="number" id="'+id+'" value="'+(val!==undefined&&val!==''?val:'')+'" oninput="recalcDealPage()" '
+      +'style="flex:1;border:none;padding:7px 9px;font-size:13px;font-family:monospace;background:transparent;outline:none;min-width:0;color:var(--text);width:100%">'
+      +'</div></div>';
+  }
+
+  // Scenario pills
+  var scBar='';
+  if(scenarios.length){
+    scBar='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><span style="font-size:11px;font-weight:700;color:var(--muted)">Saved:</span>';
+    scenarios.forEach(function(sc){var net2=(sc._grossIncome||0)-(sc._totalCosts||0);
+      scBar+='<div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:20px;background:var(--surface);overflow:hidden">'
+        +'<button data-scid="'+sc._id+'" onclick="loadDealScenario(this.dataset.scid)" style="padding:5px 12px;border:none;background:transparent;font-size:12px;cursor:pointer;font-family:inherit"><span style="font-weight:600">'+sc._name+'</span> <span style="color:'+(net2>=0?'var(--green)':'var(--red)')+';font-weight:700;font-family:monospace">'+fmt(net2)+'/mo</span></button>'
+        +'<button data-scid="'+sc._id+'" onclick="deleteDealScenario(this.dataset.scid)" style="padding:5px 8px;border:none;border-left:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;font-size:12px">&times;</button></div>';
+    });scBar+='</div>';
+  }
+
+  var html='<div class="page-header"><div style="display:flex;align-items:center;gap:12px">'
+    +'<button onclick="propViewList()" style="padding:7px 12px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit">&larr; Properties</button>'
+    +'<div><div class="page-title">Deal Analyzer</div><div class="page-sub">Model any deal before committing</div></div></div>'
+    +'<div style="display:flex;gap:8px"><button onclick="saveDealScenario()" style="padding:9px 16px;border-radius:9px;border:1px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Scenario</button>'
+    +'<button onclick="resetDealPage()" style="padding:9px 14px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit">Reset</button></div></div>';
+
+  html+=scBar;
+
+  var isWhole=(d.lettingType||'hmo')==='whole';
+
+  // Deal type toggle (R2R / Owned) — single row
+  html+='<div style="display:flex;gap:0;background:var(--bg);border:1.5px solid var(--border);border-radius:11px;padding:3px;margin-bottom:18px;width:fit-content">';
+  ['r2r','owned'].forEach(function(t){var active=(d.dealType||'r2r')===t;
+    html+='<button data-dt="'+t+'" onclick="switchDealType(this.dataset.dt)" style="padding:9px 22px;border-radius:8px;border:none;background:'+(active?'var(--surface)':'transparent')+';box-shadow:'+(active?'0 1px 4px rgba(0,0,0,.1)':'none')+';font-size:13px;font-weight:'+(active?700:500)+';color:'+(active?'var(--text)':'var(--muted)')+';cursor:pointer;font-family:inherit">'+(t==='r2r'?'Rent-to-Rent (R2R)':'Owned / BTL')+'</button>';});
+  html+='</div>';
+
+  var rentPeriod=d.rentPeriod||'wk';
+
+  // ── INPUTS ─────────────────────────────────────────────────────────────────
+  html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:18px">';
+
+  // Header row: title + whole-property toggle
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  html+='<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Deal Inputs</div>';
+  html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);">'
+    +'<span>Whole Property</span>'
+    +'<div data-lt="'+(isWhole?'hmo':'whole')+'" onclick="switchLettingType(this.dataset.lt)" style="width:36px;height:20px;border-radius:10px;background:'+(isWhole?'var(--accent)':'var(--border)')+';position:relative;cursor:pointer;transition:background .2s">'
+    +'<div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:'+(isWhole?'18px':'2px')+';transition:left .2s"></div></div>'
+    +'</label></div>';
+
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">';
+
+  // Rooms — greyed + disabled for whole property
+  html+='<div style="opacity:'+(isWhole?'0.35':'1')+';pointer-events:'+(isWhole?'none':'auto')+'">'
+    +'<label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:3px">Rooms</label>'
+    +'<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">'
+    +'<span style="padding:0 8px;font-size:12px;color:var(--muted);background:var(--bg);border-right:1px solid var(--border);height:34px;display:flex;align-items:center;flex-shrink:0">#</span>'
+    +'<input type="number" id="da-rooms" value="'+(d.rooms||4)+'" oninput="recalcDealPage()" '+(isWhole?'disabled':'')+' style="flex:1;border:none;padding:7px 9px;font-size:13px;font-family:monospace;background:transparent;outline:none;min-width:0;color:var(--text);width:100%">'
+    +'</div></div>';
+
+  html+=isOwned?inp('Purchase Price','da-price',d.price||'','£'):inp('LL Rent /mo','da-llrent',d.llrent||'','£');
+
+  // Rent per room — with wk/mo toggle in the label
+  html+='<div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+    +'<label style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">'+(isWhole?'Tenant Rent':'Rent / Room')+'</label>'
+    +'<div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">'
+    +'<button onclick="switchRentPeriod(\'wk\')" style="padding:2px 7px;border:none;background:'+(rentPeriod==='wk'?'var(--accent)':'var(--bg)')+';color:'+(rentPeriod==='wk'?'#fff':'var(--muted)')+';font-size:9px;font-weight:700;cursor:pointer;font-family:inherit">wk</button>'
+    +'<button onclick="switchRentPeriod(\'mo\')" style="padding:2px 7px;border:none;background:'+(rentPeriod==='mo'?'var(--accent)':'var(--bg)')+';color:'+(rentPeriod==='mo'?'#fff':'var(--muted)')+';font-size:9px;font-weight:700;cursor:pointer;font-family:inherit">mo</button>'
+    +'</div></div>'
+    +'<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden">'
+    +'<span style="padding:0 8px;font-size:12px;color:var(--muted);background:var(--bg);border-right:1px solid var(--border);height:34px;display:flex;align-items:center;flex-shrink:0">&pound;</span>'
+    +'<input type="number" id="da-wkrent" value="'+(d.wkrent||'')+'" oninput="recalcDealPage()" style="flex:1;border:none;padding:7px 9px;font-size:13px;font-family:monospace;background:transparent;outline:none;min-width:0;color:var(--text);width:100%">'
+    +'</div></div>';
+
+  html+=inp('Occupancy','da-occ',d.occ||85,'%');
+  html+=inp('Bills','da-bills',d.bills||'','£');
+  html+=inp('Maintenance','da-maint',d.maint||'','£');
+  html+=inp('Insurance','da-insur',d.insur||'','£');
+  html+=inp('Management','da-mgmt',d.mgmt||'','£');
+  html+=inp('Void Allowance','da-void',d.voidCost||'','£');
+  html+=inp('Other','da-other',d.other||'','£');
+  if(isOwned){
+    html+=inp('Deposit %','da-dep',d.dep||25,'%');
+    html+=inp('Renovation','da-reno',d.reno||'','£');
+    html+=inp('Mortgage Rate','da-mrate',d.mrate||4.5,'%');
+    html+=inp('Mortgage Term','da-mterm',d.mterm||25,'yr');
+  }
+  html+='</div>';
+  if(isOwned) html+='<div id="da-calc-mortgage" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:14px"></div>';
+  html+='</div>';
+
+  // ── RESULTS: full-width below inputs ─────────────────────────────────────────
+  html+='<div id="da-results"><div style="padding:32px;text-align:center;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:14px">'
+    +'<div style="font-size:28px;margin-bottom:8px">&#x1F9EE;</div>'
+    +'<div style="font-size:13px">Fill in the figures above to see the analysis</div></div></div>';
+
+  // AI section
+  html+='<div style="margin-top:18px;background:linear-gradient(135deg,#0F0F1A,#1a1a3e);border-radius:14px;overflow:hidden">'
+    +'<div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px">'
+    +'<div style="display:flex;align-items:center;gap:12px"><div style="font-size:24px">&#x1F916;</div>'
+    +'<div><div style="font-size:14px;font-weight:700;color:#fff">AI Deal Analysis</div>'
+    +'<div style="font-size:11px;color:rgba(255,255,255,.45)">Instant verdict — strengths, risks, suggestions</div></div></div>'
+    +'<button onclick="runLocalDealAnalysis()" style="padding:9px 20px;border-radius:9px;border:none;background:#00D897;color:#000;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Analyze Deal</button></div>'
+    +'<div id="da-ai-out" style="padding:0 20px 16px"></div></div>';
+
+  return html;
+}
+
+function recalcDealPage(){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!document.getElementById('da-rooms'))return;
+  function gv(id,def){var el=document.getElementById(id);return el?(parseFloat(el.value)||0):(def||0);}
+  var sc=state.dealInputs._scratch||{};
+  var dealType=sc.dealType||'r2r';
+  var isOwned=dealType==='owned';
+  var isWhole=(sc.lettingType||'hmo')==='whole';
+  var rooms=isWhole?1:Math.max(1,gv('da-rooms',1));
+  var wkRent=gv('da-wkrent',0); // same field for both HMO and whole property
+  var occ=gv('da-occ',85);
+  var llRent=isOwned?0:gv('da-llrent',0),bills=gv('da-bills',0),maint=gv('da-maint',0),insur=gv('da-insur',0),mgmt=gv('da-mgmt',0),voidC=gv('da-void',0),other=gv('da-other',0);
+  var price=isOwned?gv('da-price',0):0,dep=isOwned?gv('da-dep',25):0,reno=isOwned?gv('da-reno',0):0,mrate=isOwned?gv('da-mrate',4.5):0,mterm=isOwned?gv('da-mterm',25):0;
+  var mortPayment=0;
+  if(isOwned&&price&&mrate&&mterm){var loan=price*(1-dep/100),mr=mrate/100/12,n=mterm*12;mortPayment=mr>0?Math.round(loan*mr*Math.pow(1+mr,n)/(Math.pow(1+mr,n)-1)):0;var mcEl=document.getElementById('da-calc-mortgage');if(mcEl)mcEl.innerHTML=mortPayment?'Est. mortgage: <strong>'+fmt(mortPayment)+'/mo</strong>':'';}
+  var primaryCost=isOwned?mortPayment:llRent;
+  var rentPeriod=sc.rentPeriod||'wk';
+  var rentMo=rentPeriod==='mo'?wkRent:wkRent*52/12; // wkRent field holds the value regardless of period
+  var grossIncome=isWhole?Math.round(rentMo*occ/100):Math.round(rooms*rentMo*occ/100);
+  var runningCosts=bills+maint+insur+mgmt+voidC+other;
+  var totalCosts=primaryCost+runningCosts,net=grossIncome-totalCosts,margin=grossIncome>0?Math.round(net/grossIncome*100):0,annualNet=net*12;
+  var cashIn=isOwned?Math.max(1,price*dep/100+reno):0;
+  var grossYield=(isOwned&&price>0)?+((grossIncome*12/price)*100).toFixed(1):0;
+  var netYield=(isOwned&&price>0)?+((annualNet/price)*100).toFixed(1):0;
+  var roi=(isOwned&&price>0&&cashIn>100&&annualNet>0)?+(annualNet/cashIn*100).toFixed(1):0;
+  var payback=(isOwned&&price>0&&cashIn>100&&net>0)?+(cashIn/net/12).toFixed(1):0;
+  var breakEven=(!isOwned&&grossIncome>0)?Math.ceil(totalCosts/(grossIncome/rooms)):0;
+  state.dealInputs._scratch={dealType:dealType,lettingType:sc.lettingType||'hmo',rentPeriod:sc.rentPeriod||'wk',rooms:rooms,wkrent:wkRent,occ:occ,llrent:llRent,bills:bills,maint:maint,insur:insur,mgmt:mgmt,voidCost:voidC,other:other,price:price,dep:dep,reno:reno,mrate:mrate,mterm:mterm,_grossIncome:grossIncome,_totalCosts:totalCosts};
+  clearTimeout(window._dealSaveTimer);window._dealSaveTimer=setTimeout(function(){saveState();},800);
+  function col(v,g,a){return v>=g?'var(--green)':v>=a?'var(--amber)':'var(--red)';}
+  var nc=net>=0?'var(--green)':'var(--red)';
+  function kpic(lbl,val,c,sub){return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;text-align:center"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+lbl+'</div><div style="font-size:22px;font-weight:800;font-family:monospace;color:'+c+'">'+val+'</div>'+(sub?'<div style="font-size:10px;color:var(--dim);margin-top:3px">'+sub+'</div>':'')+'</div>';}
+  var kpiHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+kpic('Monthly Net',fmt(net),nc)+kpic('Annual Net',fmt(annualNet),nc);
+  if(!isOwned){
+    kpiHtml+=kpic('Profit Margin',margin+'%',col(margin,20,10),'net / income');
+    if(isWhole){
+      var voidMonths=net>0&&totalCosts>0?Math.floor(net*12/totalCosts*10)/10:0;
+      kpiHtml+=kpic('Void Buffer',voidMonths>0?voidMonths+' mo':'—',col(voidMonths,3,1),'months surplus covers void');
+    } else {
+      kpiHtml+=kpic('Break-even',breakEven?breakEven+' rooms':'—',breakEven&&breakEven<=Math.floor(rooms*0.75)?'var(--green)':'var(--amber)','rooms to cover costs');
+    }
+  }
+  else{kpiHtml+=kpic('Gross Yield',grossYield>0?grossYield+'%':'—',col(grossYield,8,5),'annual rent / price')+kpic('Net Yield',netYield>0?netYield+'%':'—',col(netYield,5,3))+kpic('Cash ROI',roi>0?roi+'%':'—',col(roi,10,5),'net / cash in')+kpic('Payback',payback>0?payback+' yrs':'—',payback&&payback<10?'var(--green)':'var(--amber)');}
+  kpiHtml+='</div>';
+  var bp=grossIncome>0?Math.min(100,Math.round(totalCosts/grossIncome*100)):100;
+  var plHtml='<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Monthly P&L</div>'
+    +'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Gross income ('+occ+'% occ.)</span><span style="font-size:13px;font-weight:700;color:var(--green);font-family:monospace">'+fmt(grossIncome)+'</span></div>'
+    +(isOwned?'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Mortgage</span><span style="font-size:13px;font-weight:700;color:var(--red);font-family:monospace">- '+fmt(mortPayment)+'</span></div>':'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Landlord rent</span><span style="font-size:13px;font-weight:700;color:var(--red);font-family:monospace">- '+fmt(llRent)+'</span></div>')
+    +'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Running costs</span><span style="font-size:13px;font-weight:700;color:var(--amber);font-family:monospace">- '+fmt(runningCosts)+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;padding:8px 14px;background:'+(net>=0?'var(--green-light)':'var(--red-light)')+';margin:6px -14px -14px;border-radius:0 0 11px 11px"><span style="font-size:13px;font-weight:700">Net Profit / Loss</span><span style="font-size:16px;font-weight:800;color:'+nc+';font-family:monospace">'+fmt(net)+'/mo</span></div></div>';
+  var barHtml='<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:16px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:8px"><span>Cost ratio: '+bp+'%</span><span>Income: '+fmt(grossIncome)+'/mo</span></div><div style="height:12px;border-radius:6px;background:var(--green-light);overflow:hidden"><div style="height:100%;width:'+bp+'%;background:'+(bp>90?'var(--red)':bp>70?'var(--amber)':'var(--green)')+';border-radius:6px;transition:width .4s"></div></div><div style="text-align:right;font-size:10px;color:var(--muted);margin-top:5px">'+(bp<70?'Healthy margin':bp<90?'Tight margin':'Loss-making')+'</div></div>';
+  var MLBLS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],nowM=new Date().getMonth();
+  var maxV=Math.max(grossIncome,totalCosts,1)*1.2,W=380,H=120,bW=10,gp=2,gW=bW*2+gp+9,oX=28,oY=8,aH=H-oY-22;
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:120px;display:block">';
+  for(var i=0;i<12;i++){var x=oX+i*gW,iH=Math.max(2,Math.round((grossIncome/maxV)*aH)),cH=Math.max(2,Math.round((totalCosts/maxV)*aH));svg+='<rect x="'+x+'" y="'+(oY+aH-iH)+'" width="'+bW+'" height="'+iH+'" fill="#10B981" rx="2" opacity=".9"/><rect x="'+(x+bW+gp)+'" y="'+(oY+aH-cH)+'" width="'+bW+'" height="'+cH+'" fill="'+(totalCosts>grossIncome?'#E8375A':'#F59E0B')+'" rx="2" opacity=".85"/><text x="'+(x+bW)+'" y="'+(H-4)+'" text-anchor="middle" font-size="7.5" fill="#94A3B8">'+MLBLS[(i+nowM)%12]+'</text>';}
+  svg+='<rect x="4" y="3" width="8" height="8" fill="#10B981" rx="1"/><text x="14" y="10" font-size="8" fill="#64748B">Income</text><rect x="60" y="3" width="8" height="8" fill="#F59E0B" rx="1"/><text x="70" y="10" font-size="8" fill="#64748B">Costs</text></svg>';
+  var chartHtml='<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">12-Month Projection</div>'+svg+'</div>';
+  var yr5='<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;overflow:hidden;margin-bottom:4px"><div style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">5-Year Outlook <span style="font-weight:400;text-transform:none">(3% growth, 2% cost inflation)</span></div><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg)"><th style="padding:6px 12px;text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase">Year</th><th style="padding:6px 12px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase">Income</th><th style="padding:6px 12px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase">Costs</th><th style="padding:6px 12px;text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase">Net</th></tr></thead><tbody>';
+  for(var yr=1;yr<=5;yr++){var yi=Math.round(grossIncome*12*Math.pow(1.03,yr-1)),yc=Math.round(totalCosts*12*Math.pow(1.02,yr-1)),yn=yi-yc;yr5+='<tr style="border-top:1px solid var(--border);background:'+(yr%2?'var(--bg)':'var(--surface)')+'"><td style="padding:6px 12px;font-weight:600">Year '+yr+'</td><td style="padding:6px 12px;text-align:right;color:var(--green);font-family:monospace">'+fmt(yi)+'</td><td style="padding:6px 12px;text-align:right;color:var(--red);font-family:monospace">'+fmt(yc)+'</td><td style="padding:6px 12px;text-align:right;font-weight:700;color:'+(yn>=0?'var(--green)':'var(--red)')+';font-family:monospace">'+fmt(yn)+'</td></tr>';}
+  yr5+='</tbody></table></div>';
+  var resEl=document.getElementById('da-results');
+  if(resEl)resEl.innerHTML=kpiHtml+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+plHtml+barHtml+'</div>'+chartHtml+yr5;
+  // Auto-update local analysis on every input change
+  clearTimeout(window._localAnalysisTimer);
+  window._localAnalysisTimer=setTimeout(function(){
+    var aiOut=document.getElementById('da-ai-out');
+    if(aiOut&&(state.dealInputs._scratch||{})._grossIncome){
+      var result=analyzeLocalDeal();
+      if(result) aiOut.innerHTML=renderLocalDealOutput(result);
+    }
+  },600);
+}
+
+
+function propViewList(){state.filters.propView='list';render();}
+function propViewDeal(){state.filters.propView='deal';render();}
+function switchRentPeriod(period){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  state.dealInputs._scratch.rentPeriod=period;
+  state.filters.propView='deal';
+  saveState();render();
+}
+function switchLettingType(lt){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  state.dealInputs._scratch.lettingType=lt;
+  state.filters.propView='deal';
+  saveState();render();
+}
+function switchDealType(t){if(!state.dealInputs)state.dealInputs={};if(!state.dealInputs._scratch)state.dealInputs._scratch={};state.dealInputs._scratch.dealType=t;state.filters.propView='deal';saveState();render();}
+function resetDealPage(){if(!state.dealInputs)state.dealInputs={};delete state.dealInputs._scratch;state.filters.propView='deal';saveState();render();}
+function saveDealScenario(){if(!state.dealInputs||!state.dealInputs._scratch){showToast('Enter some figures first','error');return;}var name=prompt('Name this scenario:');if(!name)return;var id='sc_'+Date.now();state.dealInputs[id]=Object.assign({},state.dealInputs._scratch,{_name:name,_id:id});state.filters.propView='deal';saveState();render();showToast('Saved: '+name,'success');}
+function loadDealScenario(id){if(!state.dealInputs||!state.dealInputs[id])return;state.dealInputs._scratch=Object.assign({},state.dealInputs[id]);state.page='properties';state.filters.propView='deal';saveState();render();}
+function deleteDealScenario(id){if(!state.dealInputs||!state.dealInputs[id])return;if(!confirm('Delete "'+state.dealInputs[id]._name+'"?'))return;delete state.dealInputs[id];state.filters.propView='deal';saveState();render();}
+
+
+function saveDealAIKey(){var el=document.getElementById('da-key-inp');if(el)saveAgentApiKey(el.value.trim());runDealAI();}
+async function runDealAI(){
+  var outEl=document.getElementById('da-ai-out');if(!outEl)return;
+  var key=getAgentApiKey();
+  if(!key){
+    // No API key — run local deal analysis immediately
+    var localResult=analyzeLocalDeal();
+    outEl.innerHTML=renderLocalDealOutput(localResult);
+    // Also show API key option below
+    if(!localResult){
+      outEl.innerHTML='<div style="padding:12px 0"><div style="font-size:12px;color:rgba(255,255,255,.55);margin-bottom:10px">Enter figures above to see the analysis</div></div>';
+    }
+    return;
+  }
+  var d=(state.dealInputs&&state.dealInputs._scratch)||{};if(!d.rooms&&!d.wkrent){showToast('Enter deal figures first','error');return;}
+  var isOwned=d.dealType==='owned',grossIncome=d._grossIncome||0,totalCosts=d._totalCosts||0,net=grossIncome-totalCosts;
+  var margin=grossIncome>0?Math.round(net/grossIncome*100):0,cashIn=isOwned?Math.max(1,(d.price||0)*(d.dep||25)/100+(d.reno||0)):0;
+  var roi=(cashIn&&net&&(d.price||0)>0)?+(net*12/cashIn*100).toFixed(1):0;
+  var grossYield=(isOwned&&(d.price||0)>0)?+((grossIncome*12/d.price)*100).toFixed(1):0;
+  var breakEven=(!isOwned&&grossIncome>0)?Math.ceil(totalCosts/(grossIncome/Math.max(1,d.rooms||1))):0;
+  outEl.innerHTML='<div style="padding:12px 0;display:flex;align-items:center;gap:10px"><div style="width:20px;height:20px;border:2px solid #00D897;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div><span style="font-size:12px;color:rgba(255,255,255,.5)">Analyzing...</span></div>';
+  var prompt='UK property investment expert. Analyze this '+(isOwned?'BTL':'R2R')+' deal. Return ONLY valid JSON, no markdown.\nRooms: '+(d.rooms||0)+'\nWeekly rent/room: '+(d.wkrent||0)+'\nOccupancy: '+(d.occ||85)+'%\nGross monthly income: '+grossIncome+'\nTotal costs: '+totalCosts+'\nNet monthly: '+net+'\nMargin: '+margin+'%\n'+(isOwned?'Purchase: '+(d.price||0)+', Cash in: '+cashIn+', Yield: '+grossYield+'%\n':'Break-even: '+breakEven+' rooms\n')+'Return: {"score":0-100,"verdict":"GO|CAUTION|NO-GO","headline":"under 20 words","strengths":["max 3"],"risks":["max 3"],"suggestions":["max 3"]}';
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:700,messages:[{role:'user',content:prompt}]})});
+    var data=await res.json();if(data.error)throw new Error(data.error.message);
+    var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').replace(/```json|```/g,'').trim();
+    var r=JSON.parse(txt);
+    var vCol=r.verdict==='GO'?'#00D897':r.verdict==='CAUTION'?'#F5A623':'#FF4D6A';
+    function li(arr,icon,c){return(arr||[]).map(function(s){return '<div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:rgba(255,255,255,.75);margin-bottom:5px;line-height:1.45"><span style="color:'+c+';flex-shrink:0;margin-top:1px">'+icon+'</span>'+s+'</div>';}).join('');}
+    outEl.innerHTML='<div style="padding:12px 0"><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)"><div style="width:52px;height:52px;border-radius:50%;border:2.5px solid '+vCol+';display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="font-size:18px;font-weight:800;color:'+vCol+'">'+r.score+'</div></div><div><div style="font-size:15px;font-weight:800;color:'+vCol+';margin-bottom:3px">'+r.verdict+'</div><div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.4">'+r.headline+'</div></div></div>'+(r.strengths&&r.strengths.length?'<div style="margin-bottom:10px">'+li(r.strengths,'&#x2713;','#00D897')+'</div>':'')+(r.risks&&r.risks.length?'<div style="margin-bottom:10px">'+li(r.risks,'!','#FF4D6A')+'</div>':'')+(r.suggestions&&r.suggestions.length?'<div>'+li(r.suggestions,'&#x2192;','#F5A623')+'</div>':'')+'</div>';
+  }catch(err){outEl.innerHTML='<div style="padding:8px 0;font-size:12px;color:#FF4D6A">Error: '+err.message+'</div>';}
+}
+
+
+// ── Room photo sync — runs in background, does NOT block startup ──────────────
+async function syncRoomPhotosBackground() {
+  try {
+    var storageResult = await supa.storage.from('room-media').list('rooms', { limit: 500 });
+    if (storageResult.error || !storageResult.data || storageResult.data.length === 0) return;
+
+    // Use Promise.all to fetch all property folders in parallel instead of sequential
+    var propFolders = storageResult.data.filter(function(f){ return f && f.name; });
+    var roomFetches = propFolders.map(function(_propFolder) {
+      var _spid = _propFolder.name;
+      return supa.storage.from('room-media').list('rooms/' + _spid, { limit: 100 })
+        .then(function(_roomsResult) {
+          if (_roomsResult.error || !_roomsResult.data) return Promise.resolve();
+          var roomFolders = _roomsResult.data.filter(function(r){ return r && r.name && !isNaN(parseInt(r.name)); });
+          return Promise.all(roomFolders.map(function(_roomFolder) {
+            var _srn = parseInt(_roomFolder.name);
+            return supa.storage.from('room-media').list('rooms/' + _spid + '/' + _srn, { limit: 20 })
+              .then(function(_photosResult) {
+                if (_photosResult.error || !_photosResult.data || _photosResult.data.length === 0) return;
+                var _media = getMedia(_spid, _srn);
+                var added = false;
+                _photosResult.data.forEach(function(_file) {
+                  if (!_file || !_file.name) return;
+                  var _path = 'rooms/' + _spid + '/' + _srn + '/' + _file.name;
+                  var _urlData = supa.storage.from('room-media').getPublicUrl(_path);
+                  var _url = _urlData.data.publicUrl;
+                  var _exists = _media.photos.some(function(ph){ return ph.src === _url || ph.path === _path; });
+                  if (!_exists) { _media.photos.push({ src: _url, name: _file.name, path: _path }); added = true; }
+                });
+                return added;
+              });
+          }));
+        });
+    });
+
+    await Promise.all(roomFetches);
+    // Save updated cache to localStorage (no render needed — photos show on next open)
+    try { localStorage.setItem('pm_local_roomMedia', JSON.stringify(state.roomMedia)); } catch(e) {}
+    console.log('Room photos synced in background');
+  } catch(_se) { console.warn('Background room sync error:', _se); }
+}
+
 function renderPropFinanceTab(p, propTenants) {
   var isOwned  = p.ownershipType === 'owned';
   var isWhole  = p.lettingType   === 'whole';
@@ -4488,15 +5097,33 @@ function renderPropFinanceTab(p, propTenants) {
     }
   }
 
-  // ── R2R model: margin summary ─────────────────────────────────────────────
+  // R2R margin + chart
   if(!isOwned && monthlyIncome && monthlyOutgoing) {
-    var margin = monthlyOutgoing ? +((monthlyProfit / monthlyIncome)*100).toFixed(1) : 0;
-    html += section('R2R Margin Analysis', '🔄');
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
-    html += row('Gross margin', margin+'%', margin>=20?'var(--green)':margin>=10?'var(--amber)':'var(--red)');
-    html += row('Per-room avg profit', p.rooms ? fmt(Math.round(monthlyProfit/p.rooms))+'/mo' : '—');
-    html += row('Break-even occupancy', p.rooms && monthlyIncome ? Math.ceil(monthlyOutgoing / (monthlyIncome/p.rooms))+' rooms' : '—');
-    html += '</div>';
+    var margin=+((monthlyProfit/monthlyIncome)*100).toFixed(1);
+    var beRooms=p.rooms&&monthlyIncome?Math.ceil(monthlyOutgoing/(monthlyIncome/p.rooms)):0;
+    html+=section('R2R Margin Analysis','');
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">';
+    html+=kpi('Gross margin',margin+'%',margin>=20?'var(--green)':margin>=10?'var(--amber)':'var(--red)','net / income');
+    html+=kpi('Profit/room',p.rooms?fmt(Math.round(monthlyProfit/p.rooms))+'/mo':'—',monthlyProfit>0?'var(--green)':'var(--red)');
+    html+=kpi('Break-even',beRooms?beRooms+' rooms':'—',beRooms&&beRooms<=Math.floor(p.rooms*0.7)?'var(--green)':'var(--amber)','to cover costs');
+    html+='</div>';
+    var bp=monthlyIncome>0?Math.min(100,Math.round(monthlyOutgoing/monthlyIncome*100)):100;
+    html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px">';
+    html+='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:6px"><span>LL Rent: '+fmt(monthlyOutgoing)+'</span><span>Income: '+fmt(monthlyIncome)+'</span></div>';
+    html+='<div style="height:8px;border-radius:4px;background:var(--green-light);overflow:hidden"><div style="height:100%;width:'+bp+'%;background:'+(bp>85?'var(--red)':bp>65?'var(--amber)':'var(--green)')+';border-radius:4px"></div></div>';
+    html+='<div style="text-align:right;font-size:10px;color:var(--muted);margin-top:3px">'+bp+'% of income on LL rent</div></div>';
+  }
+  // 12-month chart for all properties
+  if(monthlyIncome>0){
+    var MLBLS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var nowM=new Date().getMonth(),tOut=monthlyOutgoing+monthlyExpenses;
+    var maxV=Math.max(monthlyIncome,tOut,1)*1.2;
+    var svgW=320,svgH=100,bW=9,gp=2,gW=bW*2+gp+8,oX=26,oY=6,aH=svgH-oY-22;
+    var svgStr='<svg viewBox="0 0 '+svgW+' '+svgH+'" style="width:100%;height:100px;display:block">';
+    for(var _i=0;_i<12;_i++){var _x=oX+_i*gW;var _iH=Math.max(2,Math.round((monthlyIncome/maxV)*aH));var _cH=Math.max(2,Math.round((tOut/maxV)*aH));svgStr+='<rect x="'+_x+'" y="'+(oY+aH-_iH)+'" width="'+bW+'" height="'+_iH+'" fill="#10B981" rx="2" opacity=".85"/>';svgStr+='<rect x="'+(_x+bW+gp)+'" y="'+(oY+aH-_cH)+'" width="'+bW+'" height="'+_cH+'" fill="'+(tOut>monthlyIncome?'#E8375A':'#F59E0B')+'" rx="2" opacity=".8"/>';svgStr+='<text x="'+(_x+bW)+'" y="'+(svgH-4)+'" text-anchor="middle" font-size="7" fill="#94A3B8">'+MLBLS[(_i+nowM)%12]+'</text>';}
+    svgStr+='<rect x="4" y="3" width="7" height="7" fill="#10B981" rx="1"/><text x="13" y="10" font-size="7.5" fill="#64748B">Income</text><rect x="56" y="3" width="7" height="7" fill="#F59E0B" rx="1"/><text x="65" y="10" font-size="7.5" fill="#64748B">Costs</text></svg>';
+    html+=section('12-Month Forecast','');
+    html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:6px">Net: '+fmt(monthlyIncome-tOut)+'/mo</div>'+svgStr+'</div>';
   }
 
   return html;
@@ -5605,7 +6232,7 @@ function confirmImportTenants() {
     var exists = state.tenants.some(function(t){return t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.whatsapp===r.whatsapp;});
     if(exists){ skipped++; return; }
 
-    var id = Date.now()+Math.random();
+    var id = crypto.randomUUID();
     state.tenants.push({
       id: id, name: r.name, property: r.property, room: r.room,
       rent: r.rent, freq: r.freq,
@@ -5673,22 +6300,29 @@ function renderUsers() {
       + '</div></div>';
   });
 
-  // Permissions matrix
   html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:16px;margin-top:8px">';
-  html += '<div style="font-size:13px;font-weight:700;margin-bottom:12px">&#x1F510; Role Permissions</div>';
+  html += '<div style="font-size:13px;font-weight:700;margin-bottom:14px">Role Permissions</div>';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Page Access</div>';
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr><th style="text-align:left;padding:7px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Page</th>';
+  allRoles.forEach(function(rk){var r=state.roles[rk];html+='<th style="text-align:center;padding:7px 8px;color:'+r.color+';border-bottom:1px solid var(--border)">'+r.icon+' '+r.label+'</th>';});
+  html += '</tr></thead><tbody>';
+  NAV.forEach(function(nav,ni){html+='<tr'+(ni%2?' style="background:var(--bg)"':'')+'>'+
+    '<td style="padding:7px 8px;border-bottom:1px solid var(--border)">'+nav.icon+' '+nav.label+'</td>';
+    allRoles.forEach(function(rk){var has=state.roles[rk].pages.indexOf(nav.id)>=0,locked=rk==='admin'||nav.id==='dashboard';
+      html+='<td style="text-align:center;padding:7px 8px;border-bottom:1px solid var(--border)"><input type="checkbox"'+(has?' checked':'')+(locked?' disabled':'')+' data-rk="'+rk+'" data-pg="'+nav.id+'" onchange="toggleRolePage(this.dataset.rk,this.dataset.pg)" style="width:15px;height:15px;accent-color:var(--accent);cursor:'+(locked?'not-allowed':'pointer')+'"></td>';
+    });html+='</tr>';});
+  html += '</tbody></table></div>';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:16px">Action Permissions</div>';
   html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   html += '<thead><tr><th style="text-align:left;padding:7px 8px;color:var(--muted);border-bottom:1px solid var(--border)">Permission</th>';
   allRoles.forEach(function(rk){var r=state.roles[rk];html+='<th style="text-align:center;padding:7px 8px;color:'+r.color+';border-bottom:1px solid var(--border)">'+r.icon+' '+r.label+'</th>';});
   html += '</tr></thead><tbody>';
-  [['canViewFinancials','&#x1F4B0; Financials'],['canMarkPaid','&#x2705; Mark Paid'],['canAddTenant','&#x1F465; Add Tenants'],['canEdit','&#x270F;&#xFE0F; Edit'],['canDelete','&#x1F5D1;&#xFE0F; Delete'],['canManageUsers','&#x1F464; Users']].forEach(function(perm,pi){
-    html+='<tr'+(pi%2?' style="background:var(--bg)"':'')+'>'+
-      '<td style="padding:7px 8px;border-bottom:1px solid var(--border)">'+perm[1]+'</td>';
-    allRoles.forEach(function(rk){
-      var has=!!state.roles[rk][perm[0]];
-      html+='<td style="text-align:center;padding:7px 8px;border-bottom:1px solid var(--border);font-size:15px">'+(has?'<span style="color:var(--green)">&#x2713;</span>':'<span style="color:#CBD5E1">&#x2014;</span>')+'</td>';
-    });
-    html+='</tr>';
-  });
+  [['canViewFinancials','Financials'],['canMarkPaid','Mark Paid'],['canAddTenant','Add Tenants'],['canEdit','Edit'],['canDelete','Delete'],['canManageUsers','Manage Users']].forEach(function(perm,pi){html+='<tr'+(pi%2?' style="background:var(--bg)"':'')+'>'+
+    '<td style="padding:7px 8px;border-bottom:1px solid var(--border)">'+perm[1]+'</td>';
+    allRoles.forEach(function(rk){var has=!!state.roles[rk][perm[0]],locked=rk==='admin';
+      html+='<td style="text-align:center;padding:7px 8px;border-bottom:1px solid var(--border)"><input type="checkbox"'+(has?' checked':'')+(locked?' disabled':'')+' data-rk="'+rk+'" data-pm="'+perm[0]+'" onchange="toggleRolePerm(this.dataset.rk,this.dataset.pm)" style="width:15px;height:15px;accent-color:var(--accent);cursor:'+(locked?'not-allowed':'pointer')+'"></td>';
+    });html+='</tr>';});
   html += '</tbody></table></div></div>';
   return html;
 }
@@ -5700,6 +6334,8 @@ function updateUserRole(uid, role) {
   if(String(u.id)===String(state.currentUser.id)){state.currentUser.role=role;if(!canSee(state.page))state.page='dashboard';}
   saveState(); render();
 }
+function toggleRolePage(rk,pg){if(rk==='admin'||pg==='dashboard')return;var r=state.roles[rk];if(!r)return;var i=r.pages.indexOf(pg);if(i>=0)r.pages.splice(i,1);else r.pages.push(pg);if(String(state.currentUser.role)===rk&&!canSee(state.page))state.page='dashboard';saveState();render();}
+function toggleRolePerm(rk,pm){if(rk==='admin')return;var r=state.roles[rk];if(!r)return;r[pm]=!r[pm];saveState();render();}
 function toggleUserStatus(uid) {
   var u=state.users.find(function(x){return String(x.id)===String(uid);});
   if(!u||String(u.id)===String(state.currentUser.id)) return;
@@ -6388,11 +7024,298 @@ function renderAgentResult(d,dateStr){
   return html;
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LOCAL AI — no API, no internet. Rules-based analysis using live portfolio data
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── DEAL ANALYZER: local scoring engine ───────────────────────────────────────
+function analyzeLocalDeal() {
+  var d=(state.dealInputs&&state.dealInputs._scratch)||{};
+  var isWhole=(d.lettingType||'hmo')==='whole';
+  if(!isWhole&&!d.rooms&&!d.wkrent) return null;
+  if(isWhole&&!d.monthRent) return null;
+  var isOwned=d.dealType==='owned';
+  var grossIncome=d._grossIncome||0;
+  var totalCosts=d._totalCosts||0;
+  var net=grossIncome-totalCosts;
+  var rooms=Math.max(1,d.rooms||1);
+  var margin=grossIncome>0?Math.round(net/grossIncome*100):0;
+  var annualNet=net*12;
+  var cashIn=isOwned?Math.max(1,(d.price||0)*(d.dep||25)/100+(d.reno||0)):0;
+  var grossYield=(isOwned&&(d.price||0)>0)?+((grossIncome*12/d.price)*100).toFixed(1):0;
+  var netYield=(isOwned&&(d.price||0)>0)?+((annualNet/d.price)*100).toFixed(1):0;
+  var roi=(isOwned&&cashIn>100&&annualNet>0)?+(annualNet/cashIn*100).toFixed(1):0;
+  var payback=(isOwned&&cashIn>100&&net>0)?+(cashIn/net/12).toFixed(1):0;
+  var beRooms=(!isOwned&&grossIncome>0)?Math.ceil(totalCosts/(grossIncome/rooms)):0;
+  var beRatio=rooms>0?beRooms/rooms:1;
+  var runCosts=(d.bills||0)+(d.maint||0)+(d.insur||0)+(d.mgmt||0)+(d.voidCost||0)+(d.other||0);
+
+  var score=50,strengths=[],risks=[],suggestions=[];
+
+  if(!isOwned) {
+    // ── R2R scoring ──────────────────────────────────────────────────────────
+    if(margin>=25){score+=20;strengths.push('Strong '+margin+'% profit margin — well above the 20% R2R benchmark');}
+    else if(margin>=20){score+=12;strengths.push('Good '+margin+'% margin — meets the R2R 20% target');}
+    else if(margin>=12){score+=2;suggestions.push('Margin of '+margin+'% is workable but tight — negotiate LL rent down or raise room rates to reach 20%+');}
+    else if(margin>=0){score-=12;risks.push('Margin of '+margin+'% is dangerously thin — any void will push this into a loss');}
+    else{score-=30;risks.push('Negative margin of '+margin+'% — costs already exceed income at current occupancy');}
+
+    // Break-even
+    if(beRooms>0){
+      if(beRatio<=0.55){score+=15;strengths.push('Low break-even at '+beRooms+'/'+rooms+' rooms — good downside protection if rooms go void');}
+      else if(beRatio<=0.70){score+=8;strengths.push('Manageable break-even at '+beRooms+'/'+rooms+' rooms');}
+      else if(beRatio<=0.85){score-=5;risks.push('High break-even at '+beRooms+'/'+rooms+' rooms — limited void buffer');}
+      else{score-=18;risks.push('Very high break-even at '+beRooms+'/'+rooms+' rooms — one empty room pushes into the red');}
+    }
+
+    // Void allowance
+    if(!(d.voidCost>0))suggestions.push('Add a void allowance of at least '+fmt(Math.round(grossIncome*0.08))+'/mo (8%) — empty periods will happen');
+    else if(d.voidCost>0&&d.voidCost<grossIncome*0.05)suggestions.push('Void allowance of '+fmt(d.voidCost)+'/mo may be low — consider '+fmt(Math.round(grossIncome*0.08))+'/mo (8%)');
+
+    // Maintenance reserve
+    if(!(d.maint>0))suggestions.push('No maintenance reserve — budget at least '+fmt(rooms*50)+'/mo (£50/room) for repairs and upkeep');
+
+    // Room rate sense check (South London HMO)
+    if(!isWhole&&(d.wkrent||0)>0){
+      if(d.wkrent<120)risks.push('Weekly rate of £'+d.wkrent+'/room is below South London HMO market (typically £130–180/wk) — verify comparables');
+      else if(d.wkrent>=130&&d.wkrent<=180){score+=5;strengths.push('Room rate of £'+d.wkrent+'/wk is within typical South London HMO range');}
+      else if(d.wkrent>220)risks.push('Weekly rate of £'+d.wkrent+'/room is high — confirm rooms will let at this price before committing');
+    }
+
+    // LL rent as % of income
+    var llRent=d.llrent||0;
+    if(llRent>0&&grossIncome>0){
+      var llPct=Math.round(llRent/grossIncome*100);
+      if(llPct>85){score-=10;risks.push('LL rent is '+llPct+'% of gross income — leaves almost no margin for costs or voids');}
+      else if(llPct<=70){score+=5;strengths.push('LL rent at '+llPct+'% of gross income leaves good headroom for running costs');}
+    }
+
+  } else {
+    // ── Owned/BTL scoring ────────────────────────────────────────────────────
+    if(grossYield>=10){score+=20;strengths.push('Excellent gross yield of '+grossYield+'% — well above the 8% BTL benchmark');}
+    else if(grossYield>=8){score+=12;strengths.push('Good gross yield of '+grossYield+'%');}
+    else if(grossYield>=6){score+=2;suggestions.push('Yield of '+grossYield+'% is modest — South London HMO conversions can achieve 8%+');}
+    else if(grossYield>=4){score-=8;risks.push('Low yield of '+grossYield+'% — property may struggle to cash-flow after all costs');}
+    else if(grossYield>0){score-=20;risks.push('Very low yield of '+grossYield+'% — returns do not justify the capital at risk');}
+
+    if(roi>=12){score+=18;strengths.push('Strong cash ROI of '+roi+'% — good return on invested capital');}
+    else if(roi>=8){score+=10;strengths.push('Good cash ROI of '+roi+'%');}
+    else if(roi>=5){score+=2;}
+    else if(roi>0){score-=8;risks.push('Cash ROI of '+roi+'% is below typical BTL expectations of 8–12%');}
+
+    if((d.dep||25)>=25){score+=5;strengths.push('25%+ deposit unlocks better mortgage rates and reduces LTV risk');}
+    else if((d.dep||25)<20){risks.push('Deposit below 20% — restricted mortgage options and higher interest costs likely');}
+
+    if((d.mrate||4.5)>5.5){score-=5;risks.push('Mortgage rate of '+d.mrate+'% is high — stress-test cashflow at 7% in case of remortgage');}
+    else if((d.mrate||4.5)<=4){score+=5;strengths.push('Mortgage rate of '+d.mrate+'% is favourable — lock in as long as possible');}
+
+    if((d.reno||0)>0){
+      var renoRatio=(d.reno/(d.price||1));
+      if(renoRatio>0.15)risks.push('Renovation of '+fmt(d.reno)+' is '+(renoRatio*100).toFixed(0)+'% of purchase price — get independent contractor quotes before committing');
+      else{score+=3;strengths.push('Renovation budget of '+fmt(d.reno)+' is reasonable relative to purchase price');}
+    }
+
+    if(payback>0&&payback<8){score+=8;strengths.push('Payback period of '+payback+' years — solid return of invested cash');}
+    else if(payback>=12){risks.push('Long payback period of '+payback+' years — capital tied up for a long time');}
+
+    // Void/maintenance checks
+    if(!(d.voidCost>0))suggestions.push('Add void allowance of at least '+fmt(Math.round(grossIncome*0.06))+'/mo — empty periods reduce yield significantly');
+    if(!(d.maint>0))suggestions.push('Include maintenance reserve of £50–75/room/month for an HMO property');
+  }
+
+  // Net profit check
+  if(net<0){score=Math.max(5,score-30);risks.push('Deal produces a loss of '+fmt(Math.abs(net))+'/mo at '+d.occ+'% occupancy — only viable at 100% occupancy');}
+  else if(net>0&&net<200){score=Math.max(10,score-8);suggestions.push('Net of '+fmt(net)+'/mo is very thin — a single void or repair bill will flip this to a loss');}
+  else if(net>=1000){score+=5;}
+
+  score=Math.max(5,Math.min(98,score));
+  var verdict=score>=65?'GO':score>=40?'CAUTION':'NO-GO';
+  var headline=verdict==='GO'
+    ?(isOwned?'Strong deal — '+grossYield+'% yield with '+roi+'% cash ROI on '+fmt(cashIn)+' invested':'Good deal — '+margin+'% margin, break-even at '+beRooms+' of '+rooms+' rooms')
+    :verdict==='CAUTION'
+    ?(isOwned?'Proceed carefully — returns are moderate, stress-test all costs':'Marginal deal — thin margin leaves little room for error')
+    :(isOwned?'Reconsider — capital could work harder elsewhere':'Not recommended at current terms — costs are too high relative to income');
+
+  return {score:score,verdict:verdict,headline:headline,strengths:strengths.slice(0,3),risks:risks.slice(0,3),suggestions:suggestions.slice(0,3)};
+}
+
+// ── Shared render for local deal output ────────────────────────────────────────
+function renderLocalDealOutput(r) {
+  if(!r) return '<div style="padding:12px 0;font-size:12px;color:rgba(255,255,255,.5)">Enter deal figures above first</div>';
+  var vCol=r.verdict==='GO'?'#00D897':r.verdict==='CAUTION'?'#F5A623':'#FF4D6A';
+  function li(arr,icon,c){return(arr||[]).map(function(s){return '<div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:rgba(255,255,255,.78);margin-bottom:5px;line-height:1.5"><span style="color:'+c+';flex-shrink:0;margin-top:1px">'+icon+'</span>'+s+'</div>';}).join('');}
+  return '<div style="padding:12px 0">'
+    +'<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)">'
+    +'<div style="width:54px;height:54px;border-radius:50%;border:2.5px solid '+vCol+';display:flex;align-items:center;justify-content:center;flex-shrink:0;flex-direction:column">'
+    +'<div style="font-size:16px;font-weight:800;color:'+vCol+'">'+r.score+'</div></div>'
+    +'<div><div style="font-size:15px;font-weight:800;color:'+vCol+';margin-bottom:3px">'+r.verdict+'</div>'
+    +'<div style="font-size:12px;color:rgba(255,255,255,.72);line-height:1.4">'+r.headline+'</div></div></div>'
+    +(r.strengths.length?'<div style="margin-bottom:8px">'+li(r.strengths,'&#x2713;','#00D897')+'</div>':'')
+    +(r.risks.length?'<div style="margin-bottom:8px">'+li(r.risks,'!','#FF4D6A')+'</div>':'')
+    +(r.suggestions.length?'<div>'+li(r.suggestions,'&#x2192;','#F5A623')+'</div>':'')
+    +'<div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,.25)">Local analysis — no API required</div>'
+    +'</div>';
+}
+
+function runLocalDealAnalysis(){
+  var outEl=document.getElementById('da-ai-out');
+  if(!outEl) return;
+  var result=analyzeLocalDeal();
+  outEl.innerHTML=renderLocalDealOutput(result||null);
+}
+// ── DASHBOARD: local portfolio intelligence engine ────────────────────────────
+function runLocalPortfolioAnalysis() {
+  var el=document.getElementById('ai-agent-output');
+  if(!el) return;
+
+  var props=state.properties||[];
+  var tenants=(state.tenants||[]).filter(function(t){return t.status!=='inactive';});
+  var maint=state.maintenance||[];
+
+  // Core metrics
+  var totalRooms=props.reduce(function(s,p){return s+p.rooms;},0);
+  var occupiedRooms=props.reduce(function(s,p){return s+p.occupied;},0);
+  var vacantRooms=totalRooms-occupiedRooms;
+  var occupancyPct=totalRooms?Math.round(occupiedRooms/totalRooms*100):0;
+  var totalIncome=props.reduce(function(s,p){return s+p.rent;},0);
+  var totalLLCost=props.reduce(function(s,p){return s+p.landlord;},0);
+  var totalNet=totalIncome-totalLLCost;
+  var portfolioMargin=totalIncome>0?Math.round(totalNet/totalIncome*100):0;
+  var avgRentPerRoom=occupiedRooms>0?Math.round(totalIncome/occupiedRooms):0;
+  var voidLoss=vacantRooms*avgRentPerRoom;
+
+  var lossProps=props.filter(function(p){return p.rent<p.landlord&&p.rent>0;});
+  var profitProps=props.filter(function(p){return p.rent>=p.landlord&&p.rent>0;});
+  var noIncomeProps=props.filter(function(p){return p.rent===0;});
+
+  var urgentMaint=maint.filter(function(m){return m.priority==='urgent'&&m.status!=='resolved';});
+  var openMaint=maint.filter(function(m){return m.status!=='resolved';});
+
+  var arrearsTenants=tenants.filter(function(t){return t.arrears>0;});
+  var totalArrears=arrearsTenants.reduce(function(s,t){return s+(t.arrears||0);},0);
+
+  var noticeTenants=tenants.filter(function(t){return t.status==='notice';});
+
+  // Top loss makers
+  var topLosses=lossProps.slice().sort(function(a,b){return (a.rent-a.landlord)-(b.rent-b.landlord);}).slice(0,3);
+
+  // Score
+  var score=50;
+  if(occupancyPct>=90){score+=18;}else if(occupancyPct>=85){score+=10;}else if(occupancyPct>=75){score+=2;}else if(occupancyPct<65){score-=15;}
+  if(portfolioMargin>=25){score+=18;}else if(portfolioMargin>=20){score+=10;}else if(portfolioMargin>=15){score+=4;}else if(portfolioMargin<10){score-=12;}
+  if(urgentMaint.length===0){score+=5;}else{score-=Math.min(20,urgentMaint.length*6);}
+  if(totalArrears===0){score+=5;}else if(totalArrears<1000){score-=2;}else if(totalArrears<5000){score-=8;}else{score-=15;}
+  if(lossProps.length===0){score+=8;}else{score-=Math.min(18,lossProps.length*3);}
+  score=Math.max(10,Math.min(98,score));
+  var scoreColor=score>=70?'var(--green)':score>=45?'var(--amber)':'var(--red)';
+  var scoreLabel=score>=70?'Healthy':score>=45?'Needs Attention':'Critical';
+
+  // Build insights
+  var alerts=[],insights=[],actions=[];
+
+  // Urgent maintenance
+  if(urgentMaint.length>0){alerts.push({c:'var(--red)',icon:'&#x1F6A8;',t:urgentMaint.length+' urgent maintenance job'+(urgentMaint.length>1?'s':'')+': '+urgentMaint.map(function(m){return m.property.split(' ')[0];}).join(', ')});}
+
+  // Arrears
+  if(totalArrears>0){alerts.push({c:'var(--amber)',icon:'&#x26A0;&#xFE0F;',t:arrearsTenants.length+' tenant'+(arrearsTenants.length>1?'s':'')+' in arrears — total '+fmt(totalArrears)});}
+
+  // Notice tenants
+  if(noticeTenants.length>0){alerts.push({c:'var(--blue)',icon:'&#x1F4CB;',t:noticeTenants.length+' tenant'+(noticeTenants.length>1?'s':'')+' have given notice — plan re-letting now to avoid voids'});}
+
+  // Occupancy insight
+  if(occupancyPct>=90){insights.push({c:'var(--green)',t:'Occupancy at '+occupancyPct+'% is excellent — above the 90% target. Portfolio running near full capacity.'});}
+  else if(occupancyPct>=85){insights.push({c:'var(--green)',t:'Occupancy at '+occupancyPct+'% is on target. '+vacantRooms+' vacant room'+(vacantRooms>1?'s':'')+' represent '+fmt(voidLoss)+'/mo in lost income.'});}
+  else{insights.push({c:'var(--amber)',t:'Occupancy at '+occupancyPct+'% is below target. '+vacantRooms+' vacant rooms are costing '+fmt(voidLoss)+'/mo — prioritise re-letting.'});}
+
+  // Margin insight
+  if(portfolioMargin>=20){insights.push({c:'var(--green)',t:'Portfolio gross margin of '+portfolioMargin+'% is strong — keeping '+portfolioMargin+'p in every £1 of rent.'});}
+  else if(portfolioMargin>=12){insights.push({c:'var(--amber)',t:'Gross margin of '+portfolioMargin+'% is acceptable. Review LL rent on renewal properties to push above 20%.'});}
+  else{insights.push({c:'var(--red)',t:'Gross margin of '+portfolioMargin+'% is very thin. Urgent review of LL rents and room rates needed.'});}
+
+  // Net profit
+  if(totalNet>0){insights.push({c:'var(--green)',t:'Portfolio net (before expenses) is '+fmt(totalNet)+'/mo ('+fmt(totalNet*12)+'/yr) across '+props.length+' properties.'});}
+
+  // Loss-making properties
+  if(lossProps.length>0){
+    var totalLoss=Math.abs(lossProps.reduce(function(s,p){return s+(p.rent-p.landlord);},0));
+    var msg=lossProps.length+' propert'+(lossProps.length>1?'ies are':'y is')+' loss-making — combined '+fmt(totalLoss)+'/mo loss.';
+    if(topLosses.length>0) msg+=' Worst: '+topLosses[0].name+' ('+fmt(Math.abs(topLosses[0].rent-topLosses[0].landlord))+'/mo).';
+    insights.push({c:'var(--red)',t:msg});
+    actions.push('Review LL rent terms on '+topLosses.map(function(p){return p.name.split(' ')[0];}).join(', ')+' — these are running at a loss');
+  }
+
+  // Open maintenance
+  if(openMaint.length>0){actions.push(openMaint.length+' open maintenance job'+(openMaint.length>1?'s':'')+' — resolve to protect tenant satisfaction and property condition');}
+
+  // Void action
+  if(vacantRooms>0){actions.push('Fill '+vacantRooms+' vacant room'+(vacantRooms>1?'s':'')+' — each empty room costs ~'+fmt(avgRentPerRoom)+'/mo in lost rent');}
+
+  // Arrears action
+  if(totalArrears>2000){actions.push('Chase '+fmt(totalArrears)+' in arrears — contact '+arrearsTenants.map(function(t){return t.name.split(' ')[0];}).join(', ')+'  directly');}
+
+  // Render
+  var html='<div style="padding:14px 18px">';
+
+  // Score bar
+  html+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
+    +'<div style="width:56px;height:56px;border-radius:50%;border:3px solid '+scoreColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+    +'<div style="text-align:center"><div style="font-size:18px;font-weight:800;color:'+scoreColor+'">'+score+'</div></div></div>'
+    +'<div style="flex:1"><div style="font-size:14px;font-weight:700;color:'+scoreColor+';margin-bottom:2px">Portfolio Health: '+scoreLabel+'</div>'
+    +'<div style="font-size:11px;color:var(--muted)">'+props.length+' properties · '+occupancyPct+'% occupied · '+fmt(totalNet)+'/mo net · '+openMaint.length+' open jobs</div>'
+    +'<div style="margin-top:6px;height:6px;border-radius:3px;background:var(--border);overflow:hidden"><div style="height:100%;width:'+score+'%;background:'+scoreColor+';border-radius:3px;transition:width .5s"></div></div>'
+    +'</div>'
+    +'<button onclick="runLocalPortfolioAnalysis()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-size:11px;color:var(--muted);cursor:pointer;font-family:inherit;flex-shrink:0">&#x21BB; Refresh</button>'
+    +'</div>';
+
+  // Alerts
+  if(alerts.length>0){
+    html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
+    alerts.forEach(function(a){
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid '+a.c+';border-radius:8px">'
+        +'<span style="color:'+a.c+';flex-shrink:0">'+a.icon+'</span>'
+        +'<span style="font-size:12px;color:var(--text)">'+a.t+'</span></div>';
+    });
+    html+='</div>';
+  }
+
+  // Insights
+  if(insights.length>0){
+    html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Analysis</div>';
+    html+='<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">';
+    insights.forEach(function(ins){
+      html+='<div style="display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--text);line-height:1.5">'
+        +'<span style="color:'+ins.c+';flex-shrink:0;margin-top:2px">&#x25CF;</span>'+ins.t+'</div>';
+    });
+    html+='</div>';
+  }
+
+  // Actions
+  if(actions.length>0){
+    html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Recommended Actions</div>';
+    html+='<div style="display:flex;flex-direction:column;gap:5px">';
+    actions.forEach(function(act,i){
+      html+='<div style="display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--text);line-height:1.5">'
+        +'<span style="background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;flex-shrink:0;margin-top:2px">'+(i+1)+'</span>'+act+'</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='<div style="margin-top:10px;font-size:10px;color:var(--dim)">Local analysis — runs offline, no API required</div>';
+  html+='</div>';
+
+  el.innerHTML=html;
+}
+
 function renderDashboardAgent(){
   var el=document.getElementById('ai-agent-output');
   if(!el) return;
   var key=getAgentApiKey();
-  if(!key){el.innerHTML=renderAgentKeyPrompt();return;}
+  if(!key){
+    // No API key — run local portfolio analysis immediately
+    runLocalPortfolioAnalysis();
+    return;
+  }
   var cached=localStorage.getItem('pm_agent_cache');
   var cacheTs=+(localStorage.getItem('pm_agent_cache_ts')||0);
   if(cached&&(Date.now()-cacheTs)/3600000<6){el.innerHTML=cached;return;}
@@ -6867,7 +7790,7 @@ function saveState(){
   _saveTimer = setTimeout(_doSupaSave, 1500);
   // Save local-only state immediately to localStorage
   try {
-    var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','users','companies','config'];
+    var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','users','companies','config','roles','maintExtras','dealInputs'];
     localKeys.forEach(function(k){
       if(state[k]!==undefined) {
         try { localStorage.setItem('pm_local_'+k, JSON.stringify(state[k])); }
@@ -6936,16 +7859,22 @@ async function _doSupaSave(){
 }
 // ── loadState: fetch all data from Supabase ───────────────
 async function loadState(){
+  if(!_currentOrgId){
+    // Do not load unscoped data before auth/org resolution.
+    console.warn('loadState skipped: org not resolved yet');
+    return false;
+  }
+  setAppBootMessage('Loading your data…');
   try{
     var results = await Promise.all([
-      supa.from('landlords').select('*'),
-      supa.from('properties').select('*'),
-      supa.from('tenants').select('*'),
-      supa.from('payments').select('*'),
-      supa.from('expenses').select('*'),
-      supa.from('maintenance').select('*'),
-      supa.from('landlord_payments').select('*'),
-      supa.from('contractors').select('*')
+      supa.from('landlords').select('*').eq('org_id', _currentOrgId),
+      supa.from('properties').select('*').eq('org_id', _currentOrgId),
+      supa.from('tenants').select('*').eq('org_id', _currentOrgId),
+      supa.from('payments').select('*').eq('org_id', _currentOrgId),
+      supa.from('expenses').select('*').eq('org_id', _currentOrgId),
+      supa.from('maintenance').select('*').eq('org_id', _currentOrgId),
+      supa.from('landlord_payments').select('*').eq('org_id', _currentOrgId),
+      supa.from('contractors').select('*').eq('org_id', _currentOrgId)
     ]);
     var errors = results.filter(function(r){ return r.error; });
     if(errors.length){ console.warn('Supabase load errors:', errors); }
@@ -6970,7 +7899,7 @@ async function loadState(){
     });
     // Restore local-only state from localStorage
     try {
-      var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','users','companies','config'];
+      var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','companies','config','roles','maintExtras','dealInputs'];
       localKeys.forEach(function(k){
         var raw = localStorage.getItem('pm_local_'+k);
         if(raw) { try{ state[k]=JSON.parse(raw); }catch(e){} }
@@ -6979,39 +7908,8 @@ async function loadState(){
       var savedPage = localStorage.getItem('pm_local_page');
       if(savedPage && savedPage !== 'dashboard') state.page = savedPage;
     } catch(e) {}
-    // Load room photos from Supabase Storage (source of truth across devices/sessions)
-    try {
-      var storageResult = await supa.storage.from('room-media').list('rooms', { limit: 500 });
-      if (!storageResult.error && storageResult.data && storageResult.data.length > 0) {
-        for (var _si = 0; _si < storageResult.data.length; _si++) {
-          var _propFolder = storageResult.data[_si];
-          if (!_propFolder || !_propFolder.name) continue;
-          var _spid = _propFolder.name;
-          var _roomsResult = await supa.storage.from('room-media').list('rooms/' + _spid, { limit: 100 });
-          if (_roomsResult.error || !_roomsResult.data) continue;
-          for (var _ri = 0; _ri < _roomsResult.data.length; _ri++) {
-            var _roomFolder = _roomsResult.data[_ri];
-            var _srn = parseInt(_roomFolder.name);
-            if (isNaN(_srn)) continue;
-            var _photosResult = await supa.storage.from('room-media').list('rooms/' + _spid + '/' + _srn, { limit: 20 });
-            if (_photosResult.error || !_photosResult.data || _photosResult.data.length === 0) continue;
-            var _media = getMedia(_spid, _srn);
-            _photosResult.data.forEach(function(_file) {
-              if (!_file || !_file.name) return;
-              var _path = 'rooms/' + _spid + '/' + _srn + '/' + _file.name;
-              var _urlData = supa.storage.from('room-media').getPublicUrl(_path);
-              var _url = _urlData.data.publicUrl;
-              var _exists = _media.photos.some(function(ph) { return ph.src === _url || ph.path === _path; });
-              if (!_exists) {
-                _media.photos.push({ src: _url, name: _file.name, path: _path });
-              }
-            });
-          }
-        }
-        console.log('Room photos loaded from Supabase Storage');
-        try { localStorage.setItem('pm_local_roomMedia', JSON.stringify(state.roomMedia)); } catch(e) {}
-      }
-    } catch(_se) { console.warn('Room storage load error:', _se); }
+    // Room photos loaded from localStorage cache — full sync runs in background after first render
+    // (syncRoomPhotosBackground is called via setTimeout in the render chain)
 
     // Load property docs from Supabase Storage (refresh signed URLs)
     try {
@@ -7080,21 +7978,22 @@ async function loadState(){
       }
     });
     console.log('Loaded from Supabase:', state.landlords.length, 'landlords,', state.properties.length, 'props,', state.tenants.length, 'tenants');
-    // Re-apply companies/config/users from localStorage AFTER Supabase load
+    // Re-apply companies/config from localStorage AFTER Supabase load
     // (Supabase doesn't store these, so localStorage is the source of truth)
-    ['companies','config','users'].forEach(function(k){
+    ['companies','config'].forEach(function(k){
       try {
         var raw = localStorage.getItem('pm_local_'+k);
         if(raw){
           var parsed = JSON.parse(raw);
-          if(k==='users' && Array.isArray(parsed) && parsed.length>0) state[k]=parsed;
-          else if(k!=='users' && parsed) state[k]=parsed;
+          if(parsed) state[k]=parsed;
         }
       } catch(e2){}
     });
+    return true;
   }catch(e){
     console.error('loadState error:', e);
     showToast && showToast('Database error — running in offline mode', 'error');
+    return false;
   }
 }
 async function backfillPaymentDueDates() {
@@ -7639,14 +8538,14 @@ function saveEditUser() {
   showToast('User updated ✓','success');
 }
 
-function deleteUserBtn(el) {
+async function deleteUserBtn(el) {
   var uid=el.dataset.uid;
   var u=state.users.find(function(x){return String(x.id)===String(uid);});
-  if(!u||!confirm('Delete '+u.name+'? They will no longer be able to log in.')) return;
-  // Mark as deleted (don't remove — so it persists across reloads) 
-  u.status='deleted';
-  saveState(); render();
-  showToast('User removed','success');
+  if(!u||!confirm('Permanently delete '+u.name+'? This cannot be undone.')) return;
+  state.users=state.users.filter(function(x){return String(x.id)!==String(uid);});
+  try{await supa.from('org_members').delete().eq('user_id',String(uid));}catch(e){console.warn(e);}
+  saveState();render();
+  showToast('User permanently removed','success');
 }
 
 function updateUserRoleByEl(sel) { updateUserRole(sel.dataset.uruid, sel.value); }
@@ -7865,48 +8764,29 @@ function markContractorUsed(id) {
 
 function shareMaintWA(e, maintId) {
   if(e) e.stopPropagation();
-  var m = state.maintenance.find(function(x){ return String(x.id)===String(maintId); });
-  if(!m) return;
-  var prop = state.properties.find(function(p){ return p.name===m.property; });
-  var catEmojis = {
-    'Plumbing':'🚿','Heating':'🔥','Electrical':'⚡','Broadband / WiFi':'🌐',
-    'Structural':'🏚️','White Goods':'🧺','Cleaning':'🧹','Pest Control':'🐀',
-    'Locks / Security':'🔒','Garden':'🌿','Other':'🔧'
-  };
-  var priorityEmoji = m.priority==='urgent'?'🚨':m.priority==='high'?'⚠️':'📋';
-  var statusEmoji = m.status==='resolved'?'✅':m.status==='in_progress'?'🔄':'🔴';
-  var catEmoji = catEmojis[m.cat||m.category||'Other'] || '🔧';
-  var NL = '\n';
-  var msg = priorityEmoji+' *MAINTENANCE REQUEST*'+NL
-    +'━━━━━━━━━━━━━━━━━'+NL
-    +catEmoji+' *'+m.issue+'*'+NL+NL
-    +'📍 *Property:* '+m.property+NL;
-  if(prop && prop.address && prop.address !== m.property) msg += '🏠 '+prop.address+NL;
-  if(m.room) msg += '🚪 *Room:* '+m.room+NL;
-  msg += '👤 *Tenant:* '+(m.tenant||'–')+NL+NL;
-  msg += priorityEmoji+' *Priority:* '+(m.priority||'Normal').toUpperCase()+NL;
-  msg += statusEmoji+' *Status:* '+(m.status||'open').replace('_',' ').toUpperCase()+NL;
-  if(m.cat||m.category) msg += catEmoji+' *Category:* '+(m.cat||m.category)+NL;
-  msg += '📅 *Logged:* '+(m.date||new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}))+NL;
-  if(m.notes) msg += NL+'📝 *Notes:* '+m.notes+NL;
-  if(prop && prop.mapsUrl) msg += NL+'🗺️ *Location:* '+prop.mapsUrl+NL;
-  msg += '━━━━━━━━━━━━━━━━━'+NL
-    +'_Sent via PropManager_';
+  var m=state.maintenance.find(function(x){return String(x.id)===String(maintId);});if(!m)return;
+  var prop=state.properties.find(function(p){return p.name===m.property;});
+  var mx=(state.maintExtras&&state.maintExtras[m.id])||{};
+  var NL='\n',pri=m.priority==='urgent'?' [URGENT]':m.priority==='high'?' [HIGH]':'';
+  var msg='MAINTENANCE'+pri+'\n---\n'+m.issue+'\n\nProperty: '+m.property+NL;
+  if(prop&&prop.address&&prop.address!==m.property)msg+=prop.address+NL;
+  if(m.room)msg+='Room: '+m.room+NL;
+  msg+='Tenant: '+(m.tenant||'-')+NL+NL+'Priority: '+(m.priority||'normal').toUpperCase()+NL+'Status: '+(m.status||'open').replace('_',' ').toUpperCase()+NL;
+  if(m.cat||m.category)msg+='Category: '+(m.cat||m.category)+NL;
+  msg+='Logged: '+(m.date||new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}))+NL;
+  if(mx.cost)msg+='Job Cost: £'+mx.cost+NL;
+  if(m.notes)msg+=NL+'Notes: '+m.notes+NL;
+  if(prop&&prop.mapsUrl)msg+=NL+'Location: '+prop.mapsUrl+NL;
+  msg+='---\nSent via PropManager';
   window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
 }
 
 function shareAllMaintWA() {
-  var open = state.maintenance.filter(function(m){ return m.status!=='resolved'; });
-  if(!open.length){ showToast('No open maintenance tasks','error'); return; }
-  var msg = '🔧 *OPEN MAINTENANCE ('+open.length+')*\n'
-    +new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+'\n━━━━━━━━━━━━━━━━━\n';
-  open.forEach(function(m,i){
-    msg+=(i+1)+'. *'+m.issue+'*'+(m.priority==='urgent'?' 🚨':'')+'\n'
-      +'   📍 '+m.property+(m.room?' Rm '+m.room:'')+'\n'
-      +'   '+((m.status||'open').replace('_',' ').toUpperCase())+'\n'
-      +(m.notes?'   📝 '+m.notes+'\n':'');
-  });
-  msg+='━━━━━━━━━━━━━━━━━';
+  var open=state.maintenance.filter(function(m){return m.status!=='resolved';});
+  if(!open.length){showToast('No open maintenance tasks','error');return;}
+  var msg='OPEN MAINTENANCE ('+open.length+')\n'+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+'\n---\n';
+  open.forEach(function(m,i){msg+=(i+1)+'. '+m.issue+(m.priority==='urgent'?' [URGENT]':'')+'\n   '+m.property+(m.room?' Rm '+m.room:'')+'\n   '+((m.status||'open').replace('_',' ').toUpperCase())+'\n'+(m.notes?'   '+m.notes+'\n':'');});
+  msg+='---';
   window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
 }
 
@@ -7929,13 +8809,38 @@ function shareAllPropDocs(propId, propNameEncoded) {
 }
 
 function clearSavedState(){
-  SAVE_KEYS.forEach(function(k){localStorage.removeItem('pm_'+k);});
-  localStorage.removeItem('pm_uid');
+  var _kr=[];for(var _i=0;_i<localStorage.length;_i++){var _k=localStorage.key(_i);if(_k&&_k.startsWith('pm_'))_kr.push(_k);}
+  _kr.forEach(function(k){localStorage.removeItem(k);});
   location.reload();
 }
 var _origRender=render;
-render=function(){_origRender();saveState();if(state.page==='dashboard'){setTimeout(renderDashboardAgent,100);}};
-loadState().then(function(){
+render=function(){
+  if(_appBootPending) return;
+  _origRender();
+  // Debounce saveState — prevents expensive serialisation on every rapid render
+  clearTimeout(window._renderSaveTimer);
+  window._renderSaveTimer=setTimeout(saveState,800);
+  // Debounce dashboard agent — prevents multiple concurrent DOM rebuilds
+  if(state.page==='dashboard'){
+    clearTimeout(window._dashAgentTimer);
+    window._dashAgentTimer=setTimeout(renderDashboardAgent,200);
+  }
+  // Debounce deal recalc
+  if(state.page==='properties'&&(state.filters.propView||'list')==='deal'){
+    clearTimeout(window._dealCalcTimer);
+    window._dealCalcTimer=setTimeout(recalcDealPage,80);
+  }
+  // Trigger room photo background sync once, 3s after first render
+  if(!window._roomSyncDone){
+    clearTimeout(window._roomSyncTimer);
+    window._roomSyncTimer=setTimeout(function(){
+      window._roomSyncDone=true;
+      syncRoomPhotosBackground();
+    },3000);
+  }
+};
+loadState().then(function(loaded){
+if(!loaded) return;
 // ALWAYS resync property occupancy, room prices and income from tenants.
 // This runs after loadState() so it corrects any stale localStorage data too.
 (function syncPropertiesFromTenants() {
