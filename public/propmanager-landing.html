@@ -300,6 +300,7 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
   .metric-item-val{font-size:38px}
 }
 </style>
+<script src="/config.js"></script>
 </head>
 <body>
 
@@ -988,8 +989,8 @@ function showSlide(idx,btn){document.querySelectorAll(".preview-slide").forEach(
 <script>
 // ── Load live pricing from Supabase plan_config ──────────────────
 (function(){
-  var SUPA_URL='https://kzumoubhxdoqqcucdact.supabase.co';
-  var SUPA_KEY='sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+  var SUPA_URL=window.ENV.SUPA_URL;
+  var SUPA_KEY=window.ENV.SUPA_KEY;
   var DEFAULTS={starter:49,professional:89,business:149};
   fetch(SUPA_URL+'/rest/v1/app_config?key=eq.plan_config&select=value',{
     headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Cache-Control':'no-cache'}

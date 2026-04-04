@@ -336,6 +336,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .nav-item{min-width:80px;max-width:100px;}
 }
 </style>
+<script src="/config.js"></script>
 </head>
 <body>
 
@@ -707,8 +708,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const SUPA_URL = 'https://kzumoubhxdoqqcucdact.supabase.co';
-const SUPA_KEY = 'sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+const SUPA_URL = window.ENV.SUPA_URL;
+const SUPA_KEY = window.ENV.SUPA_KEY;
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 // ═══════════════════════════════════════════════════════
 // STATE

@@ -191,6 +191,7 @@ input::placeholder { color:var(--dim); }
 .reset-title { font-size:18px; font-weight:700; margin-bottom:8px; }
 .reset-sub { font-size:14px; color:var(--silver); line-height:1.6; }
 </style>
+<script src="/config.js"></script>
 </head>
 <body>
 
@@ -312,7 +313,7 @@ input::placeholder { color:var(--dim); }
     <div style="font-size:18px;font-weight:700;color:var(--white);margin-bottom:6px">Reset your password</div>
     <div style="font-size:13px;color:var(--silver)">Enter your email and we'll send a reset link.</div>
   </div>
-  <form id="reset-form" onsubmit="handleReset(event)">
+  <form id="reset-form" onsubmit="handleReset(event)" style="display:none">
     <div class="field">
       <label>Email address</label>
       <input type="email" id="reset-email" placeholder="you@example.com" autocomplete="email" required>
@@ -327,7 +328,7 @@ input::placeholder { color:var(--dim); }
   </form>
 
   <!-- RESET SUCCESS -->
-  <div id="reset-success">
+  <div id="reset-success" style="display:none">
     <div class="reset-icon">📬</div>
     <div class="reset-title">Check your email</div>
     <p class="reset-sub">We've sent a password reset link to your email. Click the link to set a new password.</p>
@@ -340,8 +341,8 @@ input::placeholder { color:var(--dim); }
 </div>
 
 <script>
-const SUPA_URL = 'https://kzumoubhxdoqqcucdact.supabase.co';
-const SUPA_KEY = 'sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+const SUPA_URL = window.ENV.SUPA_URL;
+const SUPA_KEY = window.ENV.SUPA_KEY;
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 const PLAN_LABELS = { trial:'Free Trial', starter:'Starter', professional:'Professional', business:'Business' };

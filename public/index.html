@@ -234,6 +234,7 @@ select option{background:#fff;color:var(--text)}
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
 </head>
 <body>
 <div id="app-boot-overlay" aria-busy="true" aria-live="polite">
@@ -458,8 +459,8 @@ const DATA_VERSION = 'v10-rent-fix'; // Standard portal password for all tenants
 // ══════════════════════════════════════════════════════════
 // SUPABASE DATA LAYER
 // ══════════════════════════════════════════════════════════
-const SUPA_URL = 'https://kzumoubhxdoqqcucdact.supabase.co';
-const SUPA_KEY = 'sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+const SUPA_URL = window.ENV.SUPA_URL;
+const SUPA_KEY = window.ENV.SUPA_KEY;
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── Auth & Org provisioning ───────────────────────────────────
@@ -733,7 +734,7 @@ supa.auth.onAuthStateChange(function(event, session) {
   if (!session) {
     _appBootPending = false;
     hideAppBootOverlay();
-    window.location.href = 'login.html';
+    window.location.href = 'propmanager-landing.html';
     return;
   }
 
@@ -9074,7 +9075,7 @@ async function backfillPaymentDueDates() {
 async function doLogOut() {
   try { await supa.auth.signOut(); } catch(e) { console.warn('signOut:', e); }
   localStorage.removeItem('pm_local_users');
-  window.location.href = 'login.html';
+  window.location.href = 'propmanager-landing.html';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

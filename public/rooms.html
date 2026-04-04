@@ -66,6 +66,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .footer{text-align:center;padding:32px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
 @media(max-width:600px){.hero{padding:32px 16px 44px}.grid{grid-template-columns:1fr}}
 </style>
+<script src="/config.js"></script>
 </head>
 <body>
 <div class="hero">
@@ -136,7 +137,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div class="share-toast" id="share-toast"></div>
 
 <script>
-var SUPA_URL='https://kzumoubhxdoqqcucdact.supabase.co',SUPA_KEY='sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+var SUPA_URL=window.ENV.SUPA_URL,SUPA_KEY=window.ENV.SUPA_KEY;
 
 var allRooms=[], filtered=[], typeFilter='all', areaFilter='', companyWA='', currentRoom=null;
 

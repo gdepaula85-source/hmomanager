@@ -166,6 +166,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   .kpi-grid{grid-template-columns:repeat(2,1fr)}
 }
 </style>
+<script src="/config.js"></script>
 </head>
 <body>
 
@@ -276,8 +277,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
 </div>
 
 <script>
-const SUPA_URL = 'https://kzumoubhxdoqqcucdact.supabase.co';
-const SUPA_KEY = 'sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+const SUPA_URL = window.ENV.SUPA_URL;
+const SUPA_KEY = window.ENV.SUPA_KEY;
 
 // ── IMPORTANT: Add your email here to restrict access ─────────
 const SUPERADMIN_EMAILS = ['g.depaula85@gmail.com','gleydson@reservationsdirect.co.uk'];
