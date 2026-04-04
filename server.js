@@ -20,7 +20,10 @@ app.get('/config.js', (req, res) => {
   res.send(`
     window.ENV = {
       SUPA_URL: "${process.env.SUPABASE_URL || ''}",
-      SUPA_KEY: "${process.env.SUPABASE_ANON_KEY || ''}"
+      SUPA_KEY: "${process.env.SUPABASE_ANON_KEY || ''}",
+      ANTHROPIC_API_URL: "${process.env.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1/messages'}",
+      ANTHROPIC_API_KEY: "${process.env.ANTHROPIC_API_KEY || ''}",
+      WORKER_URL: "${process.env.WORKER_URL || ''}"
     };
   `);
 });

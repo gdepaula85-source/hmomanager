@@ -165,7 +165,7 @@ async function handleReset(e) {
   if(!email) { showMsg('Please enter your email address.', 'error'); return; }
   setLoading('reset', true);
   const { error } = await supa.auth.resetPasswordForEmail(email, {
-    redirectTo: 'https://calm-cell-1923.g-depaula85.workers.dev/index.html'
+    redirectTo: window.ENV.WORKER_URL || window.location.origin + '/index.html'
   });
   setLoading('reset', false);
   if(error) { showMsg(friendlyError(error.message), 'error'); return; }

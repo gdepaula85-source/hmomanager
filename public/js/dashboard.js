@@ -427,7 +427,7 @@ supa.auth.onAuthStateChange(function(event, session) {
       +'</div>'
       +'<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>'
       +'<script>'
-      +'var _sc=supabase.createClient("https://kzumoubhxdoqqcucdact.supabase.co","sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF");'
+      +'var _sc=supabase.createClient("'+window.ENV.SUPA_URL+'", "'+window.ENV.SUPA_KEY+'");'
       +'async function setpw(){'
       +'var p1=document.getElementById("pw1").value,p2=document.getElementById("pw2").value,m=document.getElementById("msg");'
       +'if(p1.length<8){m.className="msg err";m.textContent="Min 8 characters";m.style.display="block";return;}'
@@ -4716,7 +4716,8 @@ async function runDealAI(){
   outEl.innerHTML='<div style="padding:12px 0;display:flex;align-items:center;gap:10px"><div style="width:20px;height:20px;border:2px solid #00D897;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div><span style="font-size:12px;color:rgba(255,255,255,.5)">Analyzing...</span></div>';
   var prompt='UK property investment expert. Analyze this '+(isOwned?'BTL':'R2R')+' deal. Return ONLY valid JSON, no markdown.\nRooms: '+(d.rooms||0)+'\nWeekly rent/room: '+(d.wkrent||0)+'\nOccupancy: '+(d.occ||85)+'%\nGross monthly income: '+grossIncome+'\nTotal costs: '+totalCosts+'\nNet monthly: '+net+'\nMargin: '+margin+'%\n'+(isOwned?'Purchase: '+(d.price||0)+', Cash in: '+cashIn+', Yield: '+grossYield+'%\n':'Break-even: '+breakEven+' rooms\n')+'Return: {"score":0-100,"verdict":"GO|CAUTION|NO-GO","headline":"under 20 words","strengths":["max 3"],"risks":["max 3"],"suggestions":["max 3"]}';
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:700,messages:[{role:'user',content:prompt}]})});
+    var authKey = window.ENV.ANTHROPIC_API_KEY || key;
+    var res=await fetch(window.ENV.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':authKey,'anthropic-version':'2023-06-01','anthropic-dangerously-allow-browser':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:700,messages:[{role:'user',content:prompt}]})});
     var data=await res.json();if(data.error)throw new Error(data.error.message);
     var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').replace(/```json|```/g,'').trim();
     var r=JSON.parse(txt);
@@ -7652,9 +7653,10 @@ async function runAIAgent(forceRefresh) {
   var snap=buildPortfolioSnapshot();
   var prompt='You are a property management analyst for a South London HMO portfolio. Analyse the following data and return ONLY valid JSON.\n\nPortfolio Snapshot ('+snap.date+'):\n'+JSON.stringify(snap,null,2)+'\n\nReturn ONLY this JSON structure:\n{"score":<0-100>,"scoreLabel":"<Excellent|Good|Needs Attention|Critical>","scoreColor":"<green|amber|red>","summary":"<2 sentences>","insights":[{"icon":"<emoji>","title":"<short>","body":"<1-2 sentences>","priority":"<high|medium|low>"}],"tasks":[{"icon":"<emoji>","task":"<specific action>","urgency":"<urgent|today|this-week>"}]}\n\nRules: exactly 4 insights (arrears, voids, landlord payments, maintenance). 3-5 tasks. Be specific with names and numbers.';
   try {
-    var res=await fetch('https://api.anthropic.com/v1/messages',{
+    var authKey = window.ENV.ANTHROPIC_API_KEY || getAgentApiKey();
+    var res=await fetch(window.ENV.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-api-key':authKey,'anthropic-version':'2023-06-01','anthropic-dangerously-allow-browser':'true'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
     });
     var data=await res.json();
@@ -8863,7 +8865,7 @@ function previewEmailForTenant(triggerId,tenantId){
 async function sendEmail(to,subject,body){
   var cfg=getEmailConfig();
   if(!cfg.apiKey||!cfg.from){showToast('Email not configured — add API key in Settings','error');return false;}
-  var supaUrl='https://kzumoubhxdoqqcucdact.supabase.co';
+  var supaUrl=window.ENV.SUPA_URL;
   try{
     var resp=await fetch(supaUrl+'/functions/v1/send-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.apiKey},body:JSON.stringify({provider:cfg.provider||'Resend',from:cfg.from,to:to,subject:subject,text:body})});
     if(resp.ok){showToast('Email sent to '+to,'success');return true;}
