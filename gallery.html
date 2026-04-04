@@ -99,65 +99,6 @@ function dbg(msg){
   el.innerHTML+='<div>'+msg+'</div>';
 }
 
-function sleep(ms){
-  return new Promise(function(resolve){ setTimeout(resolve, ms); });
-}
-
-async function listRoomMediaWithRetry(prefix){
-  var maxAttempts = 4;
-  var lastErr = null;
-  for(var attempt=1; attempt<=maxAttempts; attempt++){
-    try{
-      var ctrl = new AbortController();
-      var timer = setTimeout(function(){ ctrl.abort(); }, 12000);
-      var listRes = await fetch(SUPA_URL+'/storage/v1/object/list/room-media', {
-        method: 'POST',
-        headers: {
-          'apikey': SUPA_KEY,
-          'Authorization': 'Bearer '+SUPA_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          prefix: prefix,
-          limit: 50,
-          offset: 0,
-          sortBy: {column:'created_at', order:'asc'}
-        }),
-        signal: ctrl.signal
-      });
-      clearTimeout(timer);
-
-      if(!listRes.ok){
-        var errText = await listRes.text();
-        var retriable = listRes.status === 544 || listRes.status >= 500 || listRes.status === 429;
-        if(retriable){
-          throw new Error('retriable_http_'+listRes.status+': '+errText.slice(0,180));
-        }
-        throw new Error('Storage list HTTP '+listRes.status+': '+errText.slice(0,180));
-      }
-
-      var files = await listRes.json();
-      if(!Array.isArray(files)){
-        throw new Error('Storage response not an array: '+JSON.stringify(files).slice(0,120));
-      }
-      return files;
-    }catch(e){
-      lastErr = e;
-      var msg = String(e && e.message || e);
-      var canRetry = attempt < maxAttempts &&
-        (msg.indexOf('retriable_http_') === 0 ||
-         msg.indexOf('timed out') >= 0 ||
-         msg.indexOf('aborted') >= 0 ||
-         msg.indexOf('Failed to fetch') >= 0 ||
-         msg.indexOf('NetworkError') >= 0);
-      dbg('Storage attempt '+attempt+'/'+maxAttempts+' failed: '+msg);
-      if(!canRetry) break;
-      await sleep(500 * Math.pow(2, attempt-1));
-    }
-  }
-  throw lastErr || new Error('Unknown storage error');
-}
-
 // ── Address helpers ───────────────────────────────────────────
 function getPostcode(addr){
   var m=(addr||'').match(/[A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}/i);
@@ -228,8 +169,32 @@ async function loadGallery(){
   dbg('Fetching storage prefix: '+prefix);
 
   try{
-    var files = await listRoomMediaWithRetry(prefix);
+    var listRes = await fetch(SUPA_URL+'/storage/v1/object/list/room-media', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer '+SUPA_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prefix: prefix,
+        limit: 50,
+        offset: 0,
+        sortBy: {column:'created_at', order:'asc'}
+      })
+    });
+
+    if(!listRes.ok){
+      var errText = await listRes.text();
+      throw new Error('Storage list HTTP '+listRes.status+': '+errText.slice(0,120));
+    }
+
+    var files = await listRes.json();
     dbg('Storage returned: '+JSON.stringify(files).slice(0,200));
+
+    if(!Array.isArray(files)){
+      throw new Error('Storage response not an array: '+JSON.stringify(files).slice(0,120));
+    }
 
     // Filter: real files only (not folders, not hidden, not .emptyFolderPlaceholder)
     var imgExts = /\.(jpe?g|png|webp|gif|heic|heif|avif)$/i;
@@ -289,9 +254,8 @@ async function loadGallery(){
     document.getElementById('area').innerHTML =
       '<div class="empty">'+
       '<div style="font-size:48px;margin-bottom:12px">&#x26A0;&#xFE0F;</div>'+
-      '<div style="font-size:14px;font-weight:600">Could not load photos right now</div>'+
-      '<div style="font-size:11px;margin-top:8px;opacity:.75">The gallery service timed out. Please refresh in a few seconds.</div>'+
-      '<button onclick="loadGallery()" style="margin-top:12px;padding:8px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.25);background:#2A1E3F;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Retry</button>'+
+      '<div style="font-size:14px;font-weight:600">Could not load photos</div>'+
+      '<div style="font-size:11px;margin-top:8px;opacity:.5">'+err.message+'</div>'+
       '<div style="font-size:11px;margin-top:4px;opacity:.4">Property ID: '+pid+' &middot; Room: '+rn+'</div>'+
       '</div>';
   }

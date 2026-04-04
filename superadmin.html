@@ -91,6 +91,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .plan-trial{background:var(--amber-bg);color:var(--amber)}
 .plan-starter{background:var(--blue-bg);color:var(--blue)}
 .plan-professional{background:var(--green-bg);color:var(--green)}
+.plan-free{background:#F0FDF4;color:#15803D}
 .plan-business{background:var(--purple-bg);color:var(--purple)}
 
 /* ── Org row ── */
@@ -402,7 +403,7 @@ function navigate(page) {
 function fmt(n){ return '£'+(+n||0).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0}); }
 function fmtDate(d){ if(!d) return '—'; return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function daysUntil(d){ return Math.ceil((new Date(d)-new Date())/(1000*60*60*24)); }
-function planClass(p){ var m={'trial':'plan-trial','starter':'plan-starter','professional':'plan-professional','business':'plan-business'}; return m[p]||'plan-trial'; }
+function planClass(p){ var m={'trial':'plan-trial','free':'plan-free','starter':'plan-starter','professional':'plan-professional','business':'plan-business'}; return m[p]||'plan-trial'; }
 function statusClass(s){ var m={'trial':'trial','active':'active','paused':'paused','cancelled':'cancelled'}; return m[s]||'paused'; }
 function orgColor(name){ var colors=['#00D897','#4B9EFF','#9B8AFF','#F5A623','#FF4D6A','#06B6D4']; return colors[name.charCodeAt(0)%colors.length]; }
 function orgInitials(name){ return name.split(' ').map(w=>w[0]).filter(Boolean).slice(0,2).join('').toUpperCase(); }
@@ -410,6 +411,7 @@ function orgInitials(name){ return name.split(' ').map(w=>w[0]).filter(Boolean).
 // ── Plan config (loaded from Supabase, falls back to defaults) ────────────────
 var PLAN_CONFIG = {
   trial:        { price:0,   days:14,  seats:3,  properties:5,  label:'Trial',        features:['Dashboard','Properties','Tenants','Rent Collection'] },
+  free:         { price:0,   days:null, seats:1,  properties:3,  tenants:15, label:'Free',         features:['Up to 3 properties','Up to 15 tenants','Dashboard','Rent tracking'] },
   starter:      { price:49,  days:null, seats:3,  properties:15, label:'Starter',      features:['Dashboard','Properties','Tenants','Rent Collection','WhatsApp sharing'] },
   professional: { price:89,  days:null, seats:5,  properties:25, label:'Professional', features:['Everything in Starter','Tenancy agreements','Document vault','Landlord payments','Late fee automation'] },
   business:     { price:149, days:null, seats:15, properties:60, label:'Business',     features:['Everything in Professional','Available rooms page','Priority support','Role-based access'] },
@@ -442,7 +444,7 @@ async function saveConfig(key, value) {
 
 // ── Settings / Plans & Pricing page ──────────────────────────────────────────
 function renderSettings() {
-  var plans = ['trial','starter','professional','business'];
+  var plans = ['trial','free','starter','professional','business'];
   return `
     <!-- Trial Rules -->
     <div class="card" style="margin-bottom:20px">
@@ -483,7 +485,7 @@ function renderSettings() {
         <button class="btn-primary" style="font-size:12px;padding:7px 16px" onclick="savePlanConfig()">Save All Plans</button>
       </div>
       <div style="padding:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
-        ${['starter','professional','business'].map(function(plan){
+        ${['free','starter','professional','business'].map(function(plan){
           var cfg = PLAN_CONFIG[plan]||{};
           var color = plan==='business'?'var(--purple)':plan==='professional'?'var(--green)':'var(--blue)';
           return `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px">

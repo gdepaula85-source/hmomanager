@@ -868,11 +868,34 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
   <div style="max-width:1200px;margin:0 auto;text-align:center">
     <span class="section-label reveal">Transparent pricing</span>
     <h2 class="section-title reveal">Start free.<br>Scale when ready.</h2>
+    <p class="section-sub reveal" style="margin:0 auto 8px;color:#00D897;font-size:13px;font-weight:600">✦ Prices update live from our admin panel</p>
     <p class="section-sub reveal reveal-delay-1" style="margin:0 auto 0">No setup fees. Cancel anytime. 14-day free trial on all paid plans.</p>
-    <div class="pricing-grid">
+    <!-- Pricing cards — prices loaded dynamically from Supabase plan_config -->
+    <div class="pricing-grid" id="pricing-grid">
+
+      <!-- FREE tier (static — always free) -->
       <div class="pricing-card reveal">
+        <div class="pricing-tier">Free</div>
+        <div class="pricing-price" style="font-size:42px">Free<sub style="font-size:14px"> forever</sub></div>
+        <div class="pricing-desc">Perfect for small operators just getting started.</div>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li>Up to 3 properties</li>
+          <li>Up to 15 tenants</li>
+          <li>Rent tracking</li>
+          <li>Dashboard &amp; overview</li>
+          <li class="no">WhatsApp sharing</li>
+          <li class="no">Tenancy agreements</li>
+          <li class="no">Multi-user access</li>
+          <li class="no">Landlord payments</li>
+        </ul>
+        <button class="pricing-cta pricing-cta-ghost" onclick="window.location.href='login.html?plan=free'">Get started free →</button>
+      </div>
+
+      <!-- STARTER — price from Supabase -->
+      <div class="pricing-card reveal reveal-delay-1">
         <div class="pricing-tier">Starter</div>
-        <div class="pricing-price"><sup>£</sup>49<sub>/mo</sub></div>
+        <div class="pricing-price"><sup>£</sup><span id="price-starter">49</span><sub>/mo</sub></div>
         <div class="pricing-desc">For landlords getting started. Up to 15 properties.</div>
         <div class="pricing-divider"></div>
         <ul class="pricing-features">
@@ -887,10 +910,12 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
         </ul>
         <button class="pricing-cta pricing-cta-ghost" onclick="window.location.href='login.html?plan=starter'">Start free trial →</button>
       </div>
-      <div class="pricing-card featured reveal reveal-delay-1">
+
+      <!-- PROFESSIONAL — price from Supabase, featured -->
+      <div class="pricing-card featured reveal reveal-delay-2">
         <div class="pricing-badge">Most popular</div>
         <div class="pricing-tier">Professional</div>
-        <div class="pricing-price"><sup>£</sup>89<sub>/mo</sub></div>
+        <div class="pricing-price"><sup>£</sup><span id="price-professional">89</span><sub>/mo</sub></div>
         <div class="pricing-desc">For growing operators managing up to 25 HMOs.</div>
         <div class="pricing-divider"></div>
         <ul class="pricing-features">
@@ -905,9 +930,11 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
         </ul>
         <button class="pricing-cta pricing-cta-solid" onclick="window.location.href='login.html?plan=professional'">Start free trial →</button>
       </div>
-      <div class="pricing-card reveal reveal-delay-2">
+
+      <!-- BUSINESS — price from Supabase -->
+      <div class="pricing-card reveal reveal-delay-3">
         <div class="pricing-tier">Business</div>
-        <div class="pricing-price"><sup>£</sup>149<sub>/mo</sub></div>
+        <div class="pricing-price"><sup>£</sup><span id="price-business">149</span><sub>/mo</sub></div>
         <div class="pricing-desc">For established operators needing more scale.</div>
         <div class="pricing-divider"></div>
         <ul class="pricing-features">
@@ -922,23 +949,7 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
         </ul>
         <button class="pricing-cta pricing-cta-ghost" onclick="window.location.href='login.html?plan=business'">Start free trial →</button>
       </div>
-      <div class="pricing-card reveal reveal-delay-3">
-        <div class="pricing-tier">Enterprise</div>
-        <div class="pricing-price"><sup>£</sup>299<sub>/mo</sub></div>
-        <div class="pricing-desc">Unlimited everything for large agencies.</div>
-        <div class="pricing-divider"></div>
-        <ul class="pricing-features">
-          <li>Unlimited properties</li>
-          <li>Unlimited tenants</li>
-          <li>All Business features</li>
-          <li>Unlimited users</li>
-          <li>White-label branding</li>
-          <li>API access</li>
-          <li>Dedicated account manager</li>
-          <li>SLA guarantee</li>
-        </ul>
-        <button class="pricing-cta pricing-cta-ghost" onclick="window.location.href='mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Enterprise'">Contact sales →</button>
-      </div>
+
     </div>
     <div class="reveal" style="margin-top:40px;padding:20px 28px;background:rgba(0,216,151,.06);border:1px solid rgba(0,216,151,.15);border-radius:12px;display:inline-flex;align-items:center;gap:12px">
       <span style="font-size:20px">💡</span>
@@ -975,6 +986,26 @@ footer{padding:60px 48px;border-top:1px solid var(--line);display:flex;justify-c
 function showSlide(idx,btn){document.querySelectorAll(".preview-slide").forEach(function(s,i){s.classList.toggle("active",i===idx)});document.querySelectorAll(".preview-tab").forEach(function(b){b.classList.remove("active")});btn.classList.add("active")}
 </script>
 <script>
+// ── Load live pricing from Supabase plan_config ──────────────────
+(function(){
+  var SUPA_URL='https://kzumoubhxdoqqcucdact.supabase.co';
+  var SUPA_KEY='sb_publishable_DQeZmR_zJl4GDB0trLlhuw_N9Ja76AF';
+  var DEFAULTS={starter:49,professional:89,business:149};
+  fetch(SUPA_URL+'/rest/v1/app_config?key=eq.plan_config&select=value',{
+    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Cache-Control':'no-cache'}
+  })
+  .then(function(r){return r.json();})
+  .then(function(rows){
+    if(!rows||!rows[0]||!rows[0].value) return;
+    var cfg=JSON.parse(rows[0].value);
+    ['starter','professional','business'].forEach(function(plan){
+      var el=document.getElementById('price-'+plan);
+      if(el&&cfg[plan]&&cfg[plan].price!=null) el.textContent=cfg[plan].price;
+    });
+  })
+  .catch(function(){}); // silently fall back to defaults if offline
+})();
+
 // Cursor
 const cursor = document.getElementById('cursor');
 const cursorRing = document.getElementById('cursor-ring');

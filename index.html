@@ -835,18 +835,23 @@ function rowToPayment(r){
     shortfall:parseFloat(r.shortfall)||0,notes:r.notes||''};
 }
 function rowToExpense(r){
-  return {id:r.id,category:r.category||'',description:r.description||'',
+  var cat=r.category||'',desc=r.description||'',propName=r.property_name||'';
+  return {id:r.id,category:cat,description:desc,cat:cat,desc:desc,
     amount:parseFloat(r.amount)||0,type:r.type||'',status:r.status||'estimated',
     freq:r.freq||'one-off',recurring:r.recurring||false,startDate:r.start_date||null,
-    propertyId:r.property_id||null,propertyName:r.property_name||''};
+    propertyId:r.property_id||null,propertyName:propName,property:propName};
 }
 function rowToMaintenance(r){
   return {id:r.id,property:r.property_name||'',propertyId:r.property_id||null,
     roomNumber:r.room_number||null,location:r.location||'',tenantName:r.tenant_name||'',
+    room:r.room_number||null,tenant:r.tenant_name||'',
     issue:r.issue||'',category:r.category||'General',priority:r.priority||'medium',
     status:r.status||'open',notes:r.notes||'',photoUrl:r.photo_url||'',photo:r.photo_url||'',
     date:r.logged_date||null,cat:r.category||'General',
-    loggedDate:r.logged_date||null,resolvedDate:r.resolved_date||null};
+    loggedDate:r.logged_date||null,resolvedDate:r.resolved_date||null,
+    contractor:r.contractor||'',
+    jobCost:parseFloat(r.job_cost)||0,
+    invoiceName:r.invoice_name||'',invoiceUrl:r.invoice_url||''};
 }
 function rowToLandlordPayment(r){
   return {id:r.id,landlordId:r.landlord_id||null,landlordName:r.landlord_name||'',
@@ -912,6 +917,7 @@ function expenseToRow(e){
     property_id:e.propertyId||null,property_name:e.propertyName||''};
 }
 function maintenanceToRow(m){
+  var mx=(state.maintExtras&&state.maintExtras[m.id])||{};
   return {id:m.id,property_id:m.propertyId||null,property_name:m.property||'',
     room_number:m.roomNumber||m.room||null,location:m.location||'',
     tenant_name:m.tenantName||m.tenant||'',
@@ -919,7 +925,11 @@ function maintenanceToRow(m){
     priority:m.priority||'medium',
     status:m.status||'open',notes:m.notes||'',
     photo_url:m.photoUrl||m.photo||'',
-    logged_date:m.loggedDate||m.date||null,resolved_date:m.resolvedDate||null};
+    logged_date:m.loggedDate||m.date||null,resolved_date:m.resolvedDate||null,
+    contractor:m.contractor||null,
+    job_cost:mx.cost||m.jobCost||null,
+    invoice_name:mx.invoiceName||m.invoiceName||null,
+    invoice_url:mx.invoiceUrl||m.invoiceUrl||null};
 }
 function landlordPaymentToRow(lp){
   return {id:lp.id,landlord_id:lp.landlordId||null,landlord_name:lp.landlordName||'',
@@ -1066,7 +1076,14 @@ function handleVideoUploadBtn(el){ handleVideoUpload(el.dataset.pid, parseInt(el
 function shareRoomWABtn(el){ shareRoomWA(el.dataset.pid, parseInt(el.dataset.rn)); }
 function saveRoomNotesBtn(el){ saveRoomNotes(el.dataset.pid, parseInt(el.dataset.rn)); }
 
-function goto(page){if(!canSee(page))return;state.page=page;render();}
+function goto(page){
+  if(!canSee(page))return;
+  // Clear search filters when navigating away from their page
+  if(page!=='tenants')   state.filters.tenantQ='';
+  if(page!=='properties')state.filters.propQ='';
+  if(page!=='maintenance')state.filters.maintQ='';
+  state.page=page;render();
+}
 
 function render() {
   renderNav();
@@ -1225,37 +1242,6 @@ function renderDashboard() {
   else{s.openM.slice(0,5).forEach(function(m){html+='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:12px;font-weight:600">'+m.issue+'</div><div style="font-size:11px;color:var(--muted)">'+m.property+' &middot; Rm '+m.room+'</div></div>'+badge(m.priority)+'</div>';});}
   html += '</div></div>';
 
-  // Void tracker
-  // Property docs expiry alerts
-  if(state.propDocs) {
-    var expiringDocs = [];
-    Object.keys(state.propDocs).forEach(function(pid){
-      (state.propDocs[pid]||[]).forEach(function(doc){
-        if(!doc.expiresAt) return;
-        var days = Math.ceil((new Date(doc.expiresAt)-TODAY)/86400000);
-        if(days <= 90) {
-          var p = state.properties.find(function(x){return x.id===+pid;});
-          expiringDocs.push({doc:doc, days:days, propName:p?p.name:'Unknown'});
-        }
-      });
-    });
-    expiringDocs.sort(function(a,b){return a.days-b.days;});
-    if(expiringDocs.length) {
-      html += '<div class="card" style="border-color:#FED7AA;margin-top:0">';
-      html += '<div class="card-title" style="color:#C2410C">⚠️ Documents Expiring Soon ('+expiringDocs.length+')</div>';
-      expiringDocs.slice(0,8).forEach(function(item){
-        var col = item.days<0?'var(--red)':item.days<=30?'#EA580C':'#D97706';
-        var bg  = item.days<0?'#FEE2E2':item.days<=30?'#FFF7ED':'#FFFBEB';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">';
-        html += '<div><div style="font-size:12px;font-weight:700">'+item.doc.type+'</div>';
-        html += '<div style="font-size:11px;color:var(--muted)">'+item.propName+'</div></div>';
-        html += '<span style="font-size:11px;font-weight:700;color:'+col+';background:'+bg+';padding:3px 10px;border-radius:8px">';
-        html += item.days<0?'Expired':item.days===0?'Today!':item.days+'d left';
-        html += '</span></div>';
-      });
-      html += '</div>';
-    }
-  }
   // ── AI Agent card ──
   html += '<div class="card" style="margin-top:0;padding:0;overflow:hidden">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#0F0F1A 0%,#1a1a3e 100%)">';
@@ -1268,6 +1254,8 @@ function renderDashboard() {
   html += '<div id="ai-agent-output"></div>';
   html += '</div>';
   html += '<div class="card" style="margin-top:0">'+renderVoidTracker()+'</div>';
+  html += '<div class="card" style="margin-top:0">'+renderComplianceWidget()+'</div>';
+  html += '<div class="card" style="margin-top:0">'+renderDepositSummary()+'</div>';
 
   return html;
 }
@@ -1281,6 +1269,8 @@ function renderProperties() {
   const data = state.properties.filter(p=>{
     if(pco && p.companyId!==pco) return false;
     const ok = p.name.toLowerCase().includes(q)||p.area.toLowerCase().includes(q);
+    if(f==='archived') return ok&&p.status==='archived';
+    if(p.status==='archived') return false;
     if(f==='profitable') return ok&&net(p)>0;
     if(f==='loss') return ok&&net(p)<0;
     if(f==='vacant') return ok&&p.occupied<p.rooms;
@@ -1293,6 +1283,7 @@ function renderProperties() {
     <div class="page-header">
       <div><div class="page-title">Properties</div><div class="page-sub">${data.length} of ${state.properties.length} properties</div></div>
       <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="openDataModal('properties')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Properties">⇅</button>
         <button onclick="propViewDeal()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Deal Analyzer</button>
         <select onchange="state.filters.propCompany=this.value;render()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">${coOpts}</select>
         ${btn('+ Add Property',"openModal('addProp')")}
@@ -1300,7 +1291,7 @@ function renderProperties() {
     </div>
     <div class="filters">
       <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" placeholder="Search properties…" value="${state.filters.propQ||''}" oninput="state.filters.propQ=this.value;debouncedPropSearch()"></div>
-      ${['all','owned','managed','profitable','loss','vacant'].map(v=>`<button class="filter-btn ${f===v?'active':''}" onclick="state.filters.props='${v}';render()">${v==='loss'?'Loss-Making':v==='vacant'?'Has Vacancies':v==='owned'?'🏠 Owned':v==='managed'?'🤝 Managed':v[0].toUpperCase()+v.slice(1)}</button>`).join('')}
+      ${['all','owned','managed','profitable','loss','vacant','archived'].map(v=>`<button class="filter-btn ${f===v?'active':''}" onclick="state.filters.props='${v}';render()">${v==='loss'?'Loss-Making':v==='vacant'?'Has Vacancies':v==='owned'?'🏠 Owned':v==='managed'?'🤝 Managed':v==='archived'?'📦 Archived':v[0].toUpperCase()+v.slice(1)}</button>`).join('')}
     </div>
     <!-- Portfolio KPI strip -->
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
@@ -1409,10 +1400,13 @@ function renderTenants() {
   return `
     <div class="page-header">
       <div><div class="page-title">Tenants</div><div class="page-sub">${state.tenants.filter(t=>t.status==='active').length} active · ${state.tenants.filter(t=>t.arrears>0).length} in arrears</div></div>
-      ${btn('+ Add Tenant',"openModal('addTenant')")}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="openDataModal('tenants')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Tenants">⇅</button>
+        ${btn('+ Add Tenant',"openModal('addTenant')")}
+      </div>
     </div>
     <!-- Tenant KPIs -->
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
           <div>
@@ -1428,6 +1422,18 @@ function renderTenants() {
           <div style="height:100%;border-radius:3px;background:${(()=>{const r=state.properties.reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active').length;const pct=r?Math.round(a/r*100):0;return pct>=90?'#10B981':pct>=70?'#F59E0B':'#EF4444';})()};width:${(()=>{const r=state.properties.reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active').length;return r?Math.round(a/r*100):0;})()}%"></div>
         </div>
       </div>
+      ${(function(){
+        var act=state.tenants.filter(function(t){return t.status==='active'||t.status==='notice_given';});
+        var wk=act.filter(function(t){return t.freq==='weekly';}).reduce(function(s,t){return s+t.rent;},0);
+        var mo=act.filter(function(t){return t.freq==='monthly';}).reduce(function(s,t){return s+t.rent;},0);
+        var total=Math.round(wk*52/12+mo);
+        return '<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:12px;padding:12px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-end">'
+          +'<div><div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px" title="Calculated as: (weekly tenants × rent × 52 ÷ 12) + (monthly tenants × rent). Full-portfolio figure, not filtered.">Monthly Rent Roll ℹ</div>'
+          +'<div style="font-size:24px;font-weight:800;color:var(--green);font-family:monospace">£'+total.toLocaleString()+'</div></div>'
+          +'<div style="text-align:right"><div style="font-size:12px;color:var(--green);font-weight:600">'+act.length+' tenants</div>'
+          +'<div style="font-size:10px;color:var(--green)">wk × 52÷12 + monthly</div></div></div></div>';
+      })()}
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:${state.tenants.filter(t=>t.arrears>0&&t.status!=='inactive').length?'10px':'14px'}">
       <div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:10px;padding:10px;text-align:center">
@@ -1521,15 +1527,15 @@ function renderTenants() {
             <div class="metric-box"><div class="metric-label">Rent</div><div class="metric-val" style="color:var(--green)">${fmt(t.rent)}<span style="font-size:10px;color:var(--muted);font-weight:400;font-family:Inter,sans-serif">/${t.freq==='weekly'?'wk':'mo'}</span></div></div>
             <div class="metric-box"><div class="metric-label">Last Paid</div><div style="font-size:12px;font-weight:600;color:var(--text);margin-top:3px">${t.paid||'—'}</div></div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px" onclick="event.stopPropagation()">
             <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">Due</span>
             ${(function(){
               if(t.freq==='monthly'){
                 var opts=['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th','13th','14th','15th','16th','17th','18th','19th','20th','21st','22nd','23rd','24th','25th','26th','27th','28th'];
-                return '<select onchange="quickSetDueDay('+JSON.stringify(t.id)+',this.value,\'monthly\')" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;flex:1">'+opts.map(function(o,i){return '<option value="'+(i+1)+'" '+(t.payDayOfMonth===(i+1)?'selected':'')+'>'+o+' of month</option>';}).join('')+'</select>';
+                return '<select onclick="event.stopPropagation()" onchange="quickSetDueDay('+JSON.stringify(t.id)+',this.value,\'monthly\')" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;flex:1">'+opts.map(function(o,i){return '<option value="'+(i+1)+'" '+(t.payDayOfMonth===(i+1)?'selected':'')+'>'+o+' of month</option>';}).join('')+'</select>';
               } else {
                 var days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-                return '<select onchange="quickSetDueDay('+JSON.stringify(t.id)+',this.value,\'weekly\')" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;flex:1">'+days.map(function(d){return '<option value="'+d+'" '+(t.payDay===d?'selected':'')+'>'+d+'</option>';}).join('')+'</select>';
+                return '<select onclick="event.stopPropagation()" onchange="quickSetDueDay('+JSON.stringify(t.id)+',this.value,\'weekly\')" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;flex:1">'+days.map(function(d){return '<option value="'+d+'" '+(t.payDay===d?'selected':'')+'>'+d+'</option>';}).join('')+'</select>';
               }
             })()}
           </div>
@@ -1539,7 +1545,7 @@ function renderTenants() {
             <span class="mono" style="font-size:13px;font-weight:700;color:var(--red)">${fmt(t.arrears)}</span>
           </div>` : ''}
 
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px" onclick="event.stopPropagation()">
             ${badge(t.method==='bank'?'bank':'cash')}
             ${t.whatsapp
               ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -2128,7 +2134,8 @@ function renderExpenses() {
   const staff = filtered.filter(e=>e.type==='staff').reduce((a,e)=>a+e.amount,0);
   const prop  = filtered.filter(e=>e.type==='property').reduce((a,e)=>a+e.amount,0);
   const over  = filtered.filter(e=>e.type==='overhead').reduce((a,e)=>a+e.amount,0);
-  const total = staff+prop+over;
+  const actual= filtered.filter(e=>e.type==='actual').reduce((a,e)=>a+e.amount,0);
+  const total = staff+prop+over+actual;
   const moLabel = selMonth==='all' ? 'All Time' : (MONTHS.find(function(m){return m.key===selMonth;})||{label:selMonth}).label;
 
   return `
@@ -2155,6 +2162,7 @@ function renderExpenses() {
         <div onclick="state.filters.expenses='list';state.filters.expType='';render()" style="cursor:pointer">${kpi('Total Expenses', fmt(total), 'This month', '#E8375A', '💸')}</div>
         <div onclick="state.filters.expenses='list';state.filters.expType='staff';render()" style="cursor:pointer">${kpi('Staff & Labour', fmt(staff), `${filtered.filter(e=>e.type==='staff').length} records · tap to view`, '#F59E0B', '👷')}</div>
         <div onclick="state.filters.expenses='list';state.filters.expType='property';render()" style="cursor:pointer">${kpi('Property Costs', fmt(prop), `${filtered.filter(e=>e.type==='property').length} records · tap to view`, '#3B82F6', '🏠')}</div>
+        ${actual>0?`<div onclick="state.filters.expenses='list';state.filters.expType='actual';render()" style="cursor:pointer">${kpi('Job Costs', fmt(actual), filtered.filter(e=>e.type==='actual').length+' maintenance jobs · tap to view', '#F97316', '🔧')}</div>`:''}
         <div onclick="state.filters.expenses='list';state.filters.expType='overhead';render()" style="cursor:pointer">${kpi('Overhead', fmt(over), `${filtered.filter(e=>e.type==='overhead').length} records · tap to view`, '#8B5CF6', '⚙️')}</div>
       </div>
       <div class="grid-2">
@@ -2279,13 +2287,25 @@ function renderMaintenance() {
                   <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:${tbg};color:${tc}">${c.trade}</span>
                   ${stars?`<span style="font-size:11px;color:var(--amber);margin-left:6px">${stars}</span>`:''}
                 </div>
-                <button onclick="openEditContractorModal('${c.id}')" style="padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)">✏️ Edit</button>
+                <div style="display:flex;gap:6px">
+                  <button onclick="openContractorProfile('${c.id}')" style="padding:5px 12px;border-radius:7px;border:1.5px solid var(--accent);background:var(--accent-light);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--accent-dark)">View Profile</button>
+                  <button onclick="openEditContractorModal('${c.id}')" style="padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)">Edit</button>
+                </div>
               </div>
               ${c.phone?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">📞 ${c.phone}</div>`:''}
               ${c.email?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">✉️ ${c.email}</div>`:''}
               ${c.callOutCharge?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">💷 Call-out: £${c.callOutCharge}</div>`:''}
               ${c.notes?`<div style="font-size:11px;color:var(--dim);background:var(--bg);padding:6px 9px;border-radius:7px;margin:8px 0">${c.notes}</div>`:''}
-              ${c.lastUsed?`<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Last used: ${new Date(c.lastUsed).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</div>`:''}
+              ${c.lastUsed?`<div style="font-size:11px;color:var(--dim);margin-bottom:4px">Last used: ${new Date(c.lastUsed).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</div>`:''}
+              ${(()=>{
+                var jobs=state.maintenance.filter(function(m){return m.contractor===c.name;});
+                var spend=state.expenses.filter(function(e){return e.desc&&e.desc.includes('['+c.name+']');}).reduce(function(s,e){return s+e.amount;},0);
+                if(!jobs.length) return '';
+                return '<div style="display:flex;gap:6px;margin-bottom:8px">'
+                  +'<span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px">'+jobs.length+' job'+(jobs.length>1?'s':'')+'</span>'
+                  +(spend>0?'<span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px">£'+spend.toLocaleString()+'</span>':'')
+                  +'</div>';
+              })()}
               <div style="display:flex;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
                 ${waHref?`<a href="${waHref}" target="_blank" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;border-radius:8px;background:#F0FDF4;border:1px solid #BBF7D0;color:#16A34A;font-size:12px;font-weight:700;text-decoration:none">💬 WhatsApp</a>`:''}
                 ${mailHref?`<a href="${mailHref}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;border-radius:8px;background:var(--blue-light);border:1px solid #BFDBFE;color:var(--blue);font-size:12px;font-weight:700;text-decoration:none">✉️ Email</a>`:''}
@@ -2316,6 +2336,7 @@ function renderMaintenance() {
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
             <div style="display:flex;gap:5px;flex-wrap:wrap">${badge(m.priority)} ${badge(m.status.replace('_',' '))}</div>
             <button data-mid="${m.id}" onclick="openEditMaintModal(this.dataset.mid)" style="padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted);flex-shrink:0;margin-left:6px">Edit</button>
+            <button data-mid="${m.id}" onclick="deleteMaintenanceJob(this.dataset.mid)" style="padding:4px 9px;border-radius:7px;border:1px solid var(--red);background:var(--red-light);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--red);flex-shrink:0;margin-left:4px">✕</button>
           </div>
           <div style="font-size:15px;font-weight:700;margin-bottom:6px">${m.issue}</div>
           <div style="font-size:12px;color:var(--muted);margin-bottom:2px">${m.property}${m.room?' · Room '+m.room:''}</div>
@@ -2323,6 +2344,7 @@ function renderMaintenance() {
           <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Logged: ${m.date} · ${m.cat}</div>
           ${allPhotos.length?`<div style="display:grid;grid-template-columns:${allPhotos.length>1?'1fr 1fr':'1fr'};gap:4px;margin-bottom:10px">${allPhotos.map(function(src){return '<img src="'+src+'" style="width:100%;height:90px;object-fit:cover;border-radius:7px">';}).join('')}</div>`:''}
           ${m.notes?`<div style="font-size:12px;color:var(--muted);background:var(--bg);padding:7px 10px;border-radius:7px;margin-bottom:10px">Notes: ${m.notes}</div>`:''}
+          ${m.contractor?`<div style="font-size:11px;color:var(--blue);background:var(--blue-light);padding:5px 9px;border-radius:7px;margin-bottom:8px;font-weight:600">👷 ${m.contractor}</div>`:''}
           ${mx.cost||mx.invoiceName?`<div style="display:flex;align-items:center;gap:8px;background:var(--green-light);border:1px solid #A7F3D0;border-radius:8px;padding:7px 10px;margin-bottom:8px">${mx.cost?'<span style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">£'+mx.cost+'</span><span style="font-size:11px;color:var(--muted)"> job cost</span>':''}${mx.invoiceName?'<a href="'+(mx.invoiceUrl||'#')+'" download="'+mx.invoiceName+'" style="margin-left:auto;font-size:11px;font-weight:700;color:var(--blue);text-decoration:none">Invoice</a>':''}</div>`:''}
           ${m.status!=='resolved'
             ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -2598,6 +2620,16 @@ function occupyRoom(propName, roomN, rentAmount) {
   if(state.voidDates) delete state.voidDates[p.id+'_'+roomN];
 }
 
+function deleteMaintenanceJob(id){
+  var m=state.maintenance.find(function(x){return String(x.id)===String(id);});
+  if(!m)return;
+  if(!confirm('Delete this job?\n\n'+m.issue+'\n\nThis cannot be undone.')) return;
+  state.maintenance=state.maintenance.filter(function(x){return String(x.id)!==String(id);});
+  state.expenses=state.expenses.filter(function(e){return e._maintId!==id;});
+  if(state.maintExtras)delete state.maintExtras[id];
+  try{supa.from('maintenance').delete().eq('id',String(id)).then(function(){});}catch(e){}
+  saveState();render();showToast('Job deleted','success');
+}
 function updMaint(id,status){state.maintenance=state.maintenance.map(m=>m.id===id?{...m,status}:m);saveState();render()}
 function confirmExp(id){
   var e=state.expenses.find(function(x){return String(x.id)===String(id);});
@@ -3230,6 +3262,12 @@ function openModal(type) {
           <button onclick="document.getElementById('f-mphoto-preview').style.display='none';document.getElementById('f-mphoto-input').value=''" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:50%;width:24px;height:24px;font-size:12px;cursor:pointer">✕</button>
         </div>
       </div>
+      <div class="field"><label class="field-label">Assign Contractor (optional)</label>
+        <select class="inp" id="f-mcontractor">
+          <option value="">— No contractor assigned —</option>
+          ${(state.contractors||[]).map(function(c){return '<option value="'+c.name+'">'+c.name+(c.trade?' · '+c.trade:'')+(c.phone?' ('+c.phone+')':'')+'</option>';}).join('')}
+        </select>
+      </div>
       <div class="field"><label class="field-label">Notes</label>
         <input class="inp" id="f-mnotes" placeholder="Any additional context, access details, best times to attend…">
       </div>`,
@@ -3583,12 +3621,14 @@ function saveModal(type) {
     var mphotoEl = document.getElementById('f-mphoto-img');
     var mphoto = (mphotoEl && mphotoEl.src && mphotoEl.src.startsWith('data:')) ? mphotoEl.src : null;
     var mnodesEl = document.getElementById('f-mnotes');
+    var mcontEl=document.getElementById('f-mcontractor');
     state.maintenance.push({
       id:crypto.randomUUID(), property:mprop, room:mroom, location:mlocation,
       tenant:mtenant, issue:missue, priority:document.getElementById('f-mpri').value,
       cat:document.getElementById('f-mcat').value, status:'open',
       date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
-      photo:mphoto, notes:mnodesEl?mnodesEl.value:''
+      photo:mphoto, notes:mnodesEl?mnodesEl.value:'',
+      contractor:mcontEl?mcontEl.value:''
     });
   }
   saveState();
@@ -3666,7 +3706,15 @@ var financialsTab = (function(){
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
         +'<div class="field"><label class="field-label">Deposit (£)</label><input class="inp" id="td-deposit" type="number" value="'+(t.deposit||0)+'"></div>'
         +'<div class="field"><label class="field-label">Deposit Status</label>'
-          +'<select class="inp" id="td-depositStatus">'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
++'<div class="field"><label class="field-label">Deposit Scheme</label>'
++'<select class="inp" id="td-depositScheme">'
++['DPS','MyDeposits','TDS','None'].map(function(s){return '<option value="'+s+'" '+(t.depositScheme===s?'selected':'')+'>'+s+'</option>';}).join('')
++'</select></div>'
++'<div class="field"><label class="field-label">Deposit Reference</label>'
++'<input class="inp" id="td-depositRef" value="'+(t.depositRef||'').replace(/"/g,'&quot;')+'" placeholder="e.g. DPS-12345678">'
++'</div></div>'
++'<select class="inp" id="td-depositStatus">'
             +'<option value="held" '+(t.depositStatus==='held'?'selected':'')+'>Held</option>'
             +'<option value="returned" '+(t.depositStatus==='returned'?'selected':'')+'>Returned</option>'
           +'</select>'
@@ -3960,6 +4008,9 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
     +'<div class="modal-body">'+tabContent+'</div>'
     +'<div class="modal-footer">'
     +'<button onclick="state.tenantDetailTab=null;closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    +(t.status==='inactive'
+      ?'<button data-tid="'+id+'" onclick="deleteTenantPermanent(this.dataset.tid)" style="padding:9px 16px;border-radius:9px;border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:auto;order:-1">&#x1F5D1; Delete Permanently</button>'
+      :'<button data-tid="'+id+'" onclick="archiveTenant(this.dataset.tid)" style="padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:auto;order:-1">&#x1F4E6; Archive</button>')
     +'<button onclick="saveTenantDetail(\''+id+'\')" style="padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Save Changes</button>'
     +'</div></div></div>';
 }
@@ -4000,6 +4051,8 @@ function saveTenantDetail(id){
   var arrEl=g('td-arrears');if(arrEl!==null)t.arrears=+arrEl;
   var depEl=g('td-deposit');if(depEl!==null)t.deposit=+depEl;
   var dstatEl=g('td-depositStatus');if(dstatEl!==null)t.depositStatus=dstatEl;
+  var drefEl=g('td-depositRef');if(drefEl!==null)t.depositRef=drefEl;
+  var dschEl=g('td-depositScheme');if(dschEl!==null)t.depositScheme=dschEl;
   var movedOut=t.status==='inactive';
   if(movedOut){
     freeRoom(oldProp,oldRoom);
@@ -4042,14 +4095,22 @@ function saveTenantDetail(id){
 }
 
 function doMoveRoom(btn) {
-  var tid   = +btn.getAttribute('data-tid');
-  var pid   = +btn.getAttribute('data-pid');
+  var tid   = btn.getAttribute('data-tid');  // keep as string for UUID compat
   var pname = decodeURIComponent(btn.getAttribute('data-pname'));
   var room  = +btn.getAttribute('data-room');
   var price = +btn.getAttribute('data-price');
-  moveTenantToRoom(tid, pid, pname, room, price);
-
+  // Coerce tid to the same type as tenant IDs in state
+  var t = state.tenants.find(function(x){return String(x.id)===String(tid);});
+  if(!t){showToast('Tenant not found','error');return;}
+  var oldProp=t.property;var oldRoom=t.room;
+  t.property=pname;t.room=room;t.rent=price;
+  freeRoom(oldProp,oldRoom);
+  occupyRoom(pname,room,price);
+  rebuildAllSchedules();
   saveState();
+  showToast('Moved to '+pname+' Room '+room,'success');
+  state.tenantDetailTab='actions';
+  openTenantDetail(t.id);
 }
 function generatePortalPassword() {
   // 3 words from a friendly word list + 2 random digits
@@ -4444,6 +4505,11 @@ async function openPropDetail(id) {
         ${tab==='details'?`
         <div class="modal-footer" style="padding:14px 20px">
           ${btn('Cancel',"state.propDetailTab=null;closeModal()",'secondary')}
+          ${p.status==='archived'
+            ? `<button onclick="deletePropPermanent('${p.id}')" style="padding:9px 16px;border-radius:9px;border:none;background:var(--red);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:auto">🗑 Delete</button>
+               <button onclick="restoreProperty('${p.id}')" style="padding:9px 16px;border-radius:9px;border:1px solid var(--green);background:var(--green-light);color:var(--green);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↩ Restore</button>`
+            : `<button onclick="archiveProperty('${p.id}')" style="padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:auto">📦 Archive</button>`
+          }
           ${btn('Save Changes',`savePropDetail('${p.id}')`,'primary')}
         </div>`:
         tab==='tenants'?`
@@ -4527,6 +4593,7 @@ function saveEditMaint(id) {
   var ns=document.getElementById('em-status').value;
   if(ns==='resolved'&&m.status!=='resolved')m.resolvedDate=new Date().toISOString().split('T')[0];
   m.status=ns;m.notes=document.getElementById('em-notes').value;
+  var _cEl=document.getElementById('em-contractor');if(_cEl)m.contractor=_cEl.value;
   if(!state.maintExtras)state.maintExtras={};
   if(!state.maintExtras[id])state.maintExtras[id]={photos:[]};
   var mx=state.maintExtras[id],prevCost=mx.cost||0;
@@ -4537,7 +4604,13 @@ function saveEditMaint(id) {
     if(!state.expenses)state.expenses=[];
     state.expenses=state.expenses.filter(function(e){return e._maintId!==id;});
     var _prop=state.properties.find(function(p){return p.name===m.property;});
-    state.expenses.push({id:crypto.randomUUID(),_maintId:id,category:'Maintenance',description:m.issue+(m.room?' (Room '+m.room+')':'')+' - '+(m.cat||'General'),amount:cv,type:'actual',status:'actual',freq:'one-off',recurring:false,startDate:new Date().toISOString().split('T')[0],propertyId:_prop?_prop.id:null,propertyName:m.property||''});
+    var _desc=m.issue+(m.room?' (Room '+m.room+')':'')+' - '+(m.cat||'General')+(m.contractor?' ['+m.contractor+']':'');
+    var _propAddr=_prop?((_prop.address&&_prop.address!==_prop.name)?_prop.address:_prop.name):m.property||'';
+    state.expenses.push({id:crypto.randomUUID(),_maintId:id,
+      category:'Maintenance',cat:'Maintenance',description:_desc,desc:_desc,
+      amount:cv,type:'actual',status:'actual',freq:'one-off',recurring:false,
+      startDate:new Date().toISOString().split('T')[0],
+      propertyId:_prop?_prop.id:null,propertyName:_propAddr,property:_propAddr});
     showToast('Job updated - cost added to Expenses','success');
   } else {showToast('Job updated','success');}
   saveState();closeModal();render();
@@ -4759,6 +4832,34 @@ function renderPropertiesDealView() {
   return html;
 }
 
+
+// Snapshot current DOM input values into _scratch before any mode toggle re-render
+// This ensures user's typed values survive the switchLettingType/switchDealType re-render
+function _dealSaveInputsToScratch() {
+  function gv(id){ var el=document.getElementById(id); return el?(parseFloat(el.value)||0):0; }
+  if(!state.dealInputs) state.dealInputs={};
+  if(!state.dealInputs._scratch) state.dealInputs._scratch={};
+  var sc = state.dealInputs._scratch;
+  // Only read fields that are currently visible (not disabled)
+  var roomsEl = document.getElementById('da-rooms');
+  // Always save the room count — even when disabled, the field value is valid
+  if(roomsEl) { var rv = parseFloat(roomsEl.value)||0; if(rv>0) sc.rooms = rv; }
+  sc.wkrent   = gv('da-wkrent');
+  sc.occ      = gv('da-occ') || 85;
+  sc.llrent   = gv('da-llrent');
+  sc.bills    = gv('da-bills');
+  sc.maint    = gv('da-maint');
+  sc.insur    = gv('da-insur');
+  sc.mgmt     = gv('da-mgmt');
+  sc.voidCost = gv('da-void');
+  sc.other    = gv('da-other');
+  sc.price    = gv('da-price');
+  sc.dep      = gv('da-dep') || 25;
+  sc.reno     = gv('da-reno');
+  sc.mrate    = gv('da-mrate') || 4.5;
+  sc.mterm    = gv('da-mterm') || 25;
+}
+
 function recalcDealPage(){
   if(!state.dealInputs)state.dealInputs={};
   if(!document.getElementById('da-rooms'))return;
@@ -4767,7 +4868,10 @@ function recalcDealPage(){
   var dealType=sc.dealType||'r2r';
   var isOwned=dealType==='owned';
   var isWhole=(sc.lettingType||'hmo')==='whole';
-  var rooms=isWhole?1:Math.max(1,gv('da-rooms',1));
+  // Always read the actual room count (even when field is disabled in Whole Property mode)
+  var inputRooms = Math.max(1, gv('da-rooms', sc.rooms||4));
+  // For calc: Whole Property = 1 unit, HMO = actual room count
+  var rooms = isWhole ? 1 : inputRooms;
   var wkRent=gv('da-wkrent',0); // same field for both HMO and whole property
   var occ=gv('da-occ',85);
   var llRent=isOwned?0:gv('da-llrent',0),bills=gv('da-bills',0),maint=gv('da-maint',0),insur=gv('da-insur',0),mgmt=gv('da-mgmt',0),voidC=gv('da-void',0),other=gv('da-other',0);
@@ -4786,7 +4890,7 @@ function recalcDealPage(){
   var roi=(isOwned&&price>0&&cashIn>100&&annualNet>0)?+(annualNet/cashIn*100).toFixed(1):0;
   var payback=(isOwned&&price>0&&cashIn>100&&net>0)?+(cashIn/net/12).toFixed(1):0;
   var breakEven=(!isOwned&&grossIncome>0)?Math.ceil(totalCosts/(grossIncome/rooms)):0;
-  state.dealInputs._scratch={dealType:dealType,lettingType:sc.lettingType||'hmo',rentPeriod:sc.rentPeriod||'wk',rooms:rooms,wkrent:wkRent,occ:occ,llrent:llRent,bills:bills,maint:maint,insur:insur,mgmt:mgmt,voidCost:voidC,other:other,price:price,dep:dep,reno:reno,mrate:mrate,mterm:mterm,_grossIncome:grossIncome,_totalCosts:totalCosts};
+  state.dealInputs._scratch={dealType:dealType,lettingType:sc.lettingType||'hmo',rentPeriod:sc.rentPeriod||'wk',rooms:inputRooms,wkrent:wkRent,occ:occ,llrent:llRent,bills:bills,maint:maint,insur:insur,mgmt:mgmt,voidCost:voidC,other:other,price:price,dep:dep,reno:reno,mrate:mrate,mterm:mterm,_grossIncome:grossIncome,_totalCosts:totalCosts};
   clearTimeout(window._dealSaveTimer);window._dealSaveTimer=setTimeout(function(){saveState();},800);
   function col(v,g,a){return v>=g?'var(--green)':v>=a?'var(--amber)':'var(--red)';}
   var nc=net>=0?'var(--green)':'var(--red)';
@@ -4825,7 +4929,7 @@ function recalcDealPage(){
   clearTimeout(window._localAnalysisTimer);
   window._localAnalysisTimer=setTimeout(function(){
     var aiOut=document.getElementById('da-ai-out');
-    if(aiOut&&(state.dealInputs._scratch||{})._grossIncome){
+    if(aiOut){
       var result=analyzeLocalDeal();
       if(result) aiOut.innerHTML=renderLocalDealOutput(result);
     }
@@ -4834,22 +4938,41 @@ function recalcDealPage(){
 
 
 function propViewList(){state.filters.propView='list';render();}
-function propViewDeal(){state.filters.propView='deal';render();}
+function propViewDeal(){
+  // Always open Deal Analyzer with a blank slate
+  if(!state.dealInputs) state.dealInputs={};
+  state.dealInputs._scratch={};
+  state.filters.propView='deal';
+  render();
+}
 function switchRentPeriod(period){
   if(!state.dealInputs)state.dealInputs={};
   if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  _dealSaveInputsToScratch();
   state.dealInputs._scratch.rentPeriod=period;
   state.filters.propView='deal';
-  saveState();render();
-}
+  render();
+  setTimeout(recalcDealPage,50);
+};
 function switchLettingType(lt){
   if(!state.dealInputs)state.dealInputs={};
   if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  // Preserve all current input values before re-rendering
+  _dealSaveInputsToScratch();
   state.dealInputs._scratch.lettingType=lt;
   state.filters.propView='deal';
   saveState();render();
+  setTimeout(recalcDealPage,50);
 }
-function switchDealType(t){if(!state.dealInputs)state.dealInputs={};if(!state.dealInputs._scratch)state.dealInputs._scratch={};state.dealInputs._scratch.dealType=t;state.filters.propView='deal';saveState();render();}
+function switchDealType(t){
+  if(!state.dealInputs)state.dealInputs={};
+  if(!state.dealInputs._scratch)state.dealInputs._scratch={};
+  _dealSaveInputsToScratch();
+  state.dealInputs._scratch.dealType=t;
+  state.filters.propView='deal';
+  saveState();render();
+  setTimeout(recalcDealPage,50);
+}
 function resetDealPage(){if(!state.dealInputs)state.dealInputs={};delete state.dealInputs._scratch;state.filters.propView='deal';saveState();render();}
 function saveDealScenario(){if(!state.dealInputs||!state.dealInputs._scratch){showToast('Enter some figures first','error');return;}var name=prompt('Name this scenario:');if(!name)return;var id='sc_'+Date.now();state.dealInputs[id]=Object.assign({},state.dealInputs._scratch,{_name:name,_id:id});state.filters.propView='deal';saveState();render();showToast('Saved: '+name,'success');}
 function loadDealScenario(id){if(!state.dealInputs||!state.dealInputs[id])return;state.dealInputs._scratch=Object.assign({},state.dealInputs[id]);state.page='properties';state.filters.propView='deal';saveState();render();}
@@ -5129,6 +5252,51 @@ function renderPropFinanceTab(p, propTenants) {
   return html;
 }
 
+function archiveProperty(id){
+  var p=state.properties.find(function(x){return String(x.id)===String(id);});if(!p)return;
+  var activeT=state.tenants.filter(function(t){return t.property===p.name&&(t.status==='active'||t.status==='notice_given');});
+  var msg=activeT.length>0?'This property has '+activeT.length+' active tenant(s). Archive anyway?\n\nActive tenants will remain linked but property hidden from main view.':'Archive "'+p.name+'"?\n\nHidden from main view. Restore or delete from Archived tab.';
+  if(!confirm(msg)) return;
+  p.status='archived';p.archivedDate=new Date().toISOString().split('T')[0];
+  saveState();closeModal();state.filters.props='archived';render();
+  showToast(p.name+' archived','success');
+}
+function deletePropPermanent(id){
+  var p=state.properties.find(function(x){return String(x.id)===String(id);});if(!p)return;
+  if(p.status!=='archived'){showToast('Archive first before deleting','error');return;}
+  if(!confirm('PERMANENTLY DELETE "'+p.name+'"?\n\nThis cannot be undone.')) return;
+  try{supa.from('properties').delete().eq('id',String(id)).then(function(){});}catch(e){}
+  state.properties=state.properties.filter(function(x){return String(x.id)!==String(id);});
+  saveState();closeModal();render();showToast(p.name+' permanently deleted','success');
+}
+function restoreProperty(id){
+  var p=state.properties.find(function(x){return String(x.id)===String(id);});if(!p)return;
+  p.status='active';delete p.archivedDate;
+  saveState();closeModal();state.filters.props='all';render();showToast(p.name+' restored','success');
+}
+function archiveTenant(id){
+  var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
+  if(!confirm('Archive "'+t.name+'"?\n\nMoved to Archived tab. Restore or delete from there.')) return;
+  var oldProp=t.property,oldRoom=t.room;
+  t.status='inactive';t.archivedDate=new Date().toISOString().split('T')[0];
+  freeRoom(oldProp,oldRoom);
+  saveState();closeModal();state.filters.tenants='archived';render();showToast(t.name+' archived','success');
+}
+function deleteTenantPermanent(id){
+  var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
+  if(t.status!=='inactive'){showToast('Archive first before deleting','error');return;}
+  if(!confirm('PERMANENTLY DELETE "'+t.name+'"?\n\nAll payment history removed. Cannot be undone.')) return;
+  try{supa.from('tenants').delete().eq('id',String(id)).then(function(){});}catch(e){}
+  state.tenants=state.tenants.filter(function(x){return String(x.id)!==String(id);});
+  state.payments=state.payments.filter(function(x){return x.tenantId!==String(id)&&x.tenantName!==t.name;});
+  saveState();closeModal();render();showToast(t.name+' permanently deleted','success');
+}
+function restoreTenant(id){
+  var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
+  t.status='active';delete t.archivedDate;
+  if(t.property&&t.room) occupyRoom(t.property,t.room,t.rent);
+  saveState();closeModal();state.filters.tenants='all';render();showToast(t.name+' restored','success');
+}
 function savePropDetail(id) {
   const p = state.properties.find(x=>x.id===id);
   if(!p) return;
@@ -5377,6 +5545,8 @@ function renderLandlords() {
     +'<option value="">All Time</option>'
     +MONTHS.map(function(m){return '<option value="'+m.key+'" '+(selMonth===m.key?'selected':'')+'>'+m.label+'</option>';}).join('')
     +'</select>'
+    +'<button onclick="openDataModal(\'landlords\')" title="Import / Export" style="padding:8px 11px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">&#x21C5;</button>'
+    +'<button onclick="openAddLandlordModal()" style="padding:9px 16px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add Landlord</button>'
     +'</div></div>';
 
   // KPI strip
@@ -5387,7 +5557,7 @@ function renderLandlords() {
   html += '</div>';
 
   // Landlord cards
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:28px">';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px">';
   // Sort landlords: those with pending payments first, then by pending amount desc
   var sortedLls = lls.slice().sort(function(a, b) {
     var aPend = filteredPays.filter(function(p){return p.landlordId===a.id&&p.status==='pending';});
@@ -5416,7 +5586,7 @@ function renderLandlords() {
     html += '<div style="background:var(--surface);border:1px solid '+(hasPending?'#FDE68A':'var(--border)')+';border-radius:13px;overflow:hidden">';
 
     // Card header — click to open detail
-    html += '<div style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openLandlordDetail('+ll.id+')">';
+    html += '<div style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openLandlordDetail(\''+ll.id+'\')">';
     html += '<div style="width:42px;height:42px;border-radius:11px;background:var(--accent-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent-dark)">'+initials+'</div>';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="font-size:14px;font-weight:700">'+ll.name+'</div>';
@@ -5460,8 +5630,16 @@ function renderLandlords() {
     });
 
     if(monthKeys.length) {
+      var nowMonthKey=new Date().toISOString().slice(0,7);
+      // Only show OVERDUE months (past due with unpaid items). Paid + future = hidden.
+      var visKeys=monthKeys.filter(function(mk){
+        return mk<=nowMonthKey && llAllPays.some(function(p){return p.monthKey===mk&&p.status!=='paid';});
+      }).sort();
+      var hiddenCount=monthKeys.filter(function(mk){
+        return mk>nowMonthKey || llAllPays.filter(function(p){return p.monthKey===mk;}).every(function(p){return p.status==='paid';});
+      }).length;
       html += '<div style="border-top:1px solid var(--border)">';
-      monthKeys.forEach(function(mk) {
+      visKeys.forEach(function(mk) {
         var mPays = llAllPays.filter(function(p){return p.monthKey===mk;});
         var mMs   = new Date(mk+'-01').getTime();
         var mLabel = mPays[0].monthLabel;
@@ -5507,12 +5685,29 @@ function renderLandlords() {
           html += '</div>';
         });
       });
+      // Always show the 'View full history' link (paid + future months are all hidden)
+      if(hiddenCount>0||llAllPays.some(function(p){return p.status==='paid';})){
+        var hiddenAll=hiddenCount;
+        if(hiddenAll>0){
+          html+='<div style="padding:8px 14px;text-align:center;border-top:1px solid var(--border)">'
+            +'<button onclick="openLandlordDetail(\''+ll.id+'\')" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;font-family:inherit">'
+            +'📋 '+hiddenAll+' month'+(hiddenAll>1?'s':'')+' hidden · View full history</button></div>';
+        }
+      }
+      // If nothing overdue at all, show a clean 'all up to date' badge
+      if(!visKeys.length){
+        html += '<div style="padding:12px 14px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border)">'
+          +'<span style="font-size:18px">✅</span>'
+          +'<span style="font-size:12px;color:var(--green);font-weight:600">All payments up to date</span>'
+          +(monthKeys.length?'<button onclick="openLandlordDetail(\''+ll.id+'\')" style="margin-left:auto;font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;font-family:inherit">View history</button>':'')
+          +'</div>';
+      }
       html += '</div>';
     }
 
     // Edit button
     html += '<div style="padding:10px 14px;border-top:1px solid var(--border)">';
-    html += '<button onclick="openLandlordDetail('+ll.id+')" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✏️ Edit Profile</button>';
+    html += '<button onclick="openLandlordDetail(\''+ll.id+'\')" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✏️ Edit Profile</button>';
     html += '</div>';
 
     html += '</div>'; // card
@@ -5522,34 +5717,105 @@ function renderLandlords() {
   return html;
 }
 
-function openLandlordDetail(id){
-  var ll=state.landlords.find(function(x){return x.id===id;});if(!ll)return;
-  var lpays=(state.landlordPayments||[]).filter(function(p){return p.landlordId===id;});
+function openAddLandlordModal(){
   document.getElementById('modal-container').innerHTML=
     '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
-    +'<div class="modal"><div class="modal-header"><span class="modal-title">'+ll.name+'</span><button class="modal-close" onclick="closeModal()">x</button></div>'
+    +'<div class="modal" style="max-width:500px">'
+    +'<div class="modal-header"><span class="modal-title">+ Add Landlord</span><button class="modal-close" onclick="closeModal()">&times;</button></div>'
     +'<div class="modal-body">'
-    +'<div class="field"><label class="field-label">Name</label><input class="inp" id="ll-name" value="'+ll.name+'"></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="field"><label class="field-label">Phone</label><input class="inp" id="ll-phone" value="'+(ll.phone||'')+'"></div><div class="field"><label class="field-label">Email</label><input class="inp" id="ll-email" value="'+(ll.email||'')+'"></div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="field"><label class="field-label">Bank</label><input class="inp" id="ll-bank" value="'+(ll.bank||'')+'"></div><div class="field"><label class="field-label">Sort Code</label><input class="inp" id="ll-sort" value="'+(ll.sortCode||'')+'"></div></div>'
-    +'<div class="field"><label class="field-label">Account No.</label><input class="inp" id="ll-acc" value="'+(ll.accountNo||'')+'"></div>'
-    +'<div class="field"><label class="field-label">Notes</label><textarea class="inp" id="ll-notes" rows="2">'+(ll.notes||'')+'</textarea></div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 6px">PROPERTIES</div>'
-    +(ll.properties||[]).map(function(pn){return '<div style="font-size:12px;padding:5px 10px;background:var(--bg);border-radius:7px;margin-bottom:4px">'+pn+'</div>';}).join('')
-    +'<div style="font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 6px">RECENT PAYMENTS</div>'
-    +lpays.slice(0,5).map(function(p){return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><span>'+p.property+' - '+p.dueDate+'</span><span style="font-weight:700;color:'+(p.status==='paid'?'var(--green)':'var(--amber)')+'">'+fmt(p.amount)+' '+p.status+'</span></div>';}).join('')
+    +'<div class="field"><label class="field-label">Name *</label><input class="inp" id="ll-name" placeholder="e.g. John Smith"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Phone</label><input class="inp" id="ll-phone" type="tel" placeholder="07911000000"></div>'
+    +'<div class="field"><label class="field-label">Email</label><input class="inp" id="ll-email" type="email" placeholder="landlord@email.com"></div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Bank Name</label><input class="inp" id="ll-bank" placeholder="e.g. Barclays"></div>'
+    +'<div class="field"><label class="field-label">Sort Code</label><input class="inp" id="ll-sort" placeholder="00-00-00"></div></div>'
+    +'<div class="field"><label class="field-label">Account No.</label><input class="inp" id="ll-acc" placeholder="12345678"></div>'
+    +'<div class="field"><label class="field-label">Notes</label><textarea class="inp" id="ll-notes" rows="2" placeholder="Payment terms, preferences…" style="resize:vertical"></textarea></div>'
     +'</div>'
-    +'<div class="modal-footer"><button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Close</button>'
-    +'<button onclick="saveLandlordDetail(\''+id+'\')" style="padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Save</button>'
+    +'<div class="modal-footer">'
+    +'<button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<button onclick="saveNewLandlord()" style="padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Add Landlord</button>'
     +'</div></div></div>';
 }
 
+function saveNewLandlord(){
+  var name=(document.getElementById('ll-name')||{value:''}).value.trim();
+  if(!name){alert('Please enter a landlord name.');return;}
+  var ll={id:crypto.randomUUID(),name:name,
+    phone:(document.getElementById('ll-phone')||{value:''}).value.trim(),
+    email:(document.getElementById('ll-email')||{value:''}).value.trim(),
+    bank:(document.getElementById('ll-bank')||{value:''}).value.trim(),
+    sortCode:(document.getElementById('ll-sort')||{value:''}).value.trim(),
+    accountNo:(document.getElementById('ll-acc')||{value:''}).value.trim(),
+    notes:(document.getElementById('ll-notes')||{value:''}).value.trim(),properties:[]};
+  if(!state.landlords) state.landlords=[];
+  state.landlords.push(ll);
+  closeModal();saveState();render();
+  showToast('Landlord added: '+ll.name,'success');
+}
+
+function deleteLandlord(id){
+  var ll=state.landlords.find(function(x){return String(x.id)===String(id);});if(!ll)return;
+  var linkedProps=state.properties.filter(function(p){return p.landlordName===ll.name;});
+  var msg='Delete '+ll.name+'?';
+  if(linkedProps.length) msg+='\n\n⚠ Linked to '+linkedProps.length+' propert'+(linkedProps.length>1?'ies':'y')+'. Link will be removed.';
+  msg+='\n\nThis cannot be undone.';
+  if(!confirm(msg)) return;
+  linkedProps.forEach(function(p){delete p.landlordName;delete p.landlordPhone;});
+  state.landlords=state.landlords.filter(function(x){return String(x.id)!==String(id);});
+  try{supa.from('landlords').delete().eq('id',String(id)).then(function(){});}catch(e){}
+  closeModal();saveState();render();
+  showToast('Landlord deleted','success');
+}
+
+function openLandlordDetail(id){
+  var ll=state.landlords.find(function(x){return String(x.id)===String(id);});if(!ll)return;
+  var lpays=(state.landlordPayments||[]).filter(function(p){return p.landlordId===id;});
+  var llProps=state.properties.filter(function(p){return p.landlordName===ll.name;});
+  var pendingPays=lpays.filter(function(p){return p.status!=='paid';});
+  var paidPays=lpays.filter(function(p){return p.status==='paid';}).sort(function(a,b){return (b.dueDate||'').localeCompare(a.dueDate||'');}).slice(0,6);
+  var shownPays=pendingPays.concat(paidPays);
+  document.getElementById('modal-container').innerHTML=
+    '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
+    +'<div class="modal" style="max-width:560px"><div class="modal-header"><span class="modal-title">'+ll.name+'</span><button class="modal-close" onclick="closeModal()">&times;</button></div>'
+    +'<div class="modal-body" style="max-height:70vh;overflow-y:auto">'
+    +'<div class="field"><label class="field-label">Name</label><input class="inp" id="ll-name" value="'+ll.name+'"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Phone</label><input class="inp" id="ll-phone" value="'+(ll.phone||'')+'"></div>'
+    +'<div class="field"><label class="field-label">Email</label><input class="inp" id="ll-email" value="'+(ll.email||'')+'"></div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label class="field-label">Bank</label><input class="inp" id="ll-bank" value="'+(ll.bank||'')+'"></div>'
+    +'<div class="field"><label class="field-label">Sort Code</label><input class="inp" id="ll-sort" value="'+(ll.sortCode||'')+'"></div></div>'
+    +'<div class="field"><label class="field-label">Account No.</label><input class="inp" id="ll-acc" value="'+(ll.accountNo||'')+'"></div>'
+    +'<div class="field"><label class="field-label">Notes</label><textarea class="inp" id="ll-notes" rows="2">'+(ll.notes||'')+'</textarea></div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:12px 0 6px">Linked Properties</div>'
+    +(llProps.length?llProps.map(function(p){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 10px;background:var(--bg);border-radius:7px;margin-bottom:4px"><span>'+p.name+'</span><span style="font-weight:700;color:var(--red);font-family:monospace">'+fmt(p.landlord)+'/mo</span></div>';}).join(''):'<div style="font-size:12px;color:var(--dim);padding:4px 0">No properties linked</div>')
+    +'<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:12px 0 6px">Payment History (overdue + last 6 paid)</div>'
+    +(shownPays.length?shownPays.map(function(p){
+        var propName=p.propName||(state.properties.find(function(x){return x.id===p.propId;})||{}).name||p.property||'—';
+        var isPaid=p.status==='paid';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">'
+          +'<div><div style="font-weight:600;color:var(--text)">'+propName+'</div>'
+          +'<div style="font-size:10px;color:var(--muted)">'+p.monthLabel+(isPaid?' · Paid '+p.paidDate:'')+'</div></div>'
+          +'<span style="font-weight:700;font-family:monospace;color:'+(isPaid?'var(--green)':'var(--amber)')+'">'+fmt(p.amount)+'</span>'
+          +'</div>';
+      }).join(''):'<div style="font-size:12px;color:var(--dim)">No payments yet</div>')
+    +'</div>'
+    +'<div class="modal-footer" style="justify-content:space-between">'
+    +'<button data-llid="'+id+'" onclick="deleteLandlord(this.dataset.llid)" style="padding:9px 16px;border-radius:9px;border:1px solid var(--red);background:var(--red-light);color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">🗑 Delete</button>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<button data-llid="'+id+'" onclick="saveLandlordDetail(this.dataset.llid)" style="padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Changes</button>'
+    +'</div></div></div></div>';
+}
+
 function saveLandlordDetail(id){
-  var ll=state.landlords.find(function(x){return x.id===id;});if(!ll)return;
+  var ll=state.landlords.find(function(x){return String(x.id)===String(id);});if(!ll)return;
   var g=function(eid){var el=document.getElementById(eid);return el?el.value:null;};
   ['ll-name','ll-phone','ll-email','ll-bank','ll-sort','ll-acc','ll-notes'].forEach(function(eid){var v=g(eid);if(v!==null){var map={'ll-name':'name','ll-phone':'phone','ll-email':'email','ll-bank':'bank','ll-sort':'sortCode','ll-acc':'accountNo','ll-notes':'notes'};ll[map[eid]]=v;}});
-  closeModal();saveState();
-  render();
+  closeModal();saveState();render();
+  showToast('Landlord updated','success');
 }
 
 
@@ -6363,6 +6629,75 @@ function getVoidDays(pid, rn) {
   return Math.max(0, Math.floor((TODAY - new Date(since)) / 86400000));
 }
 
+
+function renderComplianceWidget() {
+  if(!state.propDocs||!Object.keys(state.propDocs).length) {
+    return '<div style="font-size:14px;font-weight:700;margin-bottom:6px">📋 Compliance Calendar</div>'
+      +'<div style="font-size:12px;color:var(--muted)">Add Gas Safety, EICR and HMO Licence expiry dates in each property\'s Docs tab.</div>';
+  }
+  var alerts=[], upcoming=[], ok=0;
+  Object.keys(state.propDocs).forEach(function(pid){
+    var prop=state.properties.find(function(p){return String(p.id)===String(pid);});
+    if(!prop||prop.status==='archived') return;
+    (state.propDocs[pid]||[]).forEach(function(doc){
+      if(!doc.expiresAt) return;
+      var meta=getPropDocMeta(doc.type);
+      if(!meta||meta.warn===0) return;
+      var days=getDaysUntilExpiry(doc.expiresAt);
+      var item={propName:prop.name,docType:doc.type,icon:meta.icon,days:days,expiresAt:doc.expiresAt};
+      if(days<0){item.status='expired';alerts.push(item);}
+      else if(days<=meta.warn){item.status='warning';alerts.push(item);}
+      else if(days<=meta.warn+30){item.status='upcoming';upcoming.push(item);}
+      else ok++;
+    });
+  });
+  alerts.sort(function(a,b){return a.days-b.days;});
+  upcoming.sort(function(a,b){return a.days-b.days;});
+  var total=alerts.length+upcoming.length+ok;
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html+='<div><div style="font-size:14px;font-weight:700">📋 Compliance Calendar</div>';
+  html+='<div style="font-size:12px;color:var(--muted)">'+total+' certificates tracked</div></div></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">';
+  html+='<div style="background:'+(alerts.length?'var(--red-light)':'var(--bg)')+';border:1px solid '+(alerts.length?'#FECDD3':'var(--border)')+';border-radius:9px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:'+(alerts.length?'var(--red)':'var(--dim)')+'">'+alerts.length+'</div><div style="font-size:9px;font-weight:700;color:'+(alerts.length?'var(--red)':'var(--dim)')+';text-transform:uppercase;margin-top:2px">Expired / Due</div></div>';
+  html+='<div style="background:'+(upcoming.length?'var(--amber-light)':'var(--bg)')+';border:1px solid '+(upcoming.length?'#FDE68A':'var(--border)')+';border-radius:9px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:'+(upcoming.length?'var(--amber)':'var(--dim)')+'">'+upcoming.length+'</div><div style="font-size:9px;font-weight:700;color:'+(upcoming.length?'var(--amber)':'var(--dim)')+';text-transform:uppercase;margin-top:2px">Due Soon</div></div>';
+  html+='<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:9px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--green)">'+ok+'</div><div style="font-size:9px;font-weight:700;color:var(--green);text-transform:uppercase;margin-top:2px">Current</div></div>';
+  html+='</div>';
+  if(!alerts.length&&!upcoming.length) return html+'<div style="text-align:center;padding:12px;color:var(--dim);font-size:12px">✓ All certificates current</div>';
+  alerts.concat(upcoming).slice(0,8).forEach(function(item){
+    var isExp=item.days<0;
+    var bg=isExp?'var(--red-light)':'var(--amber-light)';
+    var border=isExp?'#FECDD3':'#FDE68A';
+    var col=isExp?'var(--red)':'var(--amber)';
+    var label=isExp?'EXPIRED '+Math.abs(item.days)+'d ago':'Expires in '+item.days+'d';
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:'+bg+';border:1px solid '+border+';border-left:3px solid '+col+';border-radius:8px;margin-bottom:6px">';
+    html+='<span style="font-size:16px">'+item.icon+'</span>';
+    html+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.propName+'</div>';
+    html+='<div style="font-size:11px;color:var(--muted)">'+item.docType+'</div></div>';
+    html+='<div style="text-align:right;flex-shrink:0"><div style="font-size:10px;font-weight:700;color:'+col+'">'+label+'</div>';
+    html+='<div style="font-size:10px;color:var(--dim)">'+new Date(item.expiresAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+'</div></div></div>';
+  });
+  return html;
+}
+
+function renderDepositSummary() {
+  var active=state.tenants.filter(function(t){return t.status==='active'||t.status==='notice_given';});
+  var totalHeld=active.filter(function(t){return t.depositStatus!=='returned';}).reduce(function(s,t){return s+(t.deposit||0);},0);
+  var noRef=active.filter(function(t){return (t.deposit||0)>0&&!t.depositRef;}).length;
+  var byScheme={};
+  active.forEach(function(t){if(!(t.deposit>0))return;var s=t.depositScheme||'Unknown';byScheme[s]=(byScheme[s]||0)+(t.deposit||0);});
+  var html='<div style="font-size:14px;font-weight:700;margin-bottom:12px">🔐 Deposit Register</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+  html+='<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:9px;padding:10px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">'+fmt(totalHeld)+'</div><div style="font-size:9px;font-weight:700;color:var(--green);text-transform:uppercase;margin-top:2px">Held</div></div>';
+  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--muted);font-family:monospace">'+active.filter(function(t){return t.depositStatus!=='returned';}).length+'</div><div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px">Tenants</div></div>';
+  html+='</div>';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+  Object.keys(byScheme).forEach(function(s){html+='<div style="padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px"><span style="font-weight:700">'+s+'</span> <span style="color:var(--muted);font-family:monospace">'+fmt(byScheme[s])+'</span></div>';});
+  if(!Object.keys(byScheme).length) html+='<span style="font-size:12px;color:var(--dim)">No deposits recorded</span>';
+  html+='</div>';
+  if(noRef>0) html+='<div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:10px;font-size:12px;color:var(--amber);font-weight:600">⚠ '+noRef+' tenant'+(noRef>1?'s':'')+' missing deposit reference</div>';
+  return html;
+}
+
 function renderVoidTracker() {
   if(!state.voidDates) state.voidDates = {};
   var voids = [];
@@ -6411,40 +6746,273 @@ function renderVoidTracker() {
 function generateAgreement(tenantId) {
   var t = state.tenants.find(function(x){return x.id===tenantId;});
   if(!t) return;
-  var p = state.properties.find(function(x){return x.name===t.property;});
+  var p    = state.properties.find(function(x){return x.name===t.property;});
   var room = p&&p.roomList ? p.roomList.find(function(r){return r.n===t.room;}) : null;
-  var today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+  var ll   = state.landlords.find(function(x){return x.name===p.landlordName;}) || {};
+  var co   = (state.companies&&state.companies[0]) || {};
+
+  var today  = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
   var moveIn = t.startDate ? new Date(t.startDate).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'}) : (t.moveIn||'—');
+  // 6-month initial fixed term end date
+  var fixedEnd = '';
+  try {
+    var fd = new Date(t.startDate||t.moveIn||Date.now());
+    fd.setMonth(fd.getMonth()+6);
+    fixedEnd = fd.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+  } catch(e){}
+
+  var propAddr   = p ? (p.address||p.name) : t.property;
+  var deposit    = t.deposit || t.rent*2;
+  var depScheme  = t.depositScheme || 'DPS';
+  var depRef     = t.depositRef || '(to be confirmed within 30 days)';
+  var rentAmt    = '£'+t.rent+' per '+(t.freq==='weekly'?'week':'month');
+  var payDay     = t.freq==='monthly' ? ('the '+(t.payDayOfMonth||1)+(t.payDayOfMonth===1?'st':t.payDayOfMonth===2?'nd':t.payDayOfMonth===3?'rd':'th')+' day of each month') : ('every '+(t.payDay||'Monday'));
+  var payMethod  = t.method==='bank'?'Bank Transfer (BACS)':'Cash';
+  var roomDesc   = 'Room '+t.room+(room?' ('+room.type+')':'');
+  var propCoName = co.name || 'Reservations Direct Limited';
+  var propCoAddr = co.address || 'South London';
+
   var S = [];
+
+  // ── Overlay wrapper ───────────────────────────────────────────────────────
   S.push('<div id="agreement-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#fff;overflow-y:auto">');
-  S.push('<div style="position:sticky;top:0;background:#1a1a2e;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px">');
-  S.push('<span style="color:#fff;font-size:14px;font-weight:700">Tenancy Agreement — '+t.name+'</span>');
+
+  // Sticky toolbar
+  S.push('<div style="position:sticky;top:0;background:#0F0F1A;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;z-index:10;print-color-adjust:exact">');
+  S.push('<span style="color:#fff;font-size:14px;font-weight:700">AST Agreement — '+t.name+'</span>');
   S.push('<div style="display:flex;gap:8px">');
-  S.push('<button onclick="window.print()" style="padding:8px 16px;border-radius:8px;border:none;background:#10B981;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Print / PDF</button>');
-  S.push('<button onclick="closeAgreement()" style="padding:8px 14px;border-radius:8px;border:1px solid #444;background:transparent;color:#fff;font-size:13px;cursor:pointer">Close</button>');
+  S.push('<button onclick="window.print()" style="padding:8px 16px;border-radius:8px;border:none;background:#10B981;color:#fff;font-size:13px;font-weight:700;cursor:pointer">🖨 Print / PDF</button>');
+  S.push('<button onclick="closeAgreement()" style="padding:8px 14px;border-radius:8px;border:1px solid #444;background:transparent;color:#fff;font-size:13px;cursor:pointer">✕ Close</button>');
   S.push('</div></div>');
-  S.push('<div style="max-width:700px;margin:0 auto;padding:30px 20px;font-family:Georgia,serif">');
-  S.push('<h1 style="font-size:18px;text-align:center;text-transform:uppercase;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:20px">Assured Shorthold Tenancy Agreement</h1>');
-  S.push('<p style="text-align:center;font-size:13px;color:#555;margin-bottom:20px">Reservations Direct Limited</p>');
-  var rows=[['Tenant',t.name],['Property',p?p.address:'—'],['Room','Room '+t.room+' — '+(room?room.type:'Room')],
-            ['Start Date',moveIn],['Weekly Rent','£'+t.rent+'/wk (£'+Math.round(t.rent*52/12)+'/mo equiv.)'],
-            ['Deposit','£'+(t.deposit||t.rent*2)],['Payment',t.method==='bank'?'Bank Transfer':'Cash'],['Date',today]];
-  S.push('<div style="background:#f7f7f7;border:1px solid #ddd;padding:6px 16px;margin-bottom:20px">');
-  rows.forEach(function(r){S.push('<div style="display:flex;padding:6px 0;border-bottom:1px solid #e0e0e0;gap:10px"><span style="font-weight:bold;min-width:130px;font-size:13px">'+r[0]+'</span><span style="font-size:13px">'+r[1]+'</span></div>');});
+
+  // ── Document body ─────────────────────────────────────────────────────────
+  S.push('<div style="max-width:760px;margin:0 auto;padding:48px 36px;font-family:Georgia,serif;font-size:13px;line-height:1.8;color:#111">');
+
+  // Company letterhead
+  S.push('<div style="text-align:center;margin-bottom:36px;padding-bottom:24px;border-bottom:3px double #000">');
+  S.push('<div style="font-size:24px;font-weight:800;letter-spacing:-.5px;font-family:Arial,sans-serif;text-transform:uppercase">'+propCoName+'</div>');
+  S.push('<div style="font-size:11px;color:#555;margin-top:4px">'+propCoAddr+' · Property Management</div>');
+  S.push('<div style="margin-top:20px;font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:2px">Assured Shorthold Tenancy Agreement</div>');
+  S.push('<div style="font-size:11px;color:#777;margin-top:6px">Pursuant to the Housing Act 1988 as amended by the Housing Act 1996</div>');
+  S.push('<div style="font-size:11px;color:#777;margin-top:2px">Agreement date: <strong>'+today+'</strong></div>');
   S.push('</div>');
-  [['1. Rent','The Tenant agrees to pay £'+t.rent+' per week every '+(t.payDay||'Friday')+' by '+(t.method==='bank'?'Bank Transfer':'Cash')+'.'],
-   ['2. Deposit','A deposit of £'+(t.deposit||t.rent*2)+' is payable before the tenancy starts and will be protected in a government-approved scheme within 30 days.'],
-   ['3. Term','This agreement starts on '+moveIn+' on a rolling periodic basis until terminated by either party giving 4 weeks written notice.'],
-   ['4. Obligations','Pay rent on time. Keep the room clean. Report maintenance issues promptly. No subletting. No pets without written permission. Allow access with 24h notice.'],
-   ['5. House Rules','Quiet hours 11pm–7am. No smoking inside. Keep communal areas clean.']
-  ].forEach(function(clause){
-    S.push('<h2 style="font-size:13px;font-weight:bold;text-transform:uppercase;border-bottom:1px solid #ccc;padding-bottom:4px;margin:20px 0 8px">'+clause[0]+'</h2>');
-    S.push('<p style="font-size:13px;line-height:1.8">'+clause[1]+'</p>');
+
+  // Parties
+  S.push('<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:5px;margin:24px 0 10px">THE PARTIES</h2>');
+  S.push('<div style="background:#F8F9FC;border:1px solid #DDE1E7;border-radius:4px;padding:14px 18px;margin-bottom:20px">');
+  S.push('<div style="display:grid;grid-template-columns:180px 1fr;gap:0">');
+  var parties=[
+    ['Landlord / Licensor', propCoName+' (the "Landlord")'],
+    ['Landlord Address', propCoAddr],
+    ['Tenant', t.name+' (the "Tenant")'],
+    ['Tenant Email', t.email||'—'],
+    ['Tenant Phone', t.whatsapp||'—'],
+  ];
+  parties.forEach(function(r){
+    S.push('<div style="padding:5px 0;border-bottom:1px solid #E8EBF0;font-weight:700;font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.04em">'+r[0]+'</div>');
+    S.push('<div style="padding:5px 0;border-bottom:1px solid #E8EBF0;font-size:13px">'+r[1]+'</div>');
   });
-  S.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px">');
-  S.push('<div><p style="font-size:13px;font-weight:bold">Tenant</p><div style="border:1px solid #999;height:60px;margin:8px 0 6px"></div><p style="font-size:12px;color:#555">'+t.name+'<br>Date: _____________</p></div>');
-  S.push('<div><p style="font-size:13px;font-weight:bold">Agent</p><div style="border:1px solid #999;height:60px;margin:8px 0 6px"></div><p style="font-size:12px;color:#555">Reservations Direct Limited<br>Date: _____________</p></div>');
-  S.push('</div></div></div>');
+  S.push('</div></div>');
+
+  // Key terms
+  S.push('<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:5px;margin:24px 0 10px">KEY TERMS</h2>');
+  S.push('<div style="background:#F8F9FC;border:1px solid #DDE1E7;border-radius:4px;padding:14px 18px;margin-bottom:24px">');
+  S.push('<div style="display:grid;grid-template-columns:180px 1fr;gap:0">');
+  var terms=[
+    ['Property', propAddr],
+    ['Room', roomDesc],
+    ['Tenancy Type', 'Assured Shorthold Tenancy'],
+    ['Start Date', moveIn],
+    ['Initial Fixed Term', '6 months (to '+fixedEnd+')'],
+    ['After Fixed Term', 'Periodic monthly tenancy (1 month notice each side)'],
+    ['Weekly Rent', '£'+t.rent+' per week'],
+    ['Monthly Equivalent', '£'+Math.round(t.rent*52/12)+' per month'],
+    ['Rent Frequency', t.freq==='weekly'?'Weekly':'Monthly'],
+    ['Payment Due', payDay],
+    ['Payment Method', payMethod],
+    ['Deposit', '£'+deposit],
+    ['Deposit Scheme', depScheme],
+    ['Deposit Reference', depRef],
+  ];
+  terms.forEach(function(r){
+    S.push('<div style="padding:5px 0;border-bottom:1px solid #E8EBF0;font-weight:700;font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.04em">'+r[0]+'</div>');
+    S.push('<div style="padding:5px 0;border-bottom:1px solid #E8EBF0;font-size:13px">'+r[1]+'</div>');
+  });
+  S.push('</div></div>');
+
+  // Important notice
+  S.push('<div style="background:#EFF6FF;border:2px solid #3B82F6;border-radius:4px;padding:14px 18px;margin-bottom:24px">');
+  S.push('<div style="font-weight:700;font-size:12px;margin-bottom:6px;color:#1D4ED8">ℹ PRESCRIBED INFORMATION — HOUSING ACT 1988</div>');
+  S.push('<div style="font-size:12px;line-height:1.6;color:#1e3a5f">');
+  S.push('This is an <strong>Assured Shorthold Tenancy (AST)</strong> under sections 19A and 20 of the Housing Act 1988 as amended. ');
+  S.push('The Tenant has full statutory rights including the right to a section 21 notice before possession can be sought after the fixed term. ');
+  S.push('The deposit will be protected in a government-approved scheme within 30 days of receipt. ');
+  S.push('The Tenant is entitled to receive Prescribed Information about the deposit scheme within that period.');
+  S.push('</div></div>');
+
+  // Clauses
+  var clauses = [
+    ['1. DEMISE',
+      '<p>The Landlord lets and the Tenant takes the property known as <strong>'+roomDesc+', '+propAddr+'</strong> (the "Property") for use as a private residential dwelling for the period described above.</p>'+
+      '<p>The Tenant shall have exclusive use of the room and shared use of communal facilities including kitchen, bathrooms, and living areas (if any).</p>'],
+
+    ['2. TERM AND CONTINUATION',
+      '<p>The tenancy is granted for an <strong>initial fixed term of 6 months</strong> commencing <strong>'+moveIn+'</strong> and expiring <strong>'+fixedEnd+'</strong>.</p>'+
+      '<p>After the fixed term, if neither party serves notice, the tenancy shall continue as a <strong>statutory periodic tenancy</strong> on a monthly basis under section 5 of the Housing Act 1988.</p>'+
+      '<p>During the periodic tenancy, either party may terminate by giving at least <strong>one month\'s written notice</strong> expiring on a rent payment date. The Landlord must serve a valid Section 21 Notice before commencing possession proceedings.</p>'],
+
+    ['3. RENT',
+      '<p>The Tenant agrees to pay rent of <strong>'+rentAmt+'</strong>, payable in advance <strong>'+payDay+'</strong> by <strong>'+payMethod+'</strong>.</p>'+
+      '<p>Rent is due on time without deduction, set-off, or counterclaim. The Landlord reserves the right to charge a late payment fee of £25 for rent received more than 3 days after the due date.</p>'+
+      '<p>The Landlord may review and increase the rent after the fixed term by serving a <strong>Section 13 Notice</strong> (Form 4) giving at least one month\'s notice. The Tenant has the right to refer any rent increase to the First-tier Tribunal (Property Chamber).</p>'],
+
+    ['4. DEPOSIT',
+      '<p>A deposit of <strong>£'+deposit+'</strong> is payable before or upon commencement of the tenancy. The Landlord will protect this deposit in the <strong>'+depScheme+'</strong> scheme within 30 days.</p>'+
+      '<p>The Prescribed Information regarding the deposit scheme will be provided to the Tenant within 30 days of receipt of the deposit.</p>'+
+      '<p>The deposit may be used to cover: unpaid rent; damage beyond fair wear and tear; missing items from the inventory; costs of cleaning if the property is not left in an equivalent state of cleanliness.</p>'+
+      '<p>The deposit will be returned, less any agreed deductions, within 10 days of the Tenant vacating and the parties agreeing the deductions. The Landlord will not make deductions without evidence.</p>'],
+
+    ['5. TENANT\'S OBLIGATIONS',
+      '<p>The Tenant agrees to:</p>'+
+      '<ol style="margin:8px 0 0 20px;padding:0;line-height:2">'+
+      '<li>Pay the rent on time as specified above.</li>'+
+      '<li>Pay any bills for which the Tenant is expressly responsible under this agreement.</li>'+
+      '<li>Keep the room and shared areas in a clean and tidy condition.</li>'+
+      '<li>Report any defects, damage, or maintenance issues to the Landlord promptly in writing.</li>'+
+      '<li>Not cause or permit any damage to the property beyond fair wear and tear.</li>'+
+      '<li>Not sublet, assign, or permit any other person to occupy the property without prior written consent.</li>'+
+      '<li>Not keep any animals or pets at the property without prior written consent.</li>'+
+      '<li>Not smoke or permit smoking anywhere inside the property.</li>'+
+      '<li>Not carry on any business, trade, or profession at the property without prior written consent.</li>'+
+      '<li>Not make any alterations, additions, or improvements to the property without prior written consent.</li>'+
+      '<li>Allow the Landlord or their agents access to the property on giving at least <strong>24 hours\' written notice</strong> (except in emergency).</li>'+
+      '<li>Comply with all reasonable house rules and policies notified by the Landlord from time to time.</li>'+
+      '<li>Not cause nuisance or annoyance to neighbouring occupiers or other residents.</li>'+
+      '<li>Ensure bins are put out on collection days as directed.</li>'+
+      '</ol>'],
+
+    ['6. LANDLORD\'S OBLIGATIONS',
+      '<p>The Landlord agrees to:</p>'+
+      '<ol style="margin:8px 0 0 20px;padding:0;line-height:2">'+
+      '<li>Allow the Tenant quiet enjoyment of the property without interference.</li>'+
+      '<li>Maintain the structure and exterior of the property in good repair (section 11, Landlord and Tenant Act 1985).</li>'+
+      '<li>Keep in repair and proper working order installations for the supply of water, gas, electricity, and sanitation.</li>'+
+      '<li>Ensure the property meets all fire, gas, and electrical safety requirements including annual gas safety certificate and 5-yearly EICR.</li>'+
+      '<li>Provide an Energy Performance Certificate (EPC) with a minimum rating of E or above.</li>'+
+      '<li>Protect the deposit in a government-approved scheme and provide Prescribed Information within 30 days.</li>'+
+      '<li>Give proper notice before entering the property.</li>'+
+      '</ol>'],
+
+    ['7. UTILITIES AND COUNCIL TAX',
+      '<p>Unless otherwise agreed in writing, the rent <strong>includes</strong> the following: gas, electricity, water, and broadband.</p>'+
+      '<p><strong>Council Tax</strong> is the responsibility of the Landlord as the property is an HMO. If the property ceases to qualify as an HMO or the Tenant is the sole occupant, the Tenant shall be responsible for Council Tax in their name.</p>'+
+      '<p>The Landlord reserves the right to implement a fair usage policy for utilities. Excessive consumption will be notified in writing and may be charged to the Tenant at cost.</p>'],
+
+    ['8. REPAIRS AND MAINTENANCE',
+      '<p>The Tenant must notify the Landlord in writing (including WhatsApp) of any defect or disrepair requiring attention as soon as reasonably practicable after it comes to their attention.</p>'+
+      '<p>The Tenant shall be liable for any damage caused by their failure to report a defect promptly where that failure results in increased repair costs.</p>'+
+      '<p>The Landlord will respond to urgent repairs (total loss of heating, water, or security) within 24 hours. Non-urgent repairs will be addressed within 14 days.</p>'],
+
+    ['9. ALTERATIONS AND DECORATION',
+      '<p>The Tenant must not carry out any alterations, redecoration, or improvements to the property without the prior written consent of the Landlord. The Tenant must restore the property to its original condition at the end of the tenancy if alterations were permitted.</p>'],
+
+    ['10. ASSIGNMENT AND SUBLETTING',
+      '<p>The Tenant must not assign this tenancy, sublet the whole or any part of the property, or take in a lodger or paying guest without the prior written consent of the Landlord. Any purported assignment or subletting without consent shall be void and may be grounds for possession.</p>'],
+
+    ['11. END OF TENANCY',
+      '<p>On termination of this tenancy, the Tenant shall:</p>'+
+      '<ol style="margin:8px 0 0 20px;padding:0;line-height:2">'+
+      '<li>Vacate the property and return all keys by 12:00 noon on the termination date.</li>'+
+      '<li>Remove all personal belongings. Items left will be disposed of after 7 days without liability.</li>'+
+      '<li>Leave the room and all communal areas in the same clean condition as at the start, allowing for fair wear and tear.</li>'+
+      '<li>Leave all fixtures, fittings, and appliances provided in good working order.</li>'+
+      '<li>Provide a forwarding address for correspondence.</li>'+
+      '</ol>'],
+
+    ['12. POSSESSION PROCEEDINGS',
+      '<p>The Landlord may seek possession of the property by serving the appropriate notice under the Housing Act 1988 (as amended by the Housing Act 1996 and Deregulation Act 2015):</p>'+
+      '<ul style="margin:8px 0 0 20px;padding:0;line-height:2">'+
+      '<li><strong>Section 21 Notice:</strong> No-fault basis, giving at least 2 months\' notice after the fixed term expires. Cannot be served in the first 4 months of the tenancy.</li>'+
+      '<li><strong>Section 8 Notice:</strong> On specified grounds (e.g. rent arrears of 2+ months — Ground 8, 10, 11), with the appropriate notice period.</li>'+
+      '</ul>'],
+
+    ['13. HOUSE RULES',
+      '<p>The following rules apply to all occupants and guests:</p>'+
+      '<ul style="margin:8px 0 0 20px;padding:0;line-height:2">'+
+      '<li><strong>Quiet hours:</strong> 11:00pm to 7:00am on all days.</li>'+
+      '<li><strong>No smoking</strong> anywhere inside the property including all rooms, hallways, and stairwells.</li>'+
+      '<li>All communal areas (kitchen, bathrooms, hallways) must be kept clean and tidy at all times.</li>'+
+      '<li>No overnight guests without prior agreement from the Landlord.</li>'+
+      '<li>No illegal drugs or activities of any kind on the premises.</li>'+
+      '<li>No items to be stored in communal hallways or blocking fire escape routes.</li>'+
+      '<li>Waste to be separated correctly and bins presented on collection days.</li>'+
+      '</ul>'],
+
+    ['14. DATA PROTECTION',
+      '<p>The Landlord will process the Tenant\'s personal data in accordance with the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018. Personal data will be used solely for the purposes of managing this tenancy, complying with legal obligations, and protecting the Landlord\'s legitimate interests. The Tenant has the right to access, rectify, or erase their data by contacting the Landlord in writing.</p>'],
+
+    ['15. GOVERNING LAW',
+      '<p>This agreement is governed by and construed in accordance with the <strong>law of England and Wales</strong>. Any disputes arising from this agreement shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>'+
+      '<p>Before commencing any court proceedings, the parties agree to attempt to resolve any dispute informally, and if unsuccessful, via the relevant redress scheme or the First-tier Tribunal (Property Chamber) where applicable.</p>'],
+  ];
+
+  clauses.forEach(function(clause){
+    S.push('<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:5px;margin:28px 0 10px">'+clause[0]+'</h2>');
+    S.push(clause[1]);
+  });
+
+  // Inventory / check-in
+  S.push('<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:5px;margin:28px 0 10px">16. INVENTORY</h2>');
+  S.push('<p>An inventory of the furniture, furnishings, and fittings provided by the Landlord shall be prepared at the start of the tenancy and signed by both parties. The inventory forms part of this agreement. The Tenant should check the inventory carefully and report any discrepancies within 48 hours of moving in.</p>');
+  S.push('<div style="background:#f7f7f7;border:1px solid #ddd;border-radius:4px;padding:14px 18px;margin-top:10px">');
+  S.push('<p style="font-weight:700;font-size:12px;margin-bottom:8px">ROOM '+t.room+' INVENTORY (complete at check-in):</p>');
+  ['Bed frame', 'Mattress', 'Wardrobe', 'Chest of drawers / storage', 'Desk / chair', 'Curtains / blinds', 'Smoke detector working', 'Carbon monoxide detector (if applicable)'].forEach(function(item){
+    S.push('<div style="display:grid;grid-template-columns:1fr 80px 80px 80px;gap:8px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px">');
+    S.push('<span>'+item+'</span><span style="text-align:center;color:#555">Good / Fair / Poor</span><span style="text-align:center;color:#555">_______</span><span></span>');
+    S.push('</div>');
+  });
+  S.push('</div>');
+
+  // Signatures
+  S.push('<div style="margin-top:48px;page-break-inside:avoid">');
+  S.push('<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #bbb;padding-bottom:5px;margin-bottom:24px">EXECUTION</h2>');
+  S.push('<p style="font-size:12px;margin-bottom:24px">By signing below, both parties confirm they have read, understood, and agreed to the terms of this Assured Shorthold Tenancy Agreement.</p>');
+  S.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:48px">');
+  // Tenant signature
+  S.push('<div>');
+  S.push('<p style="font-weight:700;font-size:13px;margin-bottom:12px">TENANT</p>');
+  S.push('<p style="font-size:12px;color:#555;margin-bottom:4px">Full Name: <strong>'+t.name+'</strong></p>');
+  S.push('<div style="border:none;border-bottom:1px solid #000;height:50px;margin:16px 0 6px"></div>');
+  S.push('<p style="font-size:11px;color:#777">Signature</p>');
+  S.push('<div style="margin-top:16px;font-size:12px">Date: ________________________________</div>');
+  S.push('</div>');
+  // Landlord signature
+  S.push('<div>');
+  S.push('<p style="font-weight:700;font-size:13px;margin-bottom:12px">LANDLORD / AGENT</p>');
+  S.push('<p style="font-size:12px;color:#555;margin-bottom:4px">On behalf of: <strong>'+propCoName+'</strong></p>');
+  S.push('<div style="border:none;border-bottom:1px solid #000;height:50px;margin:16px 0 6px"></div>');
+  S.push('<p style="font-size:11px;color:#777">Authorised Signature</p>');
+  S.push('<div style="margin-top:16px;font-size:12px">Date: ________________________________</div>');
+  S.push('</div>');
+  S.push('</div>'); // grid
+
+  // Witness
+  S.push('<div style="margin-top:32px;padding:14px 18px;background:#f7f7f7;border:1px solid #ddd;border-radius:4px">');
+  S.push('<p style="font-weight:700;font-size:12px;margin-bottom:10px">WITNESS (optional but recommended)</p>');
+  S.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;font-size:12px">');
+  ['Name','Signature','Date'].forEach(function(f){
+    S.push('<div><p style="color:#555;font-size:11px;margin-bottom:4px">'+f+'</p><div style="border-bottom:1px solid #999;height:28px"></div></div>');
+  });
+  S.push('</div></div>');
+  S.push('</div>'); // execution
+
+  // Footer
+  S.push('<div style="margin-top:40px;padding-top:16px;border-top:1px solid #ddd;text-align:center;font-size:11px;color:#999">');
+  S.push(propCoName+' · Assured Shorthold Tenancy Agreement · Prepared '+today+' · Housing Act 1988 (as amended)');
+  S.push('</div>');
+
+  S.push('</div></div>'); // doc body + overlay
+
   var existing = document.getElementById('agreement-overlay');
   if(existing) existing.remove();
   var div = document.createElement('div');
@@ -6798,6 +7366,456 @@ async function uploadTenantDoc(tenantId, input) {
 }
 
 // ── EXPORT / IMPORT ──────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════
+// DATA MANAGER MODAL — Import / Export / Template
+// ══════════════════════════════════════════════════════
+var _dmEntity = 'properties'; // current entity in modal
+var _dmPreview = null;        // parsed preview rows
+var _dmWarnings = [];
+
+function openDataModal(entity) {
+  _dmEntity = entity || 'properties';
+  _dmPreview = null;
+  _dmWarnings = [];
+  _renderDataModal();
+}
+
+function _renderDataModal() {
+  var entity = _dmEntity;
+  var label  = entity.charAt(0).toUpperCase()+entity.slice(1);
+  var preview = _dmPreview;
+  var mc = document.getElementById('modal-container');
+  if(!mc) return;
+
+  /* ── tabs ── */
+  var tabs = ['properties','tenants','landlords'].map(function(e) {
+    var active = e===entity;
+    var lbl = e.charAt(0).toUpperCase()+e.slice(1);
+    return '<button data-ent="'+e+'" onclick="openDataModal(this.dataset.ent)"'
+      +' style="padding:9px 18px;border:none;border-bottom:2px solid '+(active?'var(--accent)':'transparent')
+      +';background:transparent;font-size:13px;font-weight:'+(active?700:500)
+      +';color:'+(active?'var(--accent-dark)':'var(--muted)')
+      +';cursor:pointer;font-family:inherit;white-space:nowrap">'+lbl+'</button>';
+  }).join('');
+
+  /* ── instructions text per entity ── */
+  var instrCols = {
+    properties:'Property Name · Address · Postcode · Total Rooms · Landlord Rent (£) · Monthly Income (£) · Landlord Name · Landlord Contact',
+    tenants:   'Full Name · Property Name · Room Number · Weekly Rent (£) · Payment Day · WhatsApp · Status · Move-In Date',
+    landlords: 'Name · Phone · Email · Bank · Sort Code · Account No · Notes'
+  };
+
+  /* ── column headers for preview table ── */
+  var previewCols = {
+    properties:['Property','Area','Rooms','LL Rent','Income','Landlord'],
+    tenants:   ['Name','Property','Room','Rent','Pay Day','Status'],
+    landlords: ['Name','Phone','Email']
+  };
+
+  /* ── build HTML ── */
+  var H = [];
+  H.push('<div class="modal-overlay" onclick="if(event.target===this)closeModal()">');
+  H.push('<div class="modal" style="max-width:640px">');
+
+  /* header */
+  H.push('<div class="modal-header" style="background:linear-gradient(135deg,#0F0F1A,#1a1a3e);padding:16px 20px">');
+  H.push('<div style="display:flex;align-items:center;gap:12px"><span style="font-size:20px">⇅</span>');
+  H.push('<div><div style="font-size:15px;font-weight:700;color:#fff">Data Manager</div>');
+  H.push('<div style="font-size:11px;color:rgba(255,255,255,.5)">Import · Export · Template download</div></div></div>');
+  H.push('<button class="modal-close" onclick="closeModal()" style="color:#fff">&times;</button></div>');
+
+  /* tabs */
+  H.push('<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg)">'+tabs+'</div>');
+
+  /* body */
+  H.push('<div class="modal-body" style="max-height:70vh;overflow-y:auto">');
+
+  /* export + template row */
+  H.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">');
+  H.push('<button onclick="_dmExport()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;background:var(--green-light);border:1.5px solid #A7F3D0;border-radius:12px;cursor:pointer;font-family:inherit">');
+  H.push('<span style="font-size:28px">⬇️</span>');
+  H.push('<div style="font-size:13px;font-weight:700;color:var(--green)">Export to CSV</div>');
+  H.push('<div style="font-size:11px;color:var(--muted)">Download '+label+' data</div></button>');
+  H.push('<button onclick="_dmTemplate()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;background:var(--blue-light);border:1.5px solid #BFDBFE;border-radius:12px;cursor:pointer;font-family:inherit">');
+  H.push('<span style="font-size:28px">📋</span>');
+  H.push('<div style="font-size:13px;font-weight:700;color:var(--blue)">Download Template</div>');
+  H.push('<div style="font-size:11px;color:var(--muted)">CSV with all column headers</div></button>');
+  H.push('</div>');
+
+  /* divider */
+  H.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">');
+  H.push('<div style="flex:1;height:1px;background:var(--border)"></div>');
+  H.push('<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Import</span>');
+  H.push('<div style="flex:1;height:1px;background:var(--border)"></div></div>');
+
+  if(!preview) {
+    /* drop zone */
+    H.push('<div id="dm-dropzone" onclick="_dmBrowse()"');
+    H.push(' ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'"');
+    H.push(' ondragleave="this.style.borderColor=\'var(--border)\'"');
+    H.push(' ondrop="_dmDrop(event)"');
+    H.push(' style="border:2px dashed var(--border);border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:border-color .15s;margin-bottom:14px">');
+    H.push('<div style="font-size:40px;margin-bottom:10px">📂</div>');
+    H.push('<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:5px">Drop file here or click to browse</div>');
+    H.push('<div style="font-size:12px;color:var(--muted)">Accepts .xlsx or .csv</div></div>');
+    H.push('<input type="file" id="dm-file-inp" accept=".xlsx,.csv" style="display:none" onchange="_dmPickFile(this)">');
+
+    /* instructions */
+    H.push('<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px">');
+    H.push('<div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px">ℹ Required columns for '+label+'</div>');
+    H.push('<div style="font-size:11px;color:var(--muted);line-height:1.8">'+instrCols[entity]+'</div></div>');
+
+  } else {
+    /* preview */
+    var rows = preview.rows||[];
+    var warnings = _dmWarnings||[];
+    H.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">');
+    H.push('<div><div style="font-size:14px;font-weight:700">'+rows.length+' '+label+' ready</div>');
+    if(warnings.length) H.push('<div style="font-size:12px;color:var(--amber);margin-top:3px">⚠ '+warnings.length+' warning(s)</div>');
+    else H.push('<div style="font-size:12px;color:var(--green);margin-top:3px">✓ All rows validated</div>');
+    H.push('</div>');
+    H.push('<button onclick="_dmPreview=null;_renderDataModal()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);font-size:12px;cursor:pointer;font-family:inherit">← Back</button></div>');
+
+    if(warnings.length) {
+      H.push('<div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:10px 13px;margin-bottom:12px">');
+      warnings.slice(0,4).forEach(function(w){H.push('<div style="font-size:11px;color:var(--muted);padding:1px 0">• '+w+'</div>');});
+      if(warnings.length>4) H.push('<div style="font-size:11px;color:var(--dim)">…and '+(warnings.length-4)+' more</div>');
+      H.push('</div>');
+    }
+
+    /* progress bar — hidden until import starts */
+    H.push('<div id="dm-progress-wrap" style="display:none;margin-bottom:14px">');
+    H.push('<div style="display:flex;justify-content:space-between;margin-bottom:5px">');
+    H.push('<span id="dm-progress-label" style="font-size:12px;font-weight:600">Importing…</span>');
+    H.push('<span id="dm-progress-pct" style="font-size:12px;font-weight:700;color:var(--accent);font-family:monospace">0%</span></div>');
+    H.push('<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">');
+    H.push('<div id="dm-progress-bar" style="height:100%;border-radius:6px;background:var(--accent);width:0%;transition:width .35s"></div></div></div>');
+
+    /* table */
+    var cols = previewCols[entity]||[];
+    H.push('<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px;max-height:260px;overflow-y:auto">');
+    H.push('<table style="width:100%;border-collapse:collapse;font-size:11px">');
+    H.push('<thead style="position:sticky;top:0;background:var(--bg)"><tr>');
+    cols.forEach(function(c){
+      H.push('<th style="text-align:left;padding:8px 10px;color:var(--muted);font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border)">'+c+'</th>');
+    });
+    H.push('<th style="padding:8px 10px;border-bottom:1px solid var(--border)"></th>');
+    H.push('</tr></thead><tbody>');
+
+    rows.forEach(function(r, i) {
+      var exists = false;
+      if(entity==='properties') exists = state.properties.some(function(p){return p.name&&r.name&&p.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
+      else if(entity==='tenants') exists = state.tenants.some(function(t){return t.name&&r.name&&t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.property===r.property;});
+      else if(entity==='landlords') exists = state.landlords&&state.landlords.some(function(l){return l.name&&r.name&&l.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
+
+      var badge = exists
+        ? '<span style="font-size:9px;font-weight:700;color:var(--amber);background:var(--amber-light);padding:1px 6px;border-radius:4px">UPDATE</span>'
+        : '<span style="font-size:9px;font-weight:700;color:var(--green);background:var(--green-light);padding:1px 6px;border-radius:4px">NEW</span>';
+
+      H.push('<tr style="border-top:1px solid var(--border);background:'+(i%2?'var(--bg)':'var(--surface)')+'">');
+      if(entity==='properties') {
+        H.push('<td style="padding:7px 10px;font-weight:600;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</td>');
+        H.push('<td style="padding:7px 10px;color:var(--muted)">'+(r.postcode||r.area||'—')+'</td>');
+        H.push('<td style="padding:7px 10px;text-align:center">'+(r.rooms||0)+'</td>');
+        H.push('<td style="padding:7px 10px;font-family:monospace;color:var(--red)">£'+(r.landlord||0)+'</td>');
+        H.push('<td style="padding:7px 10px;font-family:monospace;color:var(--green)">£'+(r.rent||0)+'</td>');
+        H.push('<td style="padding:7px 10px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.landlordName||'—')+'</td>');
+      } else if(entity==='tenants') {
+        H.push('<td style="padding:7px 10px;font-weight:600">'+r.name+'</td>');
+        H.push('<td style="padding:7px 10px;color:var(--muted);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.property||'—')+'</td>');
+        H.push('<td style="padding:7px 10px;text-align:center">'+(r.room||'—')+'</td>');
+        H.push('<td style="padding:7px 10px;font-family:monospace;color:var(--green)">£'+(r.rent||0)+'/wk</td>');
+        H.push('<td style="padding:7px 10px">'+(r.payDay||'—')+'</td>');
+        H.push('<td style="padding:7px 10px">'+(r.status||'active')+'</td>');
+      } else {
+        H.push('<td style="padding:7px 10px;font-weight:600">'+r.name+'</td>');
+        H.push('<td style="padding:7px 10px;color:var(--muted)">'+(r.phone||'—')+'</td>');
+        H.push('<td style="padding:7px 10px;color:var(--muted)">'+(r.email||'—')+'</td>');
+      }
+      H.push('<td style="padding:7px 10px">'+badge+'</td>');
+      H.push('</tr>');
+    });
+    H.push('</tbody></table></div>');
+  }
+
+  H.push('</div>'); /* end modal-body */
+
+  /* footer */
+  H.push('<div class="modal-footer" style="justify-content:space-between">');
+  H.push('<button onclick="closeModal()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit">Close</button>');
+  if(preview && preview.rows && preview.rows.length) {
+    H.push('<button id="dm-import-btn" onclick="_dmConfirmImport()" style="padding:9px 22px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Import '+preview.rows.length+' '+label+'</button>');
+  }
+  H.push('</div>');
+
+  H.push('</div></div>'); /* end modal + overlay */
+
+  mc.innerHTML = H.join('');
+}
+
+
+function _dmBrowse() {
+  var inp = document.getElementById('dm-file-inp');
+  if(inp) inp.click();
+}
+
+function _dmDrop(e) {
+  e.preventDefault();
+  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) _dmProcessFile(file);
+}
+
+function _dmPickFile(input) {
+  var file = input && input.files && input.files[0];
+  if(file) _dmProcessFile(file);
+}
+
+function _dmProcessFile(file) {
+  var entity = _dmEntity;
+  var ext = (file.name||'').split('.').pop().toLowerCase();
+  if(ext==='xlsx') {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        // Use XLSX if available, else fallback to CSV-like parse
+        if(window.XLSX) {
+          var wb = window.XLSX.read(e.target.result, {type:'array'});
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var data = window.XLSX.utils.sheet_to_json(ws,{defval:''});
+          _dmParseRows(data, entity);
+        } else {
+          _dmWarnings = ['XLSX parser not loaded — try CSV format'];
+          _dmPreview = {rows:[]};
+          _renderDataModal();
+        }
+      } catch(err){ _dmWarnings=['Parse error: '+err.message]; _dmPreview={rows:[]}; _renderDataModal(); }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    // CSV
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var lines = e.target.result.split(/\r?\n/).filter(function(l){return l.trim();});
+        var headers = lines[0].split(',').map(function(h){return h.trim().replace(/^["']|["']$/g,'');});
+        var data = lines.slice(1).map(function(line){
+          var vals = line.split(',');
+          var obj = {};
+          headers.forEach(function(h,i){obj[h]=(vals[i]||'').trim().replace(/^["']|["']$/g,'');});
+          return obj;
+        });
+        _dmParseRows(data, entity);
+      } catch(err){ _dmWarnings=['CSV parse error: '+err.message]; _dmPreview={rows:[]}; _renderDataModal(); }
+    };
+    reader.readAsText(file);
+  }
+}
+
+function _dmParseRows(data, entity) {
+  _dmWarnings = [];
+  var rows = [];
+  if(entity==='properties') {
+    data.forEach(function(row,i){
+      var name = row['Property Name']||row['Name']||row['property_name']||'';
+      if(!name) return;
+      var r = {
+        name: name.trim(),
+        address: row['Address']||row['address']||name,
+        postcode: row['Postcode']||row['postcode']||row['Area']||'',
+        area: row['Area']||row['area']||'',
+        rooms: parseInt(row['Total Rooms']||row['Rooms']||row['rooms']||0)||0,
+        landlord: parseFloat(row['Landlord Rent (£)']||row['Landlord Rent']||row['landlord_rent']||0)||0,
+        rent: parseFloat(row['Monthly Income (£)']||row['Monthly Income']||row['monthly_income']||0)||0,
+        landlordName: row['Landlord Name']||row['landlord_name']||'',
+        landlordPhone: row['Landlord Contact']||row['Landlord Phone']||row['landlord_contact']||'',
+        companyName: row['Operating Company']||row['Company']||'',
+        ownershipType: (row['Status']||row['status']||'managed').toLowerCase().includes('own')?'owned':'managed',
+        mapsUrl: row['Maps URL']||row['maps_url']||'',
+        notes: row['Notes']||row['notes']||'',
+      };
+      if(!r.rooms) _dmWarnings.push('Row '+(i+2)+': '+name+' — no room count');
+      rows.push(r);
+    });
+  } else if(entity==='tenants') {
+    data.forEach(function(row,i){
+      var name = row['Full Name']||row['Name']||row['name']||'';
+      if(!name) return;
+      var r = {
+        name: name.trim(),
+        property: row['Property Name']||row['Property']||row['property']||'',
+        room: parseInt(row['Room Number']||row['Room']||row['room']||0)||0,
+        rent: parseFloat(row['Weekly Rent (£)']||row['Rent']||row['rent']||0)||0,
+        freq: (row['Frequency']||row['freq']||'weekly').toLowerCase().includes('month')?'monthly':'weekly',
+        payDay: row['Payment Day']||row['Pay Day']||row['payDay']||'Monday',
+        whatsapp: row['WhatsApp']||row['Phone']||row['phone']||'',
+        email: row['Email']||row['email']||'',
+        status: (row['Status']||row['status']||'active').toLowerCase().includes('notice')?'notice_given':'active',
+        moveIn: row['Move-In Date']||row['Move In']||row['moveIn']||'',
+        deposit: parseFloat(row['Deposit']||row['deposit']||0)||0,
+        method: (row['Payment Method']||row['method']||'bank').toLowerCase().includes('cash')?'cash':'bank',
+      };
+      var p = state.properties.find(function(p){return r.property&&p.name&&p.name.trim().toLowerCase()===r.property.trim().toLowerCase();});
+      if(r.property && !p) _dmWarnings.push('Row '+(i+2)+': '+name+' — property "'+r.property+'" not found');
+      rows.push(r);
+    });
+  } else if(entity==='landlords') {
+    data.forEach(function(row,i){
+      var name = row['Name']||row['name']||'';
+      if(!name) return;
+      rows.push({
+        name: name.trim(),
+        phone: row['Phone']||row['phone']||'',
+        email: row['Email']||row['email']||'',
+        bank: row['Bank']||row['bank']||'',
+        sortCode: row['Sort Code']||row['sortCode']||'',
+        accountNo: row['Account No']||row['accountNo']||'',
+        notes: row['Notes']||row['notes']||'',
+      });
+    });
+  }
+  _dmPreview = {rows:rows};
+  _renderDataModal();
+}
+
+async function _dmConfirmImport() {
+  var entity = _dmEntity;
+  var rows = (_dmPreview&&_dmPreview.rows)||[];
+  if(!rows.length){showToast('Nothing to import','error');return;}
+
+  var btn = document.getElementById('dm-import-btn');
+  var progressWrap = document.getElementById('dm-progress-wrap');
+  var bar = document.getElementById('dm-progress-bar');
+  var label = document.getElementById('dm-progress-label');
+  var pct = document.getElementById('dm-progress-pct');
+  if(btn) btn.disabled=true;
+  if(progressWrap) progressWrap.style.display='block';
+
+  function setProgress(done, total, msg) {
+    var p = total>0 ? Math.round(done/total*100) : 0;
+    if(bar) bar.style.width=p+'%';
+    if(pct) pct.textContent=p+'%';
+    if(label) label.textContent=msg||('Importing '+done+' / '+total+'…');
+    if(p===100 && bar) { bar.style.background='var(--green)'; if(label) label.textContent='✓ Import complete!'; }
+  }
+
+  var imported=0, skipped=0, total=rows.length;
+
+  if(entity==='properties') {
+    if(!state.properties) state.properties=[];
+    for(var i=0;i<rows.length;i++) {
+      var r=rows[i];
+      var exists = state.properties.find(function(p){return p.name&&r.name&&p.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
+      if(!exists) {
+        // Auto-create landlord if needed
+        if(r.landlordName) {
+          var ll=state.landlords&&state.landlords.find(function(l){return l.name&&l.name.trim().toLowerCase()===r.landlordName.trim().toLowerCase();});
+          if(!ll){if(!state.landlords)state.landlords=[];var newLL={id:crypto.randomUUID(),name:r.landlordName,phone:r.landlordPhone||'',email:'',bank:'',sortCode:'',accountNo:'',notes:'',properties:[]};state.landlords.push(newLL);}
+        }
+        var newProp = {
+          id:crypto.randomUUID(), name:r.name, address:r.address, postcode:r.postcode, area:r.area||r.postcode,
+          rooms:r.rooms||0, occupied:0, landlord:r.landlord||0, rent:r.rent||0,
+          ownershipType:r.ownershipType||'managed', status:'active',
+          landlordName:r.landlordName||'', landlordPhone:r.landlordPhone||'',
+          mapsUrl:r.mapsUrl||'', notes:r.notes||'', roomList:[]
+        };
+        state.properties.push(newProp);
+        imported++;
+      } else { skipped++; }
+      if(i%10===9 || i===rows.length-1) {
+        setProgress(i+1, total, 'Importing properties… '+(i+1)+' / '+total);
+        await new Promise(function(res){setTimeout(res,30);});
+      }
+    }
+  } else if(entity==='tenants') {
+    if(!state.tenants) state.tenants=[];
+    for(var i=0;i<rows.length;i++) {
+      var r=rows[i];
+      var exists = state.tenants.find(function(t){return t.name&&r.name&&t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.property===r.property;});
+      if(!exists) {
+        state.tenants.push({
+          id:crypto.randomUUID(), name:r.name, property:r.property, room:r.room,
+          rent:r.rent, freq:r.freq, payDay:r.payDay, whatsapp:r.whatsapp, email:r.email,
+          status:r.status, startDate:r.moveIn||null, moveIn:r.moveIn||null,
+          deposit:r.deposit||0, depositStatus:'held', method:r.method, arrears:0, paid:'—', paymentHistory:[]
+        });
+        imported++;
+      } else { skipped++; }
+      if(i%10===9 || i===rows.length-1) {
+        setProgress(i+1, total, 'Importing tenants… '+(i+1)+' / '+total);
+        await new Promise(function(res){setTimeout(res,30);});
+      }
+    }
+  } else if(entity==='landlords') {
+    if(!state.landlords) state.landlords=[];
+    for(var i=0;i<rows.length;i++) {
+      var r=rows[i];
+      var exists = state.landlords.find(function(l){return l.name&&r.name&&l.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
+      if(!exists) {
+        state.landlords.push({id:crypto.randomUUID(),name:r.name,phone:r.phone,email:r.email,bank:r.bank,sortCode:r.sortCode,accountNo:r.accountNo,notes:r.notes,properties:[]});
+        imported++;
+      } else { skipped++; }
+      if(i%5===4 || i===rows.length-1) {
+        setProgress(i+1, total, 'Importing landlords… '+(i+1)+' / '+total);
+        await new Promise(function(res){setTimeout(res,20);});
+      }
+    }
+  }
+
+  setProgress(total, total);
+  saveState();
+  rebuildAllSchedules();
+  await new Promise(function(res){setTimeout(res,600);});
+  if(btn){ btn.textContent='✓ Done — Close'; btn.disabled=false; btn.onclick=function(){closeModal();render();}; }
+  showToast('Imported '+imported+' '+entity+(skipped?' · '+skipped+' skipped':''),'success');
+}
+
+function _dmExport() {
+  var entity = _dmEntity;
+  var rows, filename, headers;
+  if(entity==='properties') {
+    headers=['Property Name','Address','Postcode','Area','Total Rooms','Landlord Rent (£)','Monthly Income (£)','Occupied Rooms','Landlord Name','Ownership Type','Status','Maps URL','Notes'];
+    rows=state.properties.map(function(p){return [p.name,p.address||'',p.postcode||'',p.area||'',p.rooms,p.landlord,p.rent,p.occupied,p.landlordName||'',p.ownershipType||'managed',p.status||'active',p.mapsUrl||'',p.notes||''];});
+    filename='properties-export-'+new Date().toISOString().split('T')[0]+'.csv';
+  } else if(entity==='tenants') {
+    headers=['Full Name','Property Name','Room Number','Weekly Rent (£)','Frequency','Payment Day','WhatsApp','Email','Status','Move-In Date','Deposit','Payment Method'];
+    rows=state.tenants.map(function(t){return [t.name,t.property,t.room,t.rent,t.freq||'weekly',t.payDay||'',t.whatsapp||'',t.email||'',t.status,t.startDate||t.moveIn||'',t.deposit||0,t.method||'bank'];});
+    filename='tenants-export-'+new Date().toISOString().split('T')[0]+'.csv';
+  } else {
+    headers=['Name','Phone','Email','Bank','Sort Code','Account No','Notes'];
+    rows=(state.landlords||[]).map(function(l){return [l.name,l.phone||'',l.email||'',l.bank||'',l.sortCode||'',l.accountNo||'',l.notes||''];});
+    filename='landlords-export-'+new Date().toISOString().split('T')[0]+'.csv';
+  }
+  var csv=[headers.join(',')].concat(rows.map(function(r){return r.map(function(v){var s=String(v||'');return s.includes(',')||s.includes('"')?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');})).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('Exported '+rows.length+' '+entity,'success');
+}
+
+function _dmTemplate() {
+  var entity = _dmEntity;
+  var headers, sample, filename;
+  if(entity==='properties') {
+    headers=['Property Name','Address','Postcode','Area','Total Rooms','Landlord Rent (£)','Monthly Income (£)','Occupied Rooms','Landlord Name','Landlord Contact','Status','Maps URL','Notes','Operating Company'];
+    sample=['99 Example Street','99 Example Street London SW2 1AA','SW2 1AA','Brixton',5,2500,3200,4,'John Smith','447911000001','Managed','https://maps.google.com','Good condition','Reservations Direct Limited'];
+    filename='properties-import-template.csv';
+  } else if(entity==='tenants') {
+    headers=['Full Name','Property Name','Room Number','Weekly Rent (£)','Frequency','Payment Day','WhatsApp','Email','Status','Move-In Date','Deposit','Payment Method'];
+    sample=['Maria Santos','99 Example Street',1,200,'weekly','Monday','447911000002','maria@email.com','active','2026-01-01',400,'bank'];
+    filename='tenants-import-template.csv';
+  } else {
+    headers=['Name','Phone','Email','Bank','Sort Code','Account No','Notes'];
+    sample=['John Smith','447911000001','john@email.com','Barclays','20-00-00','12345678','Pays on 1st of month'];
+    filename='landlords-import-template.csv';
+  }
+  var csv=[headers.join(','),sample.map(function(v){var s=String(v||'');return s.includes(',')||s.includes('"')?'"'+s.replace(/"/g,'""')+'"':s;}).join(',')].join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('Template downloaded','success');
+}
+
 function exportData() {
   var snapshot = {};
   var SAVE_KEYS_LOCAL = ['tenants','properties','payments','rentSchedule','expenses',
@@ -7033,8 +8051,9 @@ function renderAgentResult(d,dateStr){
 function analyzeLocalDeal() {
   var d=(state.dealInputs&&state.dealInputs._scratch)||{};
   var isWhole=(d.lettingType||'hmo')==='whole';
-  if(!isWhole&&!d.rooms&&!d.wkrent) return null;
-  if(isWhole&&!d.monthRent) return null;
+  // Return null only if there is genuinely no data entered
+  if(!d.wkrent && !d._grossIncome) return null;
+  if(!isWhole && !d.rooms && !d.wkrent) return null;
   var isOwned=d.dealType==='owned';
   var grossIncome=d._grossIncome||0;
   var totalCosts=d._totalCosts||0;
@@ -7705,7 +8724,7 @@ function renderReportForecast(props, tenants, expenses) {
   var vacantPotential= Math.round(vacantRooms * avgRent * 52/12);
 
   var kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px">'
-    +'<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green);font-family:monospace">'+fmt(monthlyIncome)+'</div><div style="font-size:9px;font-weight:800;color:var(--green);text-transform:uppercase;margin-top:3px">Monthly Income</div></div>'
+    +'<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--green);font-family:monospace">'+fmt(monthlyIncome)+'</div><div style="font-size:9px;font-weight:800;color:var(--green);text-transform:uppercase;margin-top:3px" title="Monthly rent set per-property in the property editor. May differ from the Tenant Rent Roll, which is calculated from individual tenant amounts.">Monthly Income ℹ</div></div>'
     +'<div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:12px;padding:12px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--red);font-family:monospace">'+fmt(monthlyLL)+'</div><div style="font-size:9px;font-weight:800;color:var(--red);text-transform:uppercase;margin-top:3px">LL Costs / mo</div></div>'
     +(monthlyExpenses>0?'<div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:12px;padding:12px;text-align:center"><div style="font-size:16px;font-weight:800;color:var(--amber);font-family:monospace">'+fmt(monthlyExpenses)+'</div><div style="font-size:9px;font-weight:800;color:var(--amber);text-transform:uppercase;margin-top:3px">Expenses / mo</div></div>':'')
     +'<div style="background:'+(monthlyNet>=0?'var(--green-light)':'var(--red-light)')+';border:1px solid '+(monthlyNet>=0?'#A7F3D0':'#FECDD3')+';border-radius:12px;padding:12px;text-align:center"><div style="font-size:16px;font-weight:800;color:'+(monthlyNet>=0?'var(--green)':'var(--red)')+';font-family:monospace">'+fmt(monthlyNet)+'</div><div style="font-size:9px;font-weight:800;color:'+(monthlyNet>=0?'var(--green)':'var(--red)')+';text-transform:uppercase;margin-top:3px">Net / Month</div></div>'
@@ -7884,6 +8903,14 @@ async function loadState(){
     state.payments         = (results[3].data||[]).map(rowToPayment);
     state.expenses         = (results[4].data||[]).map(rowToExpense);
     state.maintenance      = (results[5].data||[]).map(rowToMaintenance);
+    if(!state.maintExtras) state.maintExtras={};
+    state.maintenance.forEach(function(m){
+      if(!state.maintExtras[m.id]) state.maintExtras[m.id]={photos:[]};
+      var mx=state.maintExtras[m.id];
+      if(m.jobCost&&!mx.cost) mx.cost=m.jobCost;
+      if(m.invoiceName&&!mx.invoiceName) mx.invoiceName=m.invoiceName;
+      if(m.invoiceUrl&&!mx.invoiceUrl) mx.invoiceUrl=m.invoiceUrl;
+    });
     state.landlordPayments = (results[6].data||[]).map(rowToLandlordPayment);
     state.contractors      = (results[7].data||[]).map(rowToContractor);
     // Compute t.paid from most recent payment for each tenant
@@ -8053,6 +9080,131 @@ async function doLogOut() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS PAGE  (company profiles, logo, site config, account)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════
+// EMAIL TRIGGER FRAMEWORK
+// ══════════════════════════════════════════════════════════════════════
+var EMAIL_TRIGGERS = {
+  rent_reminder_3day:{id:'rent_reminder_3day',label:'Rent Due — 3 Days Before',type:'tenant',active:false,template:'Hi {name},\n\nReminder: your rent of £{amount} is due on {date}.\n\nThank you,\n{company}'},
+  rent_reminder_day: {id:'rent_reminder_day', label:'Rent Due — Day Of',       type:'tenant',active:false,template:'Hi {name},\n\nYour rent of £{amount} is due today. Please arrange payment.\n\nThank you,\n{company}'},
+  rent_overdue_3day: {id:'rent_overdue_3day', label:'Rent Overdue — 3 Days',   type:'tenant',active:false,template:'Hi {name},\n\nYour rent of £{amount} due {date} is unpaid. Please contact us urgently.\n\n{company}'},
+  rent_overdue_week: {id:'rent_overdue_week', label:'Rent Overdue — 1 Week',   type:'tenant',active:false,template:'Hi {name},\n\nYour rent of £{amount} is 7 days overdue. Please contact us immediately.\n\n{company}'},
+  move_in_welcome:   {id:'move_in_welcome',   label:'Move-in Welcome Email',   type:'tenant',active:false,template:'Hi {name},\n\nWelcome to {property}! Your tenancy begins on {date}.\n\n{company}'},
+  notice_confirm:    {id:'notice_confirm',    label:'Notice Confirmation',     type:'tenant',active:false,template:'Hi {name},\n\nThis confirms your notice to vacate {property} on {date}.\n\n{company}'},
+  compliance_expiry: {id:'compliance_expiry', label:'Compliance Cert Expiry',  type:'manager',active:false,template:'Alert: {doc_type} for {property} expires {date} ({days} days).'},
+  weekly_report:     {id:'weekly_report',     label:'Weekly Portfolio Report',  type:'manager',active:false,schedule:'Monday 09:00'},
+  monthly_report:    {id:'monthly_report',    label:'Monthly P&L Summary',     type:'manager',active:false,schedule:'1st of month 09:00'},
+};
+
+function getEmailConfig(){try{return JSON.parse(localStorage.getItem('pm_email_config')||'{}');}catch(e){return {};}}
+function saveEmailConfig(cfg){localStorage.setItem('pm_email_config',JSON.stringify(cfg));}
+
+function renderEmailSettings(){
+  var cfg=getEmailConfig();
+  var html='<div>';
+  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Provider</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+  html+='<div class="field"><label class="field-label">Provider</label><select class="inp" id="ecfg-provider" onchange="saveEmailField(\'provider\',this.value)">';
+  ['Resend','SendGrid','Mailgun','SMTP'].forEach(function(p){html+='<option '+(cfg.provider===p?'selected':'')+'>'+p+'</option>';});
+  html+='</select></div>';
+  html+='<div class="field"><label class="field-label">From Address</label><input class="inp" id="ecfg-from" placeholder="noreply@domain.com" value="'+(cfg.from||'')+'" onchange="saveEmailField(\'from\',this.value)"></div>';
+  html+='</div>';
+  html+='<div class="field"><label class="field-label">API Key</label><input class="inp" id="ecfg-apikey" type="password" placeholder="Enter API key" value="'+(cfg.apiKey?'••••••••':'')+'" onchange="saveEmailField(\'apiKey\',this.value)"></div>';
+  html+='<div class="field" style="margin-top:8px"><label class="field-label">Manager Email (for reports & alerts)</label><input class="inp" id="ecfg-mgr" placeholder="manager@domain.com" value="'+(cfg.managerEmail||'')+'" onchange="saveEmailField(\'managerEmail\',this.value)"></div>';
+  html+='</div>';
+  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:12px">Triggers</div>';
+  Object.values(EMAIL_TRIGGERS).forEach(function(tr){
+    var on=!!(cfg.triggers&&cfg.triggers[tr.id]);
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)">';
+    html+='<div><div style="font-size:13px;font-weight:500">'+tr.label+'</div>'+(tr.schedule?'<div style="font-size:11px;color:var(--muted)">📅 '+tr.schedule+'</div>':'')+'</div>';
+    html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' data-trid="'+tr.id+'" onchange="toggleEmailTrigger(this.dataset.trid,this.checked)" style="width:16px;height:16px;accent-color:var(--accent)"><span style="font-size:12px;color:'+(on?'var(--green)':'var(--muted)')+'">'+( on?'On':'Off')+'</span></label></div>';
+  });
+  html+='</div>';
+  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Test & Send</div>';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  html+='<button onclick="sendTestEmail()" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✉ Send Test Email</button>';
+  html+='<button onclick="runRentReminderEmails(true)" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔍 Dry Run</button>';
+  html+='<button onclick="runRentReminderEmails(false)" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📨 Send Reminders</button>';
+  html+='<button onclick="sendScheduledReport(\'weekly\')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📊 Weekly Report</button>';
+  html+='<button onclick="sendScheduledReport(\'monthly\')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📅 Monthly P&L</button>';
+  html+='</div><div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:9px;margin-top:10px;font-size:11px;color:var(--muted)">⚠ Email sending requires a Supabase Edge Function. Deploy function \'send-email\' to activate.</div>';
+  html+='</div></div>';
+  return html;
+}
+
+function saveEmailField(key,value){var cfg=getEmailConfig();cfg[key]=value;saveEmailConfig(cfg);showToast('Saved','success');}
+function toggleEmailTrigger(id,enabled){var cfg=getEmailConfig();if(!cfg.triggers)cfg.triggers={};cfg.triggers[id]=enabled;saveEmailConfig(cfg);showToast((enabled?'Enabled: ':'Disabled: ')+(EMAIL_TRIGGERS[id]||{label:id}).label,enabled?'success':'info');}
+
+function previewEmailForTenant(triggerId,tenantId){
+  var t=state.tenants.find(function(x){return x.id===tenantId;});if(!t)return null;
+  var tr=EMAIL_TRIGGERS[triggerId];if(!tr)return null;
+  var company=(state.companies&&state.companies[0]&&state.companies[0].name)||'Reservations Direct Limited';
+  var body=tr.template.replace(/{name}/g,t.name).replace(/{property}/g,t.property||'').replace(/{amount}/g,'£'+(t.rent||0)).replace(/{company}/g,company).replace(/{date}/g,new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}));
+  return {to:t.email,subject:tr.label,body:body};
+}
+
+async function sendEmail(to,subject,body){
+  var cfg=getEmailConfig();
+  if(!cfg.apiKey||!cfg.from){showToast('Email not configured — add API key in Settings','error');return false;}
+  var supaUrl='https://kzumoubhxdoqqcucdact.supabase.co';
+  try{
+    var resp=await fetch(supaUrl+'/functions/v1/send-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.apiKey},body:JSON.stringify({provider:cfg.provider||'Resend',from:cfg.from,to:to,subject:subject,text:body})});
+    if(resp.ok){showToast('Email sent to '+to,'success');return true;}
+    else{var err=await resp.text();showToast('Email failed: '+err.slice(0,80),'error');return false;}
+  }catch(e){showToast('Email error: '+e.message,'error');return false;}
+}
+
+async function sendTestEmail(){
+  var cfg=getEmailConfig();var to=cfg.managerEmail||cfg.from;
+  if(!to){showToast('Set a manager email first','error');return;}
+  var props=state.properties.filter(function(p){return p.status!=='archived';});
+  var body='Test from PropManager\n\n'+props.length+' properties · '+state.tenants.filter(function(t){return t.status==='active';}).length+' tenants\nSent: '+new Date().toLocaleString('en-GB');
+  await sendEmail(to,'Test Email — PropManager',body);
+}
+
+async function runRentReminderEmails(dryRun){
+  var cfg=getEmailConfig();if(!cfg.triggers){showToast('No triggers configured','error');return;}
+  var today=new Date();today.setHours(0,0,0,0);
+  var sent=0,skipped=0,log=[];
+  state.tenants.filter(function(t){return t.status==='active'&&t.email;}).forEach(function(t){
+    (state.rentSchedule||[]).filter(function(s){return s.tenantId===t.id&&s.status==='pending';}).forEach(function(s){
+      var dueDate=new Date(s.dueDateRaw);dueDate.setHours(0,0,0,0);
+      var d=Math.round((dueDate-today)/86400000);
+      var tid=null;
+      if(d===3&&cfg.triggers.rent_reminder_3day) tid='rent_reminder_3day';
+      if(d===0&&cfg.triggers.rent_reminder_day)  tid='rent_reminder_day';
+      if(d===-3&&cfg.triggers.rent_overdue_3day) tid='rent_overdue_3day';
+      if(d===-7&&cfg.triggers.rent_overdue_week) tid='rent_overdue_week';
+      if(!tid)return;
+      var preview=previewEmailForTenant(tid,t.id);
+      if(!preview||!preview.to){skipped++;return;}
+      log.push({name:t.name,to:preview.to,subject:preview.subject});
+      if(!dryRun) sendEmail(preview.to,preview.subject,preview.body);
+      sent++;
+    });
+  });
+  showToast((dryRun?'Dry run: ':'Sent: ')+sent+' emails'+(skipped?' ('+skipped+' skipped)':''),'success');
+}
+
+async function sendScheduledReport(type){
+  var cfg=getEmailConfig();var to=cfg.managerEmail;
+  if(!to){showToast('Set manager email in Settings','error');return;}
+  var props=state.properties.filter(function(p){return p.status!=='archived';});
+  var rooms=props.reduce(function(s,p){return s+p.rooms;},0);
+  var occ=props.reduce(function(s,p){return s+p.occupied;},0);
+  var income=props.reduce(function(s,p){return s+p.rent;},0);
+  var costs=props.reduce(function(s,p){return s+p.landlord;},0);
+  var now=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  var subject=type==='weekly'?'Weekly Report — '+now:'Monthly P&L — '+now;
+  var body=type==='weekly'
+    ?'Weekly Portfolio Report\n'+now+'\n\n'+props.length+' properties · '+Math.round(occ/rooms*100)+'% occupancy\nIncome: £'+income.toLocaleString()+'/mo · Costs: £'+costs.toLocaleString()+'/mo · Net: £'+(income-costs).toLocaleString()+'/mo\nOpen maintenance: '+state.maintenance.filter(function(m){return m.status!=='resolved';}).length
+    :'Monthly P&L\n'+now+'\n\nGross Income: £'+income.toLocaleString()+'\nLandlord Costs: £'+costs.toLocaleString()+'\nNet Profit: £'+(income-costs).toLocaleString()+'\nMargin: '+Math.round((income-costs)/income*100)+'%\nOccupancy: '+Math.round(occ/rooms*100)+'%';
+  await sendEmail(to,subject,body);
+}
+
 function renderSettings() {
   var companies = state.companies || [];
   var cfg = state.config || {};
@@ -8094,6 +9246,17 @@ function renderSettings() {
       +'<div style="height:100%;width:'+pct+'%;background:'+usageColor(pct)+';border-radius:3px;transition:width .4s"></div></div>';
   }
 
+  // Plan limit check
+  var _planLimits={'free':3,'trial':5,'starter':15,'professional':25,'business':60,'enterprise':9999};
+  var _curPlan=(org.plan||cfg.plan||'trial').toLowerCase();
+  var _planLimit=_planLimits[_curPlan]||5;
+  var _propCount=(state.properties||[]).filter(function(p){return p.status!=='archived';}).length;
+  var _limitWarn=_propCount>_planLimit
+    ?'<div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:0;display:flex;align-items:center;gap:12px">'
+     +'<span style="font-size:22px">⚠️</span>'
+     +'<div><div style="font-size:13px;font-weight:700;color:#92400E">Plan Limit Exceeded</div>'
+     +'<div style="font-size:12px;color:#78350F">You have <strong>'+_propCount+'</strong> properties but your <strong>'+_curPlan.charAt(0).toUpperCase()+_curPlan.slice(1)+'</strong> plan allows up to <strong>'+_planLimit+'</strong>. Consider upgrading or archiving unused properties.</div></div></div>'
+    :'';
   var html = '<div class="page-header">'
     + '<div><div class="page-title">&#x2699;&#xFE0F; Settings</div>'
     + '<div class="page-sub">Subscription, branding &amp; company profiles</div></div>'
@@ -8290,7 +9453,12 @@ function renderSettings() {
     html += '</div></div>';
   }
 
-  return html;
+    if(_limitWarn) html += '<div class="card" style="padding:0;background:transparent;box-shadow:none;border:none">'+_limitWarn+'</div>';
+  html += '<div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px">';
+  html += '<div><div style="font-size:14px;font-weight:700">⇅ Import & Export</div><div style="font-size:12px;color:var(--muted);margin-top:3px">Upload CSV/XLSX or export all data</div></div>';
+  html += '<button onclick="openDataModal(\'properties\')" style="padding:9px 16px;border-radius:9px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Open Data Manager</button></div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:16px">📧 Email & Notifications</div>'+renderEmailSettings()+'</div>';
+return html;
 }
 
 function uploadLogo(input) {
@@ -8604,6 +9772,93 @@ function previewDoc(docId) {
 // CONTRACTORS
 // ─────────────────────────────────────────────────────────────────────────────
 const CONTRACTOR_TRADES = ['General','Plumbing','Electrical','Heating','Structural','Cleaning','Pest Control','Locks / Security','Garden','White Goods','Broadband / WiFi','Other'];
+
+
+function openContractorProfile(id) {
+  var c=(state.contractors||[]).find(function(x){return x.id===id;});if(!c)return;
+  var jobs=state.maintenance.filter(function(m){return m.contractor===c.name;});
+  jobs.sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
+  var totalPaid=0,openJobs=0,resolvedJobs=0,invoices=[];
+  jobs.forEach(function(m){
+    var mx=(state.maintExtras&&state.maintExtras[m.id])||{};
+    if(mx.cost)totalPaid+=mx.cost;
+    if(m.status==='resolved')resolvedJobs++;else openJobs++;
+    if(mx.invoiceName)invoices.push({job:m.issue,name:mx.invoiceName,url:mx.invoiceUrl||'#',cost:mx.cost||0,date:m.date,property:m.property});
+  });
+  var stars=c.rating?'★'.repeat(c.rating)+'☆'.repeat(5-c.rating):'—';
+  var tc={'Plumbing':'var(--blue)','Electrical':'var(--amber)','Heating':'#EF4444','Cleaning':'var(--green)'}[c.trade]||'var(--muted)';
+  function sc(s){return s==='resolved'?'var(--green)':s==='in_progress'?'var(--amber)':'var(--red)';}
+  function sl(s){return s==='in_progress'?'In Progress':s==='resolved'?'Resolved':'Open';}
+  var html='<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
+    +'<div class="modal" style="max-width:640px">'
+    +'<div class="modal-header" style="background:linear-gradient(135deg,#0F0F1A,#1a1a3e)">'
+    +'<div style="display:flex;align-items:center;gap:14px;width:100%">'
+    +'<div style="width:48px;height:48px;border-radius:50%;background:'+tc+';display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👷</div>'
+    +'<div style="flex:1"><div style="font-size:16px;font-weight:800;color:#fff">'+c.name+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:3px">'
+    +'<span style="font-size:11px;font-weight:700;color:'+tc+';background:rgba(255,255,255,.1);padding:2px 9px;border-radius:10px">'+c.trade+'</span>'
+    +(c.rating?'<span style="font-size:12px;color:#F59E0B">'+stars+'</span>':'')
+    +'</div></div>'
+    +'<button class="modal-close" onclick="closeModal()" style="color:#fff">&times;</button></div></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">'
+    +[['Total Spent',totalPaid?'£'+totalPaid.toLocaleString():'£0','var(--red)'],
+      ['Total Jobs',jobs.length,'var(--text)'],
+      ['Open',openJobs,openJobs?'var(--amber)':'var(--green)'],
+      ['Invoices',invoices.length,'var(--blue)']
+    ].map(function(k){return '<div style="padding:14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:18px;font-weight:800;font-family:monospace;color:'+k[2]+'">'+k[1]+'</div><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px">'+k[0]+'</div></div>';}).join('')
+    +'</div>'
+    +'<div style="overflow-y:auto;max-height:60vh">'
+    +'<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Contact</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+    +(c.phone?'<a href="tel:'+c.phone+'" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--text);text-decoration:none">📞 '+c.phone+'</a>':'')
+    +(c.whatsapp?'<a href="https://wa.me/'+c.whatsapp.replace(/\D/g,'')+'" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BBF7D0;background:#F0FDF4;font-size:12px;font-weight:600;color:#16A34A;text-decoration:none">💬 WhatsApp</a>':'')
+    +(c.email?'<a href="mailto:'+c.email+'" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BFDBFE;background:var(--blue-light);font-size:12px;font-weight:600;color:var(--blue);text-decoration:none">✉ '+c.email+'</a>':'')
+    +(c.callOutCharge?'<span style="padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--muted)">💷 £'+c.callOutCharge+' call-out</span>':'')
+    +'</div>'+(c.notes?'<div style="margin-top:10px;font-size:12px;color:var(--muted);background:var(--bg);padding:8px 12px;border-radius:8px">'+c.notes+'</div>':'')
+    +'</div>';
+  if(invoices.length){
+    html+='<div style="padding:16px 20px;border-bottom:1px solid var(--border)">';
+    html+='<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Invoices & Receipts</div>';
+    invoices.forEach(function(inv){
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--blue-light);border:1px solid #BFDBFE;border-radius:9px;margin-bottom:6px">'
+        +'<div style="font-size:20px">📄</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+inv.name+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+inv.job+' · '+inv.property+'</div></div>'
+        +(inv.cost?'<span style="font-size:13px;font-weight:800;color:var(--red);font-family:monospace;flex-shrink:0">£'+inv.cost+'</span>':'')
+        +'<a href="'+inv.url+'" download="'+inv.name+'" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--blue);background:#fff;font-size:11px;font-weight:700;color:var(--blue);text-decoration:none;flex-shrink:0">Download</a></div>';
+    });
+    html+='</div>';
+  }
+  html+='<div style="padding:16px 20px">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Job History ('+jobs.length+')</div>';
+  if(!jobs.length){html+='<div style="text-align:center;padding:24px;color:var(--dim);font-size:13px">No jobs assigned yet</div>';}
+  else{jobs.forEach(function(m){
+    var mx=(state.maintExtras&&state.maintExtras[m.id])||{};
+    html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">'
+      +'<div style="width:10px;height:10px;border-radius:50%;background:'+sc(m.status)+';flex-shrink:0;margin-top:4px"></div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<div style="font-size:13px;font-weight:700">'+m.issue+'</div>'
+      +(mx.cost?'<div style="font-size:13px;font-weight:800;color:var(--red);font-family:monospace;flex-shrink:0">£'+mx.cost+'</div>':'')
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+m.property+(m.room?' · Room '+m.room:'')+'</div>'
+      +'<div style="display:flex;gap:7px;margin-top:5px;flex-wrap:wrap">'
+      +'<span style="font-size:10px;font-weight:700;color:'+sc(m.status)+';padding:2px 8px;border-radius:10px;border:1px solid '+sc(m.status)+'">'+sl(m.status)+'</span>'
+      +(m.cat?'<span style="font-size:10px;color:var(--dim)">'+m.cat+'</span>':'')
+      +(m.date?'<span style="font-size:10px;color:var(--dim)">'+m.date+'</span>':'')
+      +'</div>'
+      +(m.notes?'<div style="font-size:11px;color:var(--muted);margin-top:4px;padding:5px 8px;background:var(--bg);border-radius:6px">'+m.notes+'</div>':'')
+      +(mx.invoiceName?'<div style="margin-top:5px"><a href="'+(mx.invoiceUrl||'#')+'" download="'+mx.invoiceName+'" style="font-size:11px;font-weight:600;color:var(--blue)">📄 '+mx.invoiceName+'</a></div>':'')
+      +'</div></div>';
+  });}
+  html+='</div></div>';
+  html+='<div class="modal-footer" style="justify-content:space-between">'
+    +'<button onclick="openEditContractorModal(\''+id+'\');closeModal()" style="padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted)">✏️ Edit Profile</button>'
+    +'<button onclick="closeModal()" style="padding:9px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Close</button>'
+    +'</div></div></div>';
+  document.getElementById('modal-container').innerHTML=html;
+}
 
 function openAddContractorModal() {
   var tradeOpts = CONTRACTOR_TRADES.map(function(t){ return '<option>'+t+'</option>'; }).join('');
