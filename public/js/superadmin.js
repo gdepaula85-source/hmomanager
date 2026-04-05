@@ -1,10 +1,46 @@
 const SUPA_URL = window.ENV.SUPA_URL;
 const SUPA_KEY = window.ENV.SUPA_KEY;
 
-// ── IMPORTANT: Add your email here to restrict access ─────────
-const SUPERADMIN_EMAILS = ['g.depaula85@gmail.com','gleydson@reservationsdirect.co.uk'];
+// Optional hardcoded allowlist (bootstrap / emergencies). Primary allowlist: superadmin_organisations view (email or user_id).
+const SUPERADMIN_EMAILS = ['g.depaula85@gmail.com','gleydson@reservationsdirect.co.uk','test2@gmail.com'];
 
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+/** True if user is in SUPERADMIN_EMAILS (case-insensitive) or has a row in the superadmin_organisations view (email or user_id). */
+async function userHasSuperadminAccess(user) {
+  if (!user || !user.email) return false;
+  var em = user.email.toLowerCase();
+  if (SUPERADMIN_EMAILS.some(function (x) { return x.toLowerCase() === em; })) return true;
+
+  var { data: byEmail, error: errEmail } = await supa
+    .from('superadmin_organisations')
+    .select('id')
+    .eq('email', user.email)
+    .maybeSingle();
+  if (byEmail) return true;
+  if (errEmail && errEmail.code && errEmail.code !== 'PGRST116') {
+    console.warn('superadmin_organisations (email eq):', errEmail.message);
+  }
+
+  var { data: byEmailI } = await supa
+    .from('superadmin_organisations')
+    .select('id')
+    .ilike('email', user.email)
+    .maybeSingle();
+  if (byEmailI) return true;
+
+  var { data: byUid, error: errUid } = await supa
+    .from('superadmin_organisations')
+    .select('id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (byUid) return true;
+  if (errUid && errUid.code && errUid.code !== 'PGRST116') {
+    console.warn('superadmin_organisations (user_id):', errUid.message);
+  }
+
+  return false;
+}
 
 // ── State ─────────────────────────────────────────────────────
 var orgs = [];
@@ -17,7 +53,7 @@ var lastLoaded = null;
   try {
     const { data:{ session } } = await supa.auth.getSession();
     if(!session) { showLogin(); return; }
-    if(!SUPERADMIN_EMAILS.includes(session.user.email)) {
+    if(!(await userHasSuperadminAccess(session.user))) {
       showLogin('❌ This account does not have superadmin access.');
       await supa.auth.signOut();
       return;
@@ -56,7 +92,7 @@ async function doLogin() {
   if(!email||!pass){ errEl.textContent='Please enter email and password.';errEl.style.display='block';return; }
   var { data, error } = await supa.auth.signInWithPassword({ email, password:pass });
   if(error){ errEl.textContent='❌ '+error.message;errEl.style.display='block';return; }
-  if(!SUPERADMIN_EMAILS.includes(data.user.email)){
+  if(!(await userHasSuperadminAccess(data.user))){
     errEl.textContent='❌ This account does not have superadmin access.';errEl.style.display='block';
     await supa.auth.signOut(); return;
   }

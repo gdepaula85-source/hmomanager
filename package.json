@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
+    "build": "npm run build:dashboard",
     "build:dashboard": "node scripts/build-dashboard.js",
     "prestart": "npm run build:dashboard",
     "start": "node server.js",
@@ -17,10 +18,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.3.2"
+    "express-rate-limit": "^8.3.2",
+    "esbuild": "^0.25.12"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12",
     "supertest": "^7.2.2"
   }
 }
