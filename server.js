@@ -4,6 +4,7 @@ if (require.main === module) {
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const Stripe = require('stripe');
@@ -523,6 +524,69 @@ function firstNameFromEmail(email) {
   return cleaned ? cleaned.split(/\s+/)[0] : 'there';
 }
 
+let cachedPublicEmailTemplates = null;
+
+function readPublicEmailTemplatesFile() {
+  const filePath = path.join(__dirname, 'public', 'landlordapp_emails.html');
+  return fs.readFileSync(filePath, 'utf8');
+}
+
+function extractFirstStyleTag(html) {
+  const m = String(html || '').match(/<style>([\s\S]*?)<\/style>/i);
+  return m ? m[1] : '';
+}
+
+function extractEmailWrapByH1(publicHtml, h1Text) {
+  const html = String(publicHtml || '');
+  const needle = `<h1>${h1Text}</h1>`;
+  const h1Idx = html.indexOf(needle);
+  if (h1Idx < 0) return null;
+
+  const wrapStart = html.indexOf('<div class="email-wrap">', h1Idx);
+  if (wrapStart < 0) return null;
+
+  const nextMarker = html.indexOf('<!-- ═', wrapStart + 1);
+  const end = nextMarker >= 0 ? nextMarker : html.indexOf('</body>', wrapStart + 1);
+  if (end < 0) return null;
+
+  const chunk = html.slice(wrapStart, end).trim();
+  return chunk || null;
+}
+
+function loadPublicEmailTemplatesOnce() {
+  if (cachedPublicEmailTemplates) return cachedPublicEmailTemplates;
+  try {
+    const publicHtml = readPublicEmailTemplatesFile();
+    const styleCss = extractFirstStyleTag(publicHtml);
+    cachedPublicEmailTemplates = { publicHtml, styleCss };
+    return cachedPublicEmailTemplates;
+  } catch (e) {
+    console.warn('Could not read public/landlordapp_emails.html; using fallback email HTML. Error:', e && e.message ? e.message : e);
+    cachedPublicEmailTemplates = { publicHtml: '', styleCss: '' };
+    return cachedPublicEmailTemplates;
+  }
+}
+
+function buildEmailHtmlFromPublicTemplate(h1Text, subjectForTitle) {
+  const { publicHtml, styleCss } = loadPublicEmailTemplatesOnce();
+  const wrap = extractEmailWrapByH1(publicHtml, h1Text);
+  if (!wrap) return null;
+  const safeTitle = String(subjectForTitle || '').replace(/</g, '').replace(/>/g, '').slice(0, 200) || 'LandlordApp.io';
+  const baseStyles =
+    styleCss ||
+    // minimal fallback so emails render acceptably even if the public file is unreadable
+    '.em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}.em-body{background:#fff;padding:36px}';
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' +
+    safeTitle +
+    '</title><style>' +
+    baseStyles +
+    '</style></head><body style="margin:0;background:#F8F9FB">' +
+    wrap +
+    '</body></html>'
+  );
+}
+
 function authLifecycleTemplatePayload(templateId) {
   const id = String(templateId || '').toLowerCase();
 
@@ -530,70 +594,71 @@ function authLifecycleTemplatePayload(templateId) {
     return {
       subject: 'Welcome to LandlordApp.io',
       text: 'Hi {{first_name}},\n\nWelcome to LandlordApp.io.\nYour selected plan: {{plan_name}}\nTrial end date: {{trial_end_date}}\n\nYou can now sign in and finish setting up your workspace.',
-      html: '<!doctype html><html><body style="margin:0;background:#f8f9fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a"><div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);color:#fff"><div style="font-size:20px;font-weight:800">LandlordApp.io</div></div><div style="padding:28px"><h1 style="margin:0 0 10px;font-size:22px;line-height:1.3">Welcome, {{first_name}}.</h1><p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#475569">Thanks for creating your account. Your workspace is ready to finish setup.</p><div style="background:#f8f9fb;border:1px solid #e8ecf0;border-radius:10px;padding:14px 16px;margin:0 0 16px"><div style="font-size:13px;color:#64748b;margin:0 0 6px">Plan</div><div style="font-size:15px;font-weight:700;color:#0f172a">{{plan_name}}</div><div style="font-size:13px;color:#64748b;margin:10px 0 6px">Trial end date</div><div style="font-size:15px;font-weight:700;color:#0f172a">{{trial_end_date}}</div></div><p style="margin:0;font-size:13px;line-height:1.6;color:#64748b">Need help? Reply to this email or contact {{support_email}}.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Welcome / Sign Up', 'Welcome to LandlordApp.io') || '',
     };
   }
   if (id === 'email_verification') {
     return {
       subject: 'Verify your LandlordApp email',
       text: 'Hi {{first_name}},\n\nPlease verify your email to activate your account:\n{{verify_url}}\n\nIf you did not sign up, ignore this email.',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Verify your email, {{first_name}}</h2><p style="color:#475569;line-height:1.7">Please confirm your address before first login.</p><a href="{{verify_url}}" style="display:inline-block;background:#00B894;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700">Verify email</a></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Email Verification', 'Verify your LandlordApp email') || '',
     };
   }
   if (id === 'password_reset') {
     return {
       subject: 'Reset your LandlordApp password',
       text: 'Hi {{first_name}},\n\nReset your password using this secure link:\n{{reset_url}}\n\nIf you did not request this, you can ignore this email.',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Password reset request</h2><p style="color:#475569;line-height:1.7">Use the secure link below to set a new password.</p><a href="{{reset_url}}" style="display:inline-block;background:#00B894;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700">Reset password</a></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Password Reset', 'Reset your LandlordApp password') || '',
     };
   }
   if (id === 'trial_ending_7') {
     return {
       subject: 'Your trial ends in 7 days',
       text: 'Hi {{first_name}},\n\nYour trial ends on {{trial_end_date}}.\nUpgrade now to avoid interruptions.\nPlan: {{plan_name}} ({{plan_price}})',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Your trial ends in 7 days</h2><p style="color:#475569;line-height:1.7">Your free access ends on <strong>{{trial_end_date}}</strong>. Add billing to continue without interruption.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Trial Ending — 7 Days Left', 'Your trial ends in 7 days') || '',
     };
   }
   if (id === 'trial_ending_1') {
     return {
       subject: 'Your trial ends tomorrow',
       text: 'Hi {{first_name}},\n\nYour trial ends on {{trial_end_date}} (tomorrow). Add billing now to keep access uninterrupted.',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Your trial ends tomorrow</h2><p style="color:#475569;line-height:1.7">Your trial expires on <strong>{{trial_end_date}}</strong>. Complete subscription setup to avoid account interruption.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Trial Ending — 1 Day Left', 'Your trial ends tomorrow') || '',
     };
   }
   if (id === 'trial_expired') {
     return {
       subject: 'Your trial has ended',
       text: 'Hi {{first_name}},\n\nYour trial ended on {{trial_end_date}}.\nYour data is retained until {{data_expiry_date}}. Upgrade anytime to restore full access.',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Your trial has ended</h2><p style="color:#475569;line-height:1.7">Your trial ended on <strong>{{trial_end_date}}</strong>. Your data remains available until <strong>{{data_expiry_date}}</strong>.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Trial Expired', 'Your trial has ended') || '',
     };
   }
   if (id === 'subscription_confirmed') {
     return {
       subject: 'Subscription confirmed',
       text: 'Hi {{first_name}},\n\nYour subscription is active.\nPlan: {{plan_name}} ({{plan_price}})\nNext billing date: {{next_billing_date}}',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Subscription confirmed</h2><p style="color:#475569;line-height:1.7">Your plan <strong>{{plan_name}}</strong> is active. Next billing date: <strong>{{next_billing_date}}</strong>.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Subscription Confirmed', 'Subscription confirmed') || '',
     };
   }
   if (id === 'payment_failed') {
     return {
       subject: 'Payment failed — update your card',
       text: 'Hi {{first_name}},\n\nWe could not process your latest payment for {{plan_name}}.\nPlease update your billing method to avoid interruption.',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Payment failed</h2><p style="color:#475569;line-height:1.7">We could not process payment for your <strong>{{plan_name}}</strong> subscription. Update your card to keep service active.</p></div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Payment Failed', 'Payment failed — update your card') || '',
     };
   }
   if (id === 'payment_successful') {
     return {
       subject: 'Payment successful',
       text: 'Hi {{first_name}},\n\nYour payment was received successfully.\nPlan: {{plan_name}} ({{plan_price}})\nAmount paid: {{payment_amount}}\nPayment date: {{payment_date}}',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Payment successful</h2><p style="color:#475569;line-height:1.7">We have received your payment for <strong>{{plan_name}}</strong>.</p><p style="color:#475569;line-height:1.7;margin:10px 0 0">Amount paid: <strong>{{payment_amount}}</strong><br>Payment date: <strong>{{payment_date}}</strong></p></div></div></body></html>',
+      // Template in public file is shared with subscription confirmation.
+      html: buildEmailHtmlFromPublicTemplate('Subscription Confirmed', 'Payment successful') || '',
     };
   }
   if (id === 'monthly_portfolio_report') {
     return {
       subject: 'Monthly portfolio report',
       text: 'Hi {{first_name}},\n\nProperties: {{properties}}\nTenants: {{tenants}}\nOccupancy: {{occupancy}}\nGross income: {{gross_income}}\nLandlord costs: {{landlord_costs}}\nNet profit: {{net_profit}}\n{{#if_arrears}}Arrears: {{arrears_total}}\n{{/if_arrears}}{{#if_compliance}}Expiring certificates: {{compliance_items}}\n{{/if_compliance}}',
-      html: '<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f8f9fb;margin:0"><div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e8ecf0"><div style="padding:24px 28px;background:#0F172A;color:#fff;font-size:20px;font-weight:800">LandlordApp.io</div><div style="padding:28px"><h2 style="margin:0 0 10px">Monthly portfolio report</h2><p style="color:#475569;line-height:1.7;margin:0 0 10px">Properties: <strong>{{properties}}</strong><br>Tenants: <strong>{{tenants}}</strong><br>Occupancy: <strong>{{occupancy}}</strong><br>Gross income: <strong>{{gross_income}}</strong><br>Landlord costs: <strong>{{landlord_costs}}</strong><br>Net profit: <strong>{{net_profit}}</strong></p>{{#if_arrears}}<p style="color:#9a3412;line-height:1.7">Arrears detected: <strong>{{arrears_total}}</strong></p>{{/if_arrears}}{{#if_compliance}}<p style="color:#9a3412;line-height:1.7">Compliance certificates expiring soon: <strong>{{compliance_items}}</strong></p>{{/if_compliance}}</div></div></body></html>',
+      html: buildEmailHtmlFromPublicTemplate('Monthly Portfolio Report', 'Monthly portfolio report') || '',
     };
   }
   return null;
@@ -946,6 +1011,9 @@ app.post('/api/stripe/create-portal-session', async (req, res) => {
 
 // Configuration injection for the frontend (no secrets)
 app.get('/config.js', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.type('.js');
   res.send(`
     window.ENV = {
@@ -956,10 +1024,23 @@ app.get('/config.js', (req, res) => {
   `);
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    const name = path.basename(filePath);
+    // Prevent stale frontend shell/bundle after deploys (fixes hard-refresh-only updates).
+    if (name === 'index.html' || name === 'dashboard.bundle.js') {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  },
+}));
 
 // Fallback to index.html for any frontend routes that are not API routes
 app.get(/^(.*)$/, (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
