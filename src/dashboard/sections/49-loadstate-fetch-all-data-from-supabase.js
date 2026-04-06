@@ -16,7 +16,7 @@ async function loadState(){
       supa.from('maintenance').select('*').eq('org_id', _currentOrgId),
       supa.from('landlord_payments').select('*').eq('org_id', _currentOrgId),
       supa.from('contractors').select('*').eq('org_id', _currentOrgId),
-      supa.from('organisations').select('billing_email,owner_email,name,plan,status,trial_ends_at').eq('id', _currentOrgId).maybeSingle()
+      supa.from('organisations').select('billing_email,owner_email,name,plan,status,trial_ends_at,stripe_customer_id,stripe_subscription_id').eq('id', _currentOrgId).maybeSingle()
     ]);
     var errors = results.filter(function(r){ return r.error; });
     if(errors.length){ console.warn('Supabase load errors:', errors); }
@@ -478,10 +478,16 @@ async function sendScheduledReport(type){
 }
 
 async function startStripeCheckout(plan){
-  if(!_currentOrgId){ showToast && showToast('No organisation loaded', 'error'); return; }
+  var opts = arguments.length > 1 && arguments[1] ? arguments[1] : {};
+  if(!_currentOrgId){ showToast && showToast('No organisation loaded', 'error'); return false; }
   var sr = await supa.auth.getSession();
   var session = sr && sr.data ? sr.data.session : null;
-  if(!session){ showToast && showToast('Sign in required', 'error'); return; }
+  if(!session){ showToast && showToast('Sign in required', 'error'); return false; }
+  var normalizedPlan = String(plan || 'starter').toLowerCase();
+  if(normalizedPlan !== 'starter' && normalizedPlan !== 'professional' && normalizedPlan !== 'business' && normalizedPlan !== 'free'){
+    showToast && showToast('Unsupported plan selected', 'error');
+    return false;
+  }
   try{
     var resp = await fetch('/api/stripe/create-checkout-session', {
       method:'POST',
@@ -489,16 +495,26 @@ async function startStripeCheckout(plan){
         'Content-Type':'application/json',
         Authorization:'Bearer '+session.access_token
       },
-      body: JSON.stringify({ orgId:_currentOrgId, plan:String(plan||'starter').toLowerCase() })
+      body: JSON.stringify({ orgId:_currentOrgId, plan:normalizedPlan })
     });
     var data = await resp.json().catch(function(){ return {}; });
     if(!resp.ok || !data.url){
       showToast && showToast('Checkout failed: '+((data&&data.error)||'Unknown error'), 'error');
-      return;
+      return false;
+    }
+    if (opts && opts.clearStartCheckoutParam) {
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        params.delete('startCheckout');
+        var next = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
+        window.history.replaceState({}, '', next);
+      } catch(_urlErr) {}
     }
     window.location.href = data.url;
+    return true;
   }catch(e){
     showToast && showToast('Checkout error: '+e.message, 'error');
+    return false;
   }
 }
 
@@ -527,16 +543,32 @@ async function openStripeBillingPortal(){
   }
 }
 
+var _autoCheckoutStarted = false;
 function maybeStartCheckoutFromQuery(){
   try{
     var params = new URLSearchParams(window.location.search || '');
+    var stripeResult = String(params.get('stripe') || '').toLowerCase();
+    if (stripeResult === 'success') {
+      showToast && showToast('Payment confirmed. Finalising your subscription…', 'success');
+      params.delete('stripe');
+      var successNext = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
+      window.history.replaceState({}, '', successNext);
+    } else if (stripeResult === 'cancelled') {
+      showToast && showToast('Checkout cancelled. Complete payment to continue.', 'warn');
+      params.delete('stripe');
+      var cancelNext = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
+      window.history.replaceState({}, '', cancelNext);
+    }
+
     var plan = String(params.get('startCheckout') || '').toLowerCase();
     if(plan !== 'starter' && plan !== 'professional' && plan !== 'business') return;
-    // Prevent retrigger on refresh/back.
-    params.delete('startCheckout');
-    var next = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
-    window.history.replaceState({}, '', next);
-    setTimeout(function(){ startStripeCheckout(plan); }, 300);
+    if (_autoCheckoutStarted) return;
+    _autoCheckoutStarted = true;
+    setTimeout(function(){
+      startStripeCheckout(plan, { clearStartCheckoutParam: true }).then(function(ok){
+        if (!ok) _autoCheckoutStarted = false;
+      });
+    }, 300);
   }catch(_e){}
 }
 

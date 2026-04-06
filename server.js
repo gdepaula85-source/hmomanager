@@ -49,7 +49,8 @@ function stripeConfigured() {
 }
 
 function mapStripeStatusToOrgStatus(subStatus) {
-  if (subStatus === 'active' || subStatus === 'trialing') return 'active';
+  if (subStatus === 'trialing') return 'trial';
+  if (subStatus === 'active') return 'active';
   if (subStatus === 'canceled' || subStatus === 'incomplete_expired') return 'cancelled';
   if (subStatus === 'past_due' || subStatus === 'unpaid' || subStatus === 'incomplete') return 'paused';
   return 'paused';
@@ -64,21 +65,29 @@ function calculateMrrFromSubscription(subscription) {
 function planFromSubscription(subscription) {
   const firstItem = subscription?.items?.data?.[0];
   const priceId = firstItem?.price?.id || '';
-  return stripePlanByPrice[priceId] || 'starter';
+  return stripePlanByPrice[priceId] || null;
 }
 
 async function upsertOrgStripeStateFromSubscription(orgId, subscription) {
   if (!supabaseAdmin || !orgId || !subscription) return;
+  const resolvedPlan = planFromSubscription(subscription);
+  if (!resolvedPlan) {
+    const unresolvedPrice = subscription?.items?.data?.[0]?.price?.id || 'unknown';
+    console.warn('Stripe webhook plan mapping missing for price ID:', unresolvedPrice, 'org:', orgId);
+  }
+  const trialEndTs = Number(subscription?.trial_end || 0);
+  const trialEndIso = trialEndTs > 0 ? new Date(trialEndTs * 1000).toISOString() : null;
+  const updatePayload = {
+    status: mapStripeStatusToOrgStatus(subscription.status),
+    stripe_subscription_id: subscription.id || null,
+    stripe_customer_id: subscription.customer || null,
+    mrr: calculateMrrFromSubscription(subscription),
+    trial_ends_at: trialEndIso,
+  };
+  if (resolvedPlan) updatePayload.plan = resolvedPlan;
   await supabaseAdmin
     .from('organisations')
-    .update({
-      plan: planFromSubscription(subscription),
-      status: mapStripeStatusToOrgStatus(subscription.status),
-      stripe_subscription_id: subscription.id || null,
-      stripe_customer_id: subscription.customer || null,
-      mrr: calculateMrrFromSubscription(subscription),
-      trial_ends_at: null,
-    })
+    .update(updatePayload)
     .eq('id', orgId);
 }
 

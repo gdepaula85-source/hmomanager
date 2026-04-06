@@ -275,6 +275,38 @@
     if (r === "owner") r = "admin";
     return state.roles && state.roles[r] ? r : "viewer";
   }
+  function isPaidPlanForCheckout(plan) {
+    var p = String(plan || "").toLowerCase();
+    return p === "starter" || p === "professional" || p === "business";
+  }
+  function getStripeResultFromUrl() {
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      return String(params.get("stripe") || "").toLowerCase();
+    } catch (_e) {
+      return "";
+    }
+  }
+  async function refreshOrgBillingState(orgId, attempts, waitMs) {
+    var total = attempts || 8;
+    var delay = waitMs || 1500;
+    for (var i = 0; i < total; i++) {
+      var r = await supa.from("organisations").select("id,name,plan,status,trial_ends_at,billing_email,owner_email,stripe_customer_id,stripe_subscription_id").eq("id", orgId).maybeSingle();
+      if (!r.error && r.data) {
+        state._currentOrg = Object.assign({}, state._currentOrg || {}, r.data);
+        if (r.data.stripe_subscription_id) return r.data;
+      }
+      if (i < total - 1) {
+        await new Promise(function(resolve) {
+          setTimeout(resolve, delay);
+        });
+      }
+    }
+    return state._currentOrg || null;
+  }
+  function needsPaidCheckoutGate(org) {
+    return !!(org && isPaidPlanForCheckout(org.plan) && !org.stripe_subscription_id);
+  }
   async function mergeOrgEmailSettingsIfAvailable() {
     if (!_currentOrgId || !state._currentOrg) return;
     var r = await supa.from("organisations").select("email_settings").eq("id", _currentOrgId).maybeSingle();
@@ -379,7 +411,7 @@
   async function resolveOrg(session) {
     _currentMemberRole = "viewer";
     setAppBootMessage("Preparing your workspace\u2026");
-    var { data: membership, error: memberErr } = await supa.from("org_members").select("org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email)").eq("user_id", session.user.id).maybeSingle();
+    var { data: membership, error: memberErr } = await supa.from("org_members").select("org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email,stripe_customer_id,stripe_subscription_id)").eq("user_id", session.user.id).maybeSingle();
     if (memberErr && memberErr.code !== "PGRST116") {
       console.warn("org_members lookup:", memberErr);
     }
@@ -389,6 +421,16 @@
       var org = membership.organisations;
       state._currentOrg = org;
       await mergeOrgEmailSettingsIfAvailable();
+      var stripeResult = getStripeResultFromUrl();
+      if (stripeResult === "success" && needsPaidCheckoutGate(state._currentOrg)) {
+        setAppBootMessage("Confirming your payment\u2026");
+        org = await refreshOrgBillingState(membership.org_id, 10, 1500) || org;
+        state._currentOrg = org;
+      }
+      if (needsPaidCheckoutGate(org)) {
+        showCheckoutRequired(org);
+        return false;
+      }
       if (org && org.status === "trial" && org.trial_ends_at) {
         var daysLeft = Math.ceil((new Date(org.trial_ends_at) - /* @__PURE__ */ new Date()) / 864e5);
         if (daysLeft < 0) {
@@ -448,6 +490,10 @@
     _currentMemberRole = "admin";
     state._currentOrg = newOrg;
     console.log("New org provisioned:", newOrg.name, newOrg.id);
+    if (needsPaidCheckoutGate(newOrg)) {
+      showCheckoutRequired(newOrg);
+      return false;
+    }
     return true;
   }
   function showTrialExpired(orgName) {
@@ -480,6 +526,36 @@
         <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
       </div>
     </div>`;
+  }
+  function showCheckoutRequired(org) {
+    var orgName = org && org.name || "your workspace";
+    var plan = String(org && org.plan || "starter").toLowerCase();
+    if (!isPaidPlanForCheckout(plan)) plan = "starter";
+    var planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+    document.body.innerHTML = `
+    <div style="min-height:100vh;background:#0B0D12;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:20px">
+      <div style="background:#13161E;border:1px solid rgba(0,216,151,.35);border-radius:16px;padding:40px;max-width:520px;width:100%;text-align:center">
+        <div style="font-size:48px;margin-bottom:16px">\u{1F4B3}</div>
+        <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px">Complete subscription setup</div>
+        <div style="font-size:14px;color:#7A8099;margin-bottom:24px;line-height:1.6">
+          <strong style="color:#fff">${orgName}</strong> is on the <strong style="color:#fff">${planLabel}</strong> plan.<br>
+          Complete Stripe checkout to continue to your dashboard.
+        </div>
+        <button onclick="startStripeCheckout('${plan}', { clearStartCheckoutParam: true })" style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;margin-bottom:12px">Continue to payment</button>
+        <br>
+        <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
+      </div>
+    </div>`;
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      var qPlan = String(params.get("startCheckout") || "").toLowerCase();
+      if (qPlan === plan) {
+        setTimeout(function() {
+          startStripeCheckout(plan, { clearStartCheckoutParam: true });
+        }, 250);
+      }
+    } catch (_qe) {
+    }
   }
   supa.auth.onAuthStateChange(function(event, session) {
     if (event === "PASSWORD_RECOVERY") {
@@ -9224,7 +9300,7 @@
         supa.from("maintenance").select("*").eq("org_id", _currentOrgId),
         supa.from("landlord_payments").select("*").eq("org_id", _currentOrgId),
         supa.from("contractors").select("*").eq("org_id", _currentOrgId),
-        supa.from("organisations").select("billing_email,owner_email,name,plan,status,trial_ends_at").eq("id", _currentOrgId).maybeSingle()
+        supa.from("organisations").select("billing_email,owner_email,name,plan,status,trial_ends_at,stripe_customer_id,stripe_subscription_id").eq("id", _currentOrgId).maybeSingle()
       ]);
       var errors = results.filter(function(r) {
         return r.error;
@@ -9732,15 +9808,21 @@
     });
   }
   async function startStripeCheckout(plan) {
+    var opts = arguments.length > 1 && arguments[1] ? arguments[1] : {};
     if (!_currentOrgId) {
       showToast && showToast("No organisation loaded", "error");
-      return;
+      return false;
     }
     var sr = await supa.auth.getSession();
     var session = sr && sr.data ? sr.data.session : null;
     if (!session) {
       showToast && showToast("Sign in required", "error");
-      return;
+      return false;
+    }
+    var normalizedPlan = String(plan || "starter").toLowerCase();
+    if (normalizedPlan !== "starter" && normalizedPlan !== "professional" && normalizedPlan !== "business" && normalizedPlan !== "free") {
+      showToast && showToast("Unsupported plan selected", "error");
+      return false;
     }
     try {
       var resp = await fetch("/api/stripe/create-checkout-session", {
@@ -9749,18 +9831,29 @@
           "Content-Type": "application/json",
           Authorization: "Bearer " + session.access_token
         },
-        body: JSON.stringify({ orgId: _currentOrgId, plan: String(plan || "starter").toLowerCase() })
+        body: JSON.stringify({ orgId: _currentOrgId, plan: normalizedPlan })
       });
       var data = await resp.json().catch(function() {
         return {};
       });
       if (!resp.ok || !data.url) {
         showToast && showToast("Checkout failed: " + (data && data.error || "Unknown error"), "error");
-        return;
+        return false;
+      }
+      if (opts && opts.clearStartCheckoutParam) {
+        try {
+          var params = new URLSearchParams(window.location.search || "");
+          params.delete("startCheckout");
+          var next = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
+          window.history.replaceState({}, "", next);
+        } catch (_urlErr) {
+        }
       }
       window.location.href = data.url;
+      return true;
     } catch (e) {
       showToast && showToast("Checkout error: " + e.message, "error");
+      return false;
     }
   }
   async function openStripeBillingPortal() {
@@ -9795,16 +9888,30 @@
       showToast && showToast("Billing portal error: " + e.message, "error");
     }
   }
+  var _autoCheckoutStarted = false;
   function maybeStartCheckoutFromQuery() {
     try {
       var params = new URLSearchParams(window.location.search || "");
+      var stripeResult = String(params.get("stripe") || "").toLowerCase();
+      if (stripeResult === "success") {
+        showToast && showToast("Payment confirmed. Finalising your subscription\u2026", "success");
+        params.delete("stripe");
+        var successNext = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
+        window.history.replaceState({}, "", successNext);
+      } else if (stripeResult === "cancelled") {
+        showToast && showToast("Checkout cancelled. Complete payment to continue.", "warn");
+        params.delete("stripe");
+        var cancelNext = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
+        window.history.replaceState({}, "", cancelNext);
+      }
       var plan = String(params.get("startCheckout") || "").toLowerCase();
       if (plan !== "starter" && plan !== "professional" && plan !== "business") return;
-      params.delete("startCheckout");
-      var next = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
-      window.history.replaceState({}, "", next);
+      if (_autoCheckoutStarted) return;
+      _autoCheckoutStarted = true;
       setTimeout(function() {
-        startStripeCheckout(plan);
+        startStripeCheckout(plan, { clearStartCheckoutParam: true }).then(function(ok) {
+          if (!ok) _autoCheckoutStarted = false;
+        });
       }, 300);
     } catch (_e) {
     }
@@ -10758,9 +10865,13 @@
     window.setAppBootMessage = setAppBootMessage;
     window.hideAppBootOverlay = hideAppBootOverlay;
     window.normalizeRole = normalizeRole;
+    window.isPaidPlanForCheckout = isPaidPlanForCheckout;
+    window.getStripeResultFromUrl = getStripeResultFromUrl;
+    window.needsPaidCheckoutGate = needsPaidCheckoutGate;
     window.upsertSessionUser = upsertSessionUser;
     window.showTrialExpired = showTrialExpired;
     window.showAccountInactive = showAccountInactive;
+    window.showCheckoutRequired = showCheckoutRequired;
     window.rowToLandlord = rowToLandlord;
     window.rowToProp = rowToProp;
     window.rowToTenant = rowToTenant;
@@ -11021,6 +11132,7 @@
     window.uploadPropDocFromInput = uploadPropDocFromInput;
     window.removePropDoc = removePropDoc;
     window.fetchAiMessages = fetchAiMessages;
+    window.refreshOrgBillingState = refreshOrgBillingState;
     window.mergeOrgEmailSettingsIfAvailable = mergeOrgEmailSettingsIfAvailable;
     window.syncUsersFromOrgMembers = syncUsersFromOrgMembers;
     window.resolveOrg = resolveOrg;

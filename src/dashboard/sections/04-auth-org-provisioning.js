@@ -22,6 +22,43 @@ function normalizeRole(role) {
   return state.roles && state.roles[r] ? r : 'viewer';
 }
 
+function isPaidPlanForCheckout(plan) {
+  var p = String(plan || '').toLowerCase();
+  return p === 'starter' || p === 'professional' || p === 'business';
+}
+
+function getStripeResultFromUrl() {
+  try {
+    var params = new URLSearchParams(window.location.search || '');
+    return String(params.get('stripe') || '').toLowerCase();
+  } catch (_e) {
+    return '';
+  }
+}
+
+async function refreshOrgBillingState(orgId, attempts, waitMs) {
+  var total = attempts || 8;
+  var delay = waitMs || 1500;
+  for (var i = 0; i < total; i++) {
+    var r = await supa.from('organisations')
+      .select('id,name,plan,status,trial_ends_at,billing_email,owner_email,stripe_customer_id,stripe_subscription_id')
+      .eq('id', orgId)
+      .maybeSingle();
+    if (!r.error && r.data) {
+      state._currentOrg = Object.assign({}, state._currentOrg || {}, r.data);
+      if (r.data.stripe_subscription_id) return r.data;
+    }
+    if (i < total - 1) {
+      await new Promise(function(resolve){ setTimeout(resolve, delay); });
+    }
+  }
+  return state._currentOrg || null;
+}
+
+function needsPaidCheckoutGate(org) {
+  return !!(org && isPaidPlanForCheckout(org.plan) && !org.stripe_subscription_id);
+}
+
 /** When `organisations.email_settings` exists, merge it into state._currentOrg (skips if column not migrated). */
 async function mergeOrgEmailSettingsIfAvailable() {
   if (!_currentOrgId || !state._currentOrg) return;
@@ -126,7 +163,7 @@ async function resolveOrg(session) {
   setAppBootMessage('Preparing your workspace…');
   // 1. Look up org_members for this user (maybeSingle: no row is OK)
   var { data: membership, error: memberErr } = await supa.from('org_members')
-    .select('org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email)')
+    .select('org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email,stripe_customer_id,stripe_subscription_id)')
     .eq('user_id', session.user.id)
     .maybeSingle();
   if (memberErr && memberErr.code !== 'PGRST116') {
@@ -139,6 +176,18 @@ async function resolveOrg(session) {
     var org = membership.organisations;
     state._currentOrg = org; // store for Settings page
     await mergeOrgEmailSettingsIfAvailable();
+
+    var stripeResult = getStripeResultFromUrl();
+    if (stripeResult === 'success' && needsPaidCheckoutGate(state._currentOrg)) {
+      setAppBootMessage('Confirming your payment…');
+      org = await refreshOrgBillingState(membership.org_id, 10, 1500) || org;
+      state._currentOrg = org;
+    }
+
+    if (needsPaidCheckoutGate(org)) {
+      showCheckoutRequired(org);
+      return false;
+    }
 
     // Trial enforcement — check if expired
     if (org && org.status === 'trial' && org.trial_ends_at) {
@@ -213,6 +262,10 @@ async function resolveOrg(session) {
   _currentMemberRole = 'admin';
   state._currentOrg = newOrg; // store for Settings page
   console.log('New org provisioned:', newOrg.name, newOrg.id);
+  if (needsPaidCheckoutGate(newOrg)) {
+    showCheckoutRequired(newOrg);
+    return false;
+  }
   return true;
 }
 
@@ -247,6 +300,34 @@ function showAccountInactive(status, orgName) {
         <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
       </div>
     </div>`;
+}
+
+function showCheckoutRequired(org) {
+  var orgName = (org && org.name) || 'your workspace';
+  var plan = String((org && org.plan) || 'starter').toLowerCase();
+  if (!isPaidPlanForCheckout(plan)) plan = 'starter';
+  var planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  document.body.innerHTML = `
+    <div style="min-height:100vh;background:#0B0D12;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;padding:20px">
+      <div style="background:#13161E;border:1px solid rgba(0,216,151,.35);border-radius:16px;padding:40px;max-width:520px;width:100%;text-align:center">
+        <div style="font-size:48px;margin-bottom:16px">💳</div>
+        <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px">Complete subscription setup</div>
+        <div style="font-size:14px;color:#7A8099;margin-bottom:24px;line-height:1.6">
+          <strong style="color:#fff">${orgName}</strong> is on the <strong style="color:#fff">${planLabel}</strong> plan.<br>
+          Complete Stripe checkout to continue to your dashboard.
+        </div>
+        <button onclick="startStripeCheckout('${plan}', { clearStartCheckoutParam: true })" style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;margin-bottom:12px">Continue to payment</button>
+        <br>
+        <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
+      </div>
+    </div>`;
+  try {
+    var params = new URLSearchParams(window.location.search || '');
+    var qPlan = String(params.get('startCheckout') || '').toLowerCase();
+    if (qPlan === plan) {
+      setTimeout(function(){ startStripeCheckout(plan, { clearStartCheckoutParam: true }); }, 250);
+    }
+  } catch (_qe) {}
 }
 
 supa.auth.onAuthStateChange(function(event, session) {
