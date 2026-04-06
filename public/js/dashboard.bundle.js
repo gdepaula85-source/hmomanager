@@ -428,6 +428,12 @@
         state._currentOrg = org;
       }
       if (needsPaidCheckoutGate(org)) {
+        if (stripeResult === "cancelled") {
+          var fallbackPlan = String(org && org.plan || "starter").toLowerCase();
+          if (!isPaidPlanForCheckout(fallbackPlan)) fallbackPlan = "starter";
+          window.location.href = "choose-plan.html?stripe=cancelled&plan=" + encodeURIComponent(fallbackPlan);
+          return false;
+        }
         showCheckoutRequired(org);
         return false;
       }
@@ -1326,7 +1332,7 @@
       });
     }
     html += "</div></div>";
-    html += '<div class="card" style="margin-top:0;padding:0;overflow:hidden">';
+    html += '<div class="card" style="margin-top:18px;padding:0;overflow:hidden">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#0F0F1A 0%,#1a1a3e 100%)">';
     html += '<div style="display:flex;align-items:center;gap:10px">';
     html += '<div style="font-size:22px">\u{1F916}</div>';
@@ -1336,9 +1342,9 @@
     html += "</div>";
     html += '<div id="ai-agent-output"></div>';
     html += "</div>";
-    html += '<div class="card" style="margin-top:0">' + renderVoidTracker() + "</div>";
-    html += '<div class="card" style="margin-top:0">' + renderComplianceWidget() + "</div>";
-    html += '<div class="card" style="margin-top:0">' + renderDepositSummary() + "</div>";
+    html += '<div class="card" style="margin-top:14px">' + renderVoidTracker() + "</div>";
+    html += '<div class="card" style="margin-top:14px">' + renderComplianceWidget() + "</div>";
+    html += '<div class="card" style="margin-top:14px">' + renderDepositSummary() + "</div>";
     return html;
   }
   function renderProperties() {
@@ -9888,7 +9894,6 @@
       showToast && showToast("Billing portal error: " + e.message, "error");
     }
   }
-  var _autoCheckoutStarted = false;
   function maybeStartCheckoutFromQuery() {
     try {
       var params = new URLSearchParams(window.location.search || "");
@@ -9904,15 +9909,6 @@
         var cancelNext = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
         window.history.replaceState({}, "", cancelNext);
       }
-      var plan = String(params.get("startCheckout") || "").toLowerCase();
-      if (plan !== "starter" && plan !== "professional" && plan !== "business") return;
-      if (_autoCheckoutStarted) return;
-      _autoCheckoutStarted = true;
-      setTimeout(function() {
-        startStripeCheckout(plan, { clearStartCheckoutParam: true }).then(function(ok) {
-          if (!ok) _autoCheckoutStarted = false;
-        });
-      }, 300);
     } catch (_e) {
     }
   }
@@ -10012,7 +10008,7 @@
         ["professional", "Professional", "\xA389/mo", "25 properties \xB7 5 users"],
         ["business", "Business", "\xA3149/mo", "60 properties \xB7 15 users"]
       ].forEach(function(p) {
-        var isCurrent = p[0] === plan && !isTrial;
+        var isCurrent = p[0] === plan;
         html += '<div style="border:1.5px solid ' + (isCurrent ? "var(--accent)" : "var(--border)") + ";border-radius:9px;padding:12px;background:" + (isCurrent ? "var(--accent-light)" : "var(--bg)") + '">';
         html += '<div style="font-size:12px;font-weight:700;color:' + (isCurrent ? "var(--accent-dark)" : "var(--text)") + '">' + p[1] + "</div>";
         html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">' + p[2] + "</div>";
@@ -10020,7 +10016,7 @@
         if (!isCurrent) {
           html += `<button onclick="startStripeCheckout('` + p[0] + `')" style="display:block;width:100%;text-align:center;padding:6px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Upgrade</button>`;
         } else {
-          html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan</div>';
+          html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan' + (isTrial ? " (trial)" : "") + "</div>";
         }
         html += "</div>";
       });

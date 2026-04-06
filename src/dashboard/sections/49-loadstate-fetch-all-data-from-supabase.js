@@ -543,7 +543,6 @@ async function openStripeBillingPortal(){
   }
 }
 
-var _autoCheckoutStarted = false;
 function maybeStartCheckoutFromQuery(){
   try{
     var params = new URLSearchParams(window.location.search || '');
@@ -559,16 +558,6 @@ function maybeStartCheckoutFromQuery(){
       var cancelNext = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
       window.history.replaceState({}, '', cancelNext);
     }
-
-    var plan = String(params.get('startCheckout') || '').toLowerCase();
-    if(plan !== 'starter' && plan !== 'professional' && plan !== 'business') return;
-    if (_autoCheckoutStarted) return;
-    _autoCheckoutStarted = true;
-    setTimeout(function(){
-      startStripeCheckout(plan, { clearStartCheckoutParam: true }).then(function(ok){
-        if (!ok) _autoCheckoutStarted = false;
-      });
-    }, 300);
   }catch(_e){}
 }
 
@@ -689,7 +678,7 @@ function renderSettings() {
     [['starter','Starter','£49/mo','15 properties · 3 users'],
      ['professional','Professional','£89/mo','25 properties · 5 users'],
      ['business','Business','£149/mo','60 properties · 15 users']].forEach(function(p){
-      var isCurrent = p[0] === plan && !isTrial;
+      var isCurrent = p[0] === plan;
       html += '<div style="border:1.5px solid '+(isCurrent?'var(--accent)':'var(--border)')+';border-radius:9px;padding:12px;background:'+(isCurrent?'var(--accent-light)':'var(--bg)')+'">';
       html += '<div style="font-size:12px;font-weight:700;color:'+(isCurrent?'var(--accent-dark)':'var(--text)')+'">'+p[1]+'</div>';
       html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">'+p[2]+'</div>';
@@ -697,7 +686,7 @@ function renderSettings() {
       if(!isCurrent) {
         html += '<button onclick="startStripeCheckout(\''+p[0]+'\')" style="display:block;width:100%;text-align:center;padding:6px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Upgrade</button>';
       } else {
-        html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan</div>';
+        html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan'+(isTrial?' (trial)':'')+'</div>';
       }
       html += '</div>';
     });

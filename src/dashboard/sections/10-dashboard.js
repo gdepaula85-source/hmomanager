@@ -145,7 +145,7 @@ function renderDashboard() {
   html += '</div></div>';
 
   // ── AI Agent card ──
-  html += '<div class="card" style="margin-top:0;padding:0;overflow:hidden">';
+  html += '<div class="card" style="margin-top:18px;padding:0;overflow:hidden">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#0F0F1A 0%,#1a1a3e 100%)">';
   html += '<div style="display:flex;align-items:center;gap:10px">';
   html += '<div style="font-size:22px">🤖</div>';
@@ -155,9 +155,9 @@ function renderDashboard() {
   html += '</div>';
   html += '<div id="ai-agent-output"></div>';
   html += '</div>';
-  html += '<div class="card" style="margin-top:0">'+renderVoidTracker()+'</div>';
-  html += '<div class="card" style="margin-top:0">'+renderComplianceWidget()+'</div>';
-  html += '<div class="card" style="margin-top:0">'+renderDepositSummary()+'</div>';
+  html += '<div class="card" style="margin-top:14px">'+renderVoidTracker()+'</div>';
+  html += '<div class="card" style="margin-top:14px">'+renderComplianceWidget()+'</div>';
+  html += '<div class="card" style="margin-top:14px">'+renderDepositSummary()+'</div>';
 
   return html;
 }

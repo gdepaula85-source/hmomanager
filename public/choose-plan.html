@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Choose Your Plan — PropManager</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/config.js"></script>
 <style>
@@ -46,18 +47,33 @@
   const msg = document.getElementById('msg');
 
   function setMessage(t){ msg.textContent = t || ''; }
+  function selectPlan(plan){
+    selectedPlan = plan || 'free';
+    document.querySelectorAll('.plan').forEach(function(p){
+      p.classList.toggle('active', p.getAttribute('data-plan') === selectedPlan);
+    });
+  }
 
   (async function init(){
     const s = await supa.auth.getSession();
     if(!s || !s.data || !s.data.session){ window.location.href='login.html'; return; }
+    const params = new URLSearchParams(window.location.search || '');
+    const qPlan = String(params.get('plan') || '').toLowerCase();
+    const stripeResult = String(params.get('stripe') || '').toLowerCase();
+    const userPlan = String((s.data.session.user && s.data.session.user.user_metadata && s.data.session.user.user_metadata.selected_plan) || '').toLowerCase();
+    const preferredPlan = (qPlan === 'starter' || qPlan === 'professional' || qPlan === 'business' || qPlan === 'free')
+      ? qPlan
+      : ((userPlan === 'starter' || userPlan === 'professional' || userPlan === 'business' || userPlan === 'free') ? userPlan : 'free');
+    selectPlan(preferredPlan);
+    if (stripeResult === 'cancelled') {
+      setMessage('Checkout was cancelled. Please choose a plan to continue.');
+    }
   })();
 
   document.getElementById('plans').addEventListener('click', function(e){
     const card = e.target.closest('.plan');
     if(!card) return;
-    selectedPlan = card.getAttribute('data-plan') || 'free';
-    document.querySelectorAll('.plan').forEach(function(p){ p.classList.remove('active'); });
-    card.classList.add('active');
+    selectPlan(card.getAttribute('data-plan') || 'free');
   });
 
   document.getElementById('continue-btn').addEventListener('click', async function(){

@@ -455,7 +455,8 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      payment_method_collection: 'if_required',
+      // Require a card up front so Stripe can charge automatically when trial ends.
+      payment_method_collection: 'always',
       allow_promotion_codes: true,
       success_url: `${appBaseUrl}/index.html?stripe=success`,
       cancel_url: `${appBaseUrl}/index.html?stripe=cancelled`,

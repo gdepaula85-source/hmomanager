@@ -185,6 +185,12 @@ async function resolveOrg(session) {
     }
 
     if (needsPaidCheckoutGate(org)) {
+      if (stripeResult === 'cancelled') {
+        var fallbackPlan = String((org && org.plan) || 'starter').toLowerCase();
+        if (!isPaidPlanForCheckout(fallbackPlan)) fallbackPlan = 'starter';
+        window.location.href = 'choose-plan.html?stripe=cancelled&plan=' + encodeURIComponent(fallbackPlan);
+        return false;
+      }
       showCheckoutRequired(org);
       return false;
     }
