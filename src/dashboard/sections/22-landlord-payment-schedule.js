@@ -112,14 +112,14 @@ function renderLandlords() {
     +'</div></div>';
 
   // KPI strip
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">';
+  html += '<div class="ll-kpi-grid">';
   html += '<div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">'+fmt(totalMonthly)+'</div><div style="font-size:10px;color:var(--red);font-weight:700;margin-top:2px">MONTHLY RENT</div></div>';
   html += '<div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--amber);font-family:monospace">'+fmt(totalOwed)+'</div><div style="font-size:10px;color:var(--amber);font-weight:700;margin-top:2px">PENDING ('+pendingCount+')</div></div>';
   html += '<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">'+fmt(totalPaidAll)+'</div><div style="font-size:10px;color:var(--green);font-weight:700;margin-top:2px">PAID (ALL TIME)</div></div>';
   html += '</div>';
 
   // Landlord cards
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px">';
+  html += '<div class="ll-grid">';
   // Sort landlords: those with pending payments first, then by pending amount desc
   var sortedLls = lls.slice().sort(function(a, b) {
     var aPend = filteredPays.filter(function(p){return p.landlordId===a.id&&p.status==='pending';});
@@ -145,18 +145,18 @@ function renderLandlords() {
     var initials   = ll.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2);
     var hasPending = llPending.length > 0;
 
-    html += '<div style="background:var(--surface);border:1px solid '+(hasPending?'#FDE68A':'var(--border)')+';border-radius:13px;overflow:hidden">';
+    html += '<div class="ll-card" style="border-color:'+(hasPending?'#FDE68A':'var(--border)')+'">';
 
     // Card header — click to open detail
-    html += '<div style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openLandlordDetail(\''+ll.id+'\')">';
+    html += '<div class="ll-card-head" onclick="openLandlordDetail(\''+ll.id+'\')">';
     html += '<div style="width:42px;height:42px;border-radius:11px;background:var(--accent-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent-dark)">'+initials+'</div>';
-    html += '<div style="flex:1;min-width:0">';
-    html += '<div style="font-size:14px;font-weight:700">'+ll.name+'</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">'+ll.phone+' · '+llProps.length+' propert'+(llProps.length===1?'y':'ies')+'</div>';
+    html += '<div class="ll-card-meta">';
+    html += '<div class="ll-card-name">'+ll.name+'</div>';
+    html += '<div class="ll-card-sub">'+ll.phone+' · '+llProps.length+' propert'+(llProps.length===1?'y':'ies')+'</div>';
     html += '</div>';
-    html += '<div style="text-align:right;flex-shrink:0">';
-    html += '<div style="font-size:15px;font-weight:800;color:var(--red);font-family:monospace">'+fmt(llMonthly)+'</div>';
-    html += '<div style="font-size:10px;color:var(--muted)">per month</div>';
+    html += '<div class="ll-card-amount">';
+    html += '<div class="ll-card-amount-val">'+fmt(llMonthly)+'</div>';
+    html += '<div class="ll-card-amount-sub">per month</div>';
     html += '</div>';
     html += '</div>';
 
@@ -233,8 +233,8 @@ function renderLandlords() {
           var isOverdue = !isPaid && mMs < nowMs;
           var amtColor  = isPaid ? 'var(--green)' : isOverdue ? 'var(--red)' : 'var(--amber)';
 
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px 8px 28px;border-bottom:1px solid var(--border);background:'+(isPaid?'transparent':isOverdue?'#FFF8F8':'transparent')+'">';
-          html += '<div style="flex:1;min-width:0">';
+          html += '<div class="ll-pay-row" style="background:'+(isPaid?'transparent':isOverdue?'#FFF8F8':'transparent')+'">';
+          html += '<div class="ll-pay-main">';
           html += '<div style="font-size:12px;font-weight:600;color:'+(isPaid?'var(--muted)':'var(--text)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(pay.propName||pay.property||(state.properties.find(function(x){return x.id===pay.propId;})||{}).name||'Unknown')+'</div>';
           if(isPaid) html += '<div style="font-size:10px;color:var(--green)">Paid '+pay.paidDate+'</div>';
           html += '</div>';

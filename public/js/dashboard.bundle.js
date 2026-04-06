@@ -160,7 +160,7 @@
     return `<button class="btn btn-${variant}${sm ? " btn-sm" : ""}" onclick="${onclick}">${label}</button>`;
   }
   function waLink(number, message = "") {
-    const clean = number.replace(/\D/g, "");
+    const clean = String(number || "").replace(/\D/g, "");
     const msg = encodeURIComponent(message);
     return `https://wa.me/${clean}${msg ? "?text=" + msg : ""}`;
   }
@@ -1673,7 +1673,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px" onclick="event.stopPropagation()">
             ${badge(t.method === "bank" ? "bank" : "cash")}
             ${t.whatsapp ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
-                  ${t.arrears > 0 ? `<a href="https://wa.me/${t.whatsapp.replace(/\D/g, "")}?text=${arrMsg}" target="_blank" class="wa-btn" style="background:#FEF0F3;color:var(--red);border-color:#FECDD3">\u{1F4AC} Chase</a>` : `<a href="https://wa.me/${t.whatsapp.replace(/\D/g, "")}?text=${rentMsg}" target="_blank" class="wa-btn">\u{1F4AC} Message</a>`}
+                  ${t.arrears > 0 ? `<a href="https://wa.me/${String(t.whatsapp || "").replace(/\D/g, "")}?text=${arrMsg}" target="_blank" class="wa-btn" style="background:#FEF0F3;color:var(--red);border-color:#FECDD3">\u{1F4AC} Chase</a>` : `<a href="https://wa.me/${String(t.whatsapp || "").replace(/\D/g, "")}?text=${rentMsg}" target="_blank" class="wa-btn">\u{1F4AC} Message</a>`}
                 </div>` : '<span style="font-size:11px;color:var(--dim)">No WhatsApp</span>'}
           </div>
         </div>`;
@@ -1795,7 +1795,7 @@
     }[dueStatus] || { bg: "#F8F9FB", border: "var(--border)", text: "var(--muted)" };
     var lateFee = calcLateFee(p);
     var dueLabel = dueStatus === "overdue" ? "&#x26A0;&#xFE0F; Overdue &middot; " + dueDateStr + (lateFee > 0 ? " + &pound;" + lateFee + " fee" : "") : dueStatus === "today" ? "&#x1F4C5; Due Today" : dueStatus === "tomorrow" ? "&#x1F4C5; Tomorrow" : dueStatus === "paid" ? "&#x2713; Paid" : "&#x1F4C5; Due " + dueDateStr;
-    var waBase = tenant && tenant.whatsapp ? "https://wa.me/" + tenant.whatsapp.replace(/\D/g, "") + "?text=" : "";
+    var waBase = tenant && tenant.whatsapp ? "https://wa.me/" + String(tenant.whatsapp || "").replace(/\D/g, "") + "?text=" : "";
     var waMsg = encodeURIComponent(
       "Hi " + (p.tenant || "Tenant").split(" ")[0] + ", your rent of \xA3" + (p.amount || 0) + " is " + (dueStatus === "overdue" ? "overdue. Please pay urgently" : "due " + dueDateStr + ". Please arrange payment.") + " Thank you \u2014 Reservations Direct."
     );
@@ -1928,7 +1928,7 @@
       return "Hi " + fn + ", a rent payment of " + amt + " is outstanding. Please arrange payment at your earliest convenience. Thank you \u2014 Reservations Direct.";
     }
     var allLinks = items.map(function(item) {
-      return "https://wa.me/" + item.t.whatsapp + "?text=" + encodeURIComponent(buildMsg(item));
+      return "https://wa.me/" + String(item.t.whatsapp || "").replace(/\D/g, "") + "?text=" + encodeURIComponent(buildMsg(item));
     });
     window._bulkSendAll = function() {
       allLinks.forEach(function(u) {
@@ -1941,7 +1941,7 @@
     } else {
       html += '<div style="padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px;color:var(--muted)">' + items.length + ' tenants with WhatsApp</div><button onclick="_bulkSendAll()" style="padding:7px 14px;border-radius:8px;border:none;background:#25D366;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#x1F4AC; Send All (' + items.length + ')</button></div><div style="max-height:50vh;overflow-y:auto">';
       items.forEach(function(item) {
-        var waHref = "https://wa.me/" + item.t.whatsapp + "?text=" + encodeURIComponent(buildMsg(item));
+        var waHref = "https://wa.me/" + String(item.t.whatsapp || "").replace(/\D/g, "") + "?text=" + encodeURIComponent(buildMsg(item));
         html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:700">' + item.t.name + '</div><div style="font-size:11px;color:var(--muted)">' + item.t.property + (item.t.room ? " \xB7 Rm " + item.t.room : "") + " \xB7 \xA3" + item.total + '</div></div><a href="' + waHref + '" target="_blank" style="padding:7px 14px;border-radius:8px;background:#25D366;color:#fff;font-size:12px;font-weight:700;text-decoration:none">&#x1F4AC; Send</a></div>';
       });
       html += "</div>";
@@ -2421,7 +2421,7 @@
       };
       const tc = tradeColors[c.trade] || "var(--muted)";
       const tbg = tradeColors[c.trade + "-bg"] || "var(--bg)";
-      const waHref = c.whatsapp ? `https://wa.me/${c.whatsapp.replace(/\D/g, "")}` : "";
+      const waHref = c.whatsapp ? `https://wa.me/${String(c.whatsapp || "").replace(/\D/g, "")}` : "";
       const mailHref = c.email ? `mailto:${c.email}` : "";
       const stars = c.rating ? "\u2605".repeat(c.rating) + "\u2606".repeat(5 - c.rating) : "";
       return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px">
@@ -3114,10 +3114,58 @@
     };
     reader.readAsDataURL(file);
   }
+  function _activeTenantRoomSet(propName) {
+    var set = /* @__PURE__ */ new Set();
+    (state.tenants || []).forEach(function(t) {
+      if (t && t.property === propName && t.status !== "inactive") {
+        set.add(+t.room || 1);
+      }
+    });
+    return set;
+  }
+  function _derivePropertyRoomsForTenantModal(p) {
+    var rooms = [];
+    if (Array.isArray(p && p.roomList) && p.roomList.length) {
+      rooms = p.roomList.map(function(r) {
+        return {
+          n: +r.n || 1,
+          type: r.type || "Room",
+          price: +r.price || 0,
+          status: String(r.status || "").toLowerCase()
+        };
+      });
+    } else {
+      var count = Math.max(0, +(p && p.rooms || 0));
+      if (count > 0) {
+        var weeklyHint = count > 0 && p && p.rent ? Math.round(+p.rent * 12 / 52 / count) : 0;
+        for (var i = 1; i <= count; i++) {
+          rooms.push({ n: i, type: "Room", price: weeklyHint, status: "" });
+        }
+      }
+    }
+    return rooms.sort(function(a, b) {
+      return a.n - b.n;
+    });
+  }
   function openModal(type) {
-    const propOpts = state.properties.filter((p) => (p.roomList || []).some((r) => r.status === "vacant")).map((p) => {
-      const vac = (p.roomList || []).filter((r) => r.status === "vacant").length;
-      return `<option value="${p.name}">${p.name} (${vac} room${vac === 1 ? "" : "s"} free)</option>`;
+    const propOpts = (state.properties || []).map(function(p) {
+      var isWhole = (p.lettingType || "hmo") === "whole";
+      if (isWhole) {
+        var hasActive = (state.tenants || []).some(function(t) {
+          return t && t.property === p.name && t.status !== "inactive";
+        });
+        return '<option value="' + p.name + '">' + p.name + " (" + (hasActive ? "occupied" : "available") + ")</option>";
+      }
+      var rooms = _derivePropertyRoomsForTenantModal(p);
+      var occupiedByTenant = _activeTenantRoomSet(p.name);
+      var vacant = rooms.filter(function(r) {
+        var explicitlyOccupied = r.status === "occupied";
+        return !occupiedByTenant.has(r.n) && !explicitlyOccupied;
+      }).length;
+      if (!rooms.length) {
+        return '<option value="' + p.name + '">' + p.name + " (no rooms set up)</option>";
+      }
+      return '<option value="' + p.name + '">' + p.name + " (" + vacant + " room" + (vacant === 1 ? "" : "s") + " free)</option>";
     }).join("");
     const modals = {
       addProp: `
@@ -3586,15 +3634,18 @@
     }
     if (roomWrap) roomWrap.style.display = "";
     if (typeWrap) typeWrap.style.display = "";
-    if (!p.roomList) {
+    var rooms = _derivePropertyRoomsForTenantModal(p);
+    if (!rooms.length) {
       var opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "No rooms set up";
       roomSel.appendChild(opt);
       return;
     }
-    var vacRooms = p.roomList.filter(function(r) {
-      return r.status === "vacant";
+    var occupiedByTenant = _activeTenantRoomSet(propName);
+    var vacRooms = rooms.filter(function(r) {
+      var explicitlyOccupied = String(r.status || "").toLowerCase() === "occupied";
+      return !occupiedByTenant.has(r.n) && !explicitlyOccupied;
     });
     if (!vacRooms.length) {
       var opt = document.createElement("option");
@@ -3985,11 +4036,11 @@
     var histTab = '<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">Payment History</div><div style="font-size:11px;color:var(--muted)">' + hist.length + ' records</div></div><div style="display:flex;flex-direction:column;gap:6px">' + hist.map(function(h) {
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px"><div><div style="font-size:13px;font-weight:600">' + fmt(h.amount) + '</div><div style="font-size:11px;color:var(--muted)">' + h.date + '</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--muted)">' + (h.method === "bank" ? "\u{1F3E6} Bank" : "\u{1F4B5} Cash") + '</span><span style="font-size:11px;font-weight:700;color:' + (h.status === "paid" ? "var(--green)" : "var(--red)") + '">' + h.status + "</span></div></div>";
     }).join("") + "</div>";
-    var waBase = t.whatsapp ? "https://wa.me/" + t.whatsapp.replace(/\D/g, "") + "?text=" : "";
+    var waBase = t.whatsapp ? "https://wa.me/" + String(t.whatsapp || "").replace(/\D/g, "") + "?text=" : "";
     var firstName = t.name.split(" ")[0];
     var actionsTab = '<div style="display:flex;flex-direction:column;gap:12px">';
     if (waBase) {
-      actionsTab += '<div style="background:var(--wa-light);border:1px solid #BBF7D0;border-radius:12px;padding:16px"><div style="font-size:13px;font-weight:700;color:var(--wa);margin-bottom:10px">\u{1F4AC} WhatsApp Messages</div><div style="display:flex;flex-direction:column;gap:6px"><a href="' + waBase + encodeURIComponent("Hi " + firstName + ", your rent of \xA3" + t.rent + " is due. Please arrange payment. Thank you.") + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u{1F4AC}</span><div><div style="font-size:13px;font-weight:600">Rent Reminder</div><div style="font-size:11px;color:var(--muted)">Gentle reminder about upcoming rent</div></div></a>' + (t.arrears > 0 ? '<a href="' + waBase + encodeURIComponent("Hi " + firstName + ", you have arrears of \xA3" + t.arrears + ". Please contact us urgently.") + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #FECDD3;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u26A0\uFE0F</span><div><div style="font-size:13px;font-weight:600">Chase Arrears</div><div style="font-size:11px;color:var(--muted)">\xA3' + t.arrears + " outstanding</div></div></a>" : "") + '<a href="' + waBase + waBase.split("?")[0].replace("https://wa.me/" + t.whatsapp.replace(/\D/g, "") + "?text=", "") + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u{1F4AC}</span><div><div style="font-size:13px;font-weight:600">Open Chat</div><div style="font-size:11px;color:var(--muted)">Open WhatsApp directly</div></div></a></div></div>';
+      actionsTab += '<div style="background:var(--wa-light);border:1px solid #BBF7D0;border-radius:12px;padding:16px"><div style="font-size:13px;font-weight:700;color:var(--wa);margin-bottom:10px">\u{1F4AC} WhatsApp Messages</div><div style="display:flex;flex-direction:column;gap:6px"><a href="' + waBase + encodeURIComponent("Hi " + firstName + ", your rent of \xA3" + t.rent + " is due. Please arrange payment. Thank you.") + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u{1F4AC}</span><div><div style="font-size:13px;font-weight:600">Rent Reminder</div><div style="font-size:11px;color:var(--muted)">Gentle reminder about upcoming rent</div></div></a>' + (t.arrears > 0 ? '<a href="' + waBase + encodeURIComponent("Hi " + firstName + ", you have arrears of \xA3" + t.arrears + ". Please contact us urgently.") + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #FECDD3;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u26A0\uFE0F</span><div><div style="font-size:13px;font-weight:600">Chase Arrears</div><div style="font-size:11px;color:var(--muted)">\xA3' + t.arrears + " outstanding</div></div></a>" : "") + '<a href="' + waBase.split("?")[0] + '" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">\u{1F4AC}</span><div><div style="font-size:13px;font-weight:600">Open Chat</div><div style="font-size:11px;color:var(--muted)">Open WhatsApp directly</div></div></a></div></div>';
     }
     actionsTab += `<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:12px;padding:16px"><div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:10px">\u{1F4C4} Legal Documents</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="generateExcludedLicence('` + t.id + `')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border:1px solid #BFDBFE;border-radius:9px;cursor:pointer;font-family:inherit;text-align:left;width:100%"><span style="font-size:18px">\u{1F4CB}</span><div><div style="font-size:13px;font-weight:600;color:var(--blue)">Excluded Licence Agreement</div><div style="font-size:11px;color:var(--muted)">Standard company document \xB7 1 week notice</div></div></button><button onclick="generateAgreement('` + t.id + `')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border:1px solid #BFDBFE;border-radius:9px;cursor:pointer;font-family:inherit;text-align:left;width:100%"><span style="font-size:18px">\u{1F4C4}</span><div><div style="font-size:13px;font-weight:600;color:var(--blue)">AST Agreement</div><div style="font-size:11px;color:var(--muted)">Assured Shorthold Tenancy</div></div></button></div></div>`;
     var passwords = JSON.parse(localStorage.getItem("pm_tenant_passwords") || "{}");
@@ -5741,12 +5792,12 @@
     }).join("") + '</select><select onchange="state.filters.landlordMonth=this.value;render()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;min-width:130px"><option value="">All Time</option>' + MONTHS.map(function(m) {
       return '<option value="' + m.key + '" ' + (selMonth === m.key ? "selected" : "") + ">" + m.label + "</option>";
     }).join("") + `</select><button onclick="openDataModal('landlords')" title="Import / Export" style="padding:8px 11px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">&#x21C5;</button><button onclick="openAddLandlordModal()" style="padding:9px 16px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+ Add Landlord</button></div></div>`;
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">';
+    html += '<div class="ll-kpi-grid">';
     html += '<div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">' + fmt(totalMonthly) + '</div><div style="font-size:10px;color:var(--red);font-weight:700;margin-top:2px">MONTHLY RENT</div></div>';
     html += '<div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--amber);font-family:monospace">' + fmt(totalOwed) + '</div><div style="font-size:10px;color:var(--amber);font-weight:700;margin-top:2px">PENDING (' + pendingCount + ")</div></div>";
     html += '<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">' + fmt(totalPaidAll) + '</div><div style="font-size:10px;color:var(--green);font-weight:700;margin-top:2px">PAID (ALL TIME)</div></div>';
     html += "</div>";
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px">';
+    html += '<div class="ll-grid">';
     var sortedLls = lls.slice().sort(function(a, b) {
       var aPend = filteredPays.filter(function(p) {
         return p.landlordId === a.id && p.status === "pending";
@@ -5784,16 +5835,16 @@
         return w[0];
       }).join("").slice(0, 2);
       var hasPending = llPending.length > 0;
-      html += '<div style="background:var(--surface);border:1px solid ' + (hasPending ? "#FDE68A" : "var(--border)") + ';border-radius:13px;overflow:hidden">';
-      html += `<div style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openLandlordDetail('` + ll.id + `')">`;
+      html += '<div class="ll-card" style="border-color:' + (hasPending ? "#FDE68A" : "var(--border)") + '">';
+      html += `<div class="ll-card-head" onclick="openLandlordDetail('` + ll.id + `')">`;
       html += '<div style="width:42px;height:42px;border-radius:11px;background:var(--accent-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent-dark)">' + initials + "</div>";
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:14px;font-weight:700">' + ll.name + "</div>";
-      html += '<div style="font-size:11px;color:var(--muted)">' + ll.phone + " \xB7 " + llProps.length + " propert" + (llProps.length === 1 ? "y" : "ies") + "</div>";
+      html += '<div class="ll-card-meta">';
+      html += '<div class="ll-card-name">' + ll.name + "</div>";
+      html += '<div class="ll-card-sub">' + ll.phone + " \xB7 " + llProps.length + " propert" + (llProps.length === 1 ? "y" : "ies") + "</div>";
       html += "</div>";
-      html += '<div style="text-align:right;flex-shrink:0">';
-      html += '<div style="font-size:15px;font-weight:800;color:var(--red);font-family:monospace">' + fmt(llMonthly) + "</div>";
-      html += '<div style="font-size:10px;color:var(--muted)">per month</div>';
+      html += '<div class="ll-card-amount">';
+      html += '<div class="ll-card-amount-val">' + fmt(llMonthly) + "</div>";
+      html += '<div class="ll-card-amount-sub">per month</div>';
       html += "</div>";
       html += "</div>";
       if (llProps.length) {
@@ -5882,8 +5933,8 @@
             var isPaid = pay.status === "paid";
             var isOverdue = !isPaid && mMs < nowMs;
             var amtColor = isPaid ? "var(--green)" : isOverdue ? "var(--red)" : "var(--amber)";
-            html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px 8px 28px;border-bottom:1px solid var(--border);background:' + (isPaid ? "transparent" : isOverdue ? "#FFF8F8" : "transparent") + '">';
-            html += '<div style="flex:1;min-width:0">';
+            html += '<div class="ll-pay-row" style="background:' + (isPaid ? "transparent" : isOverdue ? "#FFF8F8" : "transparent") + '">';
+            html += '<div class="ll-pay-main">';
             html += '<div style="font-size:12px;font-weight:600;color:' + (isPaid ? "var(--muted)" : "var(--text)") + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (pay.propName || pay.property || (state.properties.find(function(x) {
               return x.id === pay.propId;
             }) || {}).name || "Unknown") + "</div>";
@@ -6586,6 +6637,20 @@
   function confirmImportProperties() {
     var rows = _importPreview.rows;
     var imported = 0, skipped = 0;
+    var plan = String(state._currentOrg && state._currentOrg.plan || "free").toLowerCase();
+    var propCap = plan === "business" ? 60 : plan === "professional" ? 25 : plan === "starter" ? 15 : plan === "trial" ? 5 : 3;
+    var currentProps = (state.properties || []).filter(function(p) {
+      return p && p.status !== "archived";
+    }).length;
+    var incomingProps = rows.filter(function(r) {
+      return !(state.properties || []).some(function(p) {
+        return p.name && r.name && p.name.trim().toLowerCase() === r.name.trim().toLowerCase();
+      });
+    }).length;
+    if (currentProps + incomingProps > propCap) {
+      alert("\u26A0\uFE0F Import blocked: records are exceeding your plan limit. This import adds " + incomingProps + " new properties but your " + plan + " plan allows up to " + propCap + ".");
+      return;
+    }
     rows.forEach(function(r) {
       var exists = state.properties.some(function(p) {
         return p.name.trim().toLowerCase() === r.name.trim().toLowerCase();
@@ -6640,6 +6705,21 @@
   function confirmImportTenants() {
     var rows = _importPreview.rows;
     var imported = 0, skipped = 0;
+    var plan = String(state._currentOrg && state._currentOrg.plan || "free").toLowerCase();
+    var tenantCap = plan === "business" || plan === "professional" ? 2147483647 : plan === "starter" ? 75 : plan === "trial" ? 30 : 15;
+    var currentActive = (state.tenants || []).filter(function(t) {
+      return t && (t.status || "active") !== "inactive";
+    }).length;
+    var incomingActive = rows.filter(function(r) {
+      var exists = (state.tenants || []).some(function(t) {
+        return t.name && r.name && t.name.trim().toLowerCase() === r.name.trim().toLowerCase() && t.whatsapp === r.whatsapp;
+      });
+      return !exists && String(r && r.status || "active").toLowerCase() !== "inactive";
+    }).length;
+    if (currentActive + incomingActive > tenantCap) {
+      alert("\u26A0\uFE0F Import blocked: records are exceeding your plan limit. This import adds " + incomingActive + " active tenants but your " + plan + " plan allows up to " + tenantCap + ".");
+      return;
+    }
     rows.forEach(function(r) {
       var exists = state.tenants.some(function(t) {
         return t.name.trim().toLowerCase() === r.name.trim().toLowerCase() && t.whatsapp === r.whatsapp;
@@ -6662,7 +6742,7 @@
         status: r.status,
         paid: "\u2014",
         arrears: 0,
-        whatsapp: r.whatsapp,
+        whatsapp: String(r.whatsapp || "").replace(/\D/g, ""),
         email: r.email,
         deposit: r.rent * 2,
         depositStatus: "held",
@@ -7497,6 +7577,48 @@
   var _dmEntity = "properties";
   var _dmPreview = null;
   var _dmWarnings = [];
+  function _dmCleanDigits(v) {
+    return String(v == null ? "" : v).replace(/\D/g, "");
+  }
+  function _dmPlanCaps(plan) {
+    var p = String(plan || "free").toLowerCase();
+    return {
+      properties: p === "business" ? 60 : p === "professional" ? 25 : p === "starter" ? 15 : p === "trial" ? 5 : 3,
+      tenants: p === "business" || p === "professional" ? 2147483647 : p === "starter" ? 75 : p === "trial" ? 30 : 15
+    };
+  }
+  function _dmValidatePlanLimitBeforeImport(entity, rows) {
+    var caps = _dmPlanCaps(state && state._currentOrg ? state._currentOrg.plan : "free");
+    if (entity === "properties") {
+      var currentProps = (state.properties || []).filter(function(p) {
+        return p && p.status !== "archived";
+      }).length;
+      var newProps = rows.filter(function(r) {
+        return !(state.properties || []).some(function(p) {
+          return p && p.name && r.name && String(p.name).trim().toLowerCase() === String(r.name).trim().toLowerCase();
+        });
+      }).length;
+      if (currentProps + newProps > caps.properties) {
+        return "Import blocked: " + newProps + " new properties would exceed your " + String(state._currentOrg && state._currentOrg.plan || "free") + " plan limit (" + caps.properties + ").";
+      }
+    }
+    if (entity === "tenants") {
+      var currentTenants = (state.tenants || []).filter(function(t) {
+        return t && (t.status || "active") !== "inactive";
+      }).length;
+      var newTenants = rows.filter(function(r) {
+        return !(state.tenants || []).some(function(t) {
+          return t && t.name && r.name && String(t.name).trim().toLowerCase() === String(r.name).trim().toLowerCase() && String(t.property || "") === String(r.property || "");
+        });
+      }).filter(function(r) {
+        return String(r && r.status || "active").toLowerCase() !== "inactive";
+      }).length;
+      if (currentTenants + newTenants > caps.tenants) {
+        return "Import blocked: " + newTenants + " new active tenants would exceed your " + String(state._currentOrg && state._currentOrg.plan || "free") + " plan limit (" + caps.tenants + ").";
+      }
+    }
+    return "";
+  }
   function openDataModal(entity) {
     _dmEntity = entity || "properties";
     _dmPreview = null;
@@ -7741,7 +7863,7 @@
           rent: parseFloat(row["Weekly Rent (\xA3)"] || row["Rent"] || row["rent"] || 0) || 0,
           freq: (row["Frequency"] || row["freq"] || "weekly").toLowerCase().includes("month") ? "monthly" : "weekly",
           payDay: row["Payment Day"] || row["Pay Day"] || row["payDay"] || "Monday",
-          whatsapp: row["WhatsApp"] || row["Phone"] || row["phone"] || "",
+          whatsapp: _dmCleanDigits(row["WhatsApp"] || row["Phone"] || row["phone"] || ""),
           email: row["Email"] || row["email"] || "",
           status: (row["Status"] || row["status"] || "active").toLowerCase().includes("notice") ? "notice_given" : "active",
           moveIn: row["Move-In Date"] || row["Move In"] || row["moveIn"] || "",
@@ -7760,7 +7882,7 @@
         if (!name) return;
         rows.push({
           name: name.trim(),
-          phone: row["Phone"] || row["phone"] || "",
+          phone: _dmCleanDigits(row["Phone"] || row["phone"] || ""),
           email: row["Email"] || row["email"] || "",
           bank: row["Bank"] || row["bank"] || "",
           sortCode: row["Sort Code"] || row["sortCode"] || "",
@@ -7797,6 +7919,14 @@
       }
     }
     var imported = 0, skipped = 0, total = rows.length;
+    var limitErr = _dmValidatePlanLimitBeforeImport(entity, rows);
+    if (limitErr) {
+      if (btn2) btn2.disabled = false;
+      if (progressWrap) progressWrap.style.display = "none";
+      showToast(limitErr, "error");
+      alert("\u26A0\uFE0F " + limitErr);
+      return;
+    }
     if (entity === "properties") {
       if (!state.properties) state.properties = [];
       for (var i = 0; i < rows.length; i++) {
@@ -7861,7 +7991,7 @@
             rent: r.rent,
             freq: r.freq,
             payDay: r.payDay,
-            whatsapp: r.whatsapp,
+            whatsapp: _dmCleanDigits(r.whatsapp),
             email: r.email,
             status: r.status,
             startDate: r.moveIn || null,
@@ -7892,7 +8022,7 @@
           return l.name && r.name && l.name.trim().toLowerCase() === r.name.trim().toLowerCase();
         });
         if (!exists) {
-          state.landlords.push({ id: crypto.randomUUID(), name: r.name, phone: r.phone, email: r.email, bank: r.bank, sortCode: r.sortCode, accountNo: r.accountNo, notes: r.notes, properties: [] });
+          state.landlords.push({ id: crypto.randomUUID(), name: r.name, phone: _dmCleanDigits(r.phone), email: r.email, bank: r.bank, sortCode: r.sortCode, accountNo: r.accountNo, notes: r.notes, properties: [] });
           imported++;
         } else {
           skipped++;
@@ -10451,7 +10581,7 @@
       ["Invoices", invoices.length, "var(--blue)"]
     ].map(function(k) {
       return '<div style="padding:14px;text-align:center;border-right:1px solid var(--border)"><div style="font-size:18px;font-weight:800;font-family:monospace;color:' + k[2] + '">' + k[1] + '</div><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-top:2px">' + k[0] + "</div></div>";
-    }).join("") + '</div><div style="overflow-y:auto;max-height:60vh"><div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Contact</div><div style="display:flex;flex-wrap:wrap;gap:8px">' + (c.phone ? '<a href="tel:' + c.phone + '" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--text);text-decoration:none">\u{1F4DE} ' + c.phone + "</a>" : "") + (c.whatsapp ? '<a href="https://wa.me/' + c.whatsapp.replace(/\D/g, "") + '" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BBF7D0;background:#F0FDF4;font-size:12px;font-weight:600;color:#16A34A;text-decoration:none">\u{1F4AC} WhatsApp</a>' : "") + (c.email ? '<a href="mailto:' + c.email + '" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BFDBFE;background:var(--blue-light);font-size:12px;font-weight:600;color:var(--blue);text-decoration:none">\u2709 ' + c.email + "</a>" : "") + (c.callOutCharge ? '<span style="padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--muted)">\u{1F4B7} \xA3' + c.callOutCharge + " call-out</span>" : "") + "</div>" + (c.notes ? '<div style="margin-top:10px;font-size:12px;color:var(--muted);background:var(--bg);padding:8px 12px;border-radius:8px">' + c.notes + "</div>" : "") + "</div>";
+    }).join("") + '</div><div style="overflow-y:auto;max-height:60vh"><div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Contact</div><div style="display:flex;flex-wrap:wrap;gap:8px">' + (c.phone ? '<a href="tel:' + c.phone + '" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--text);text-decoration:none">\u{1F4DE} ' + c.phone + "</a>" : "") + (c.whatsapp ? '<a href="https://wa.me/' + String(c.whatsapp || "").replace(/\D/g, "") + '" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BBF7D0;background:#F0FDF4;font-size:12px;font-weight:600;color:#16A34A;text-decoration:none">\u{1F4AC} WhatsApp</a>' : "") + (c.email ? '<a href="mailto:' + c.email + '" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BFDBFE;background:var(--blue-light);font-size:12px;font-weight:600;color:var(--blue);text-decoration:none">\u2709 ' + c.email + "</a>" : "") + (c.callOutCharge ? '<span style="padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--muted)">\u{1F4B7} \xA3' + c.callOutCharge + " call-out</span>" : "") + "</div>" + (c.notes ? '<div style="margin-top:10px;font-size:12px;color:var(--muted);background:var(--bg);padding:8px 12px;border-radius:8px">' + c.notes + "</div>" : "") + "</div>";
     if (invoices.length) {
       html += '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">';
       html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Invoices & Receipts</div>';
@@ -10555,7 +10685,7 @@
     var NL = "\n";
     var jobMsg = "\u{1F527} *JOB REQUEST \u2014 PropManager*" + NL + "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501" + NL + "*Issue:* " + m.issue + NL + "*Property:* " + m.property + NL + (prop && prop.address && prop.address !== m.property ? "*Address:* " + prop.address + NL : "") + (m.room ? "*Room:* " + m.room + NL : "") + (m.tenant ? "*Tenant:* " + m.tenant + NL : "") + "*Priority:* " + (m.priority || "Normal").toUpperCase() + NL + (m.notes ? NL + "*Details:* " + m.notes + NL : "") + (prop && prop.mapsUrl ? NL + "\u{1F4CD} " + prop.mapsUrl + NL : "") + "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501" + NL + "Please confirm if you can attend and your estimated arrival." + NL + "_Sent via PropManager_";
     var cRows = contractors.map(function(c) {
-      var waNum = c.whatsapp ? c.whatsapp.replace(/\D/g, "") : "";
+      var waNum = c.whatsapp ? String(c.whatsapp || "").replace(/\D/g, "") : "";
       var waHref = waNum ? "https://wa.me/" + waNum + "?text=" + encodeURIComponent(jobMsg) : "";
       var mailHref = c.email ? "mailto:" + c.email + "?subject=" + encodeURIComponent("[Job Request] " + m.issue + " \u2014 " + m.property) + "&body=" + encodeURIComponent(jobMsg) : "";
       var stars = c.rating ? "\u2605".repeat(c.rating) : "";
@@ -11009,6 +11139,8 @@
     window.refreshMaintRoomDropdown = refreshMaintRoomDropdown;
     window.refreshMaintTenantInfo = refreshMaintTenantInfo;
     window.previewMaintModalPhoto = previewMaintModalPhoto;
+    window._activeTenantRoomSet = _activeTenantRoomSet;
+    window._derivePropertyRoomsForTenantModal = _derivePropertyRoomsForTenantModal;
     window.openModal = openModal;
     window.closeModal = closeModal;
     window.debouncedTenantSearch = debouncedTenantSearch;
@@ -11107,6 +11239,9 @@
     window.clearSignature = clearSignature;
     window.saveRoomNotes = saveRoomNotes;
     window.removeRoomVideo = removeRoomVideo;
+    window._dmCleanDigits = _dmCleanDigits;
+    window._dmPlanCaps = _dmPlanCaps;
+    window._dmValidatePlanLimitBeforeImport = _dmValidatePlanLimitBeforeImport;
     window.openDataModal = openDataModal;
     window._renderDataModal = _renderDataModal;
     window._dmBrowse = _dmBrowse;
@@ -11146,6 +11281,8 @@
     window.toggleEmailTrigger = toggleEmailTrigger;
     window.previewEmailForTenant = previewEmailForTenant;
     window.getCompanyEmailContext = getCompanyEmailContext;
+    window.showStripeCheckoutLoading = showStripeCheckoutLoading;
+    window.hideStripeCheckoutLoading = hideStripeCheckoutLoading;
     window.maybeStartCheckoutFromQuery = maybeStartCheckoutFromQuery;
     window.renderSettings = renderSettings;
     window.uploadLogo = uploadLogo;

@@ -7,6 +7,49 @@ var _dmEntity = 'properties'; // current entity in modal
 var _dmPreview = null;        // parsed preview rows
 var _dmWarnings = [];
 
+function _dmCleanDigits(v) {
+  return String(v == null ? '' : v).replace(/\D/g, '');
+}
+
+function _dmPlanCaps(plan) {
+  var p = String(plan || 'free').toLowerCase();
+  return {
+    properties: p === 'business' ? 60 : p === 'professional' ? 25 : p === 'starter' ? 15 : p === 'trial' ? 5 : 3,
+    tenants: p === 'business' || p === 'professional' ? 2147483647 : p === 'starter' ? 75 : p === 'trial' ? 30 : 15
+  };
+}
+
+function _dmValidatePlanLimitBeforeImport(entity, rows) {
+  var caps = _dmPlanCaps(state && state._currentOrg ? state._currentOrg.plan : 'free');
+  if (entity === 'properties') {
+    var currentProps = (state.properties || []).filter(function(p){ return p && p.status !== 'archived'; }).length;
+    var newProps = rows.filter(function(r){
+      return !(state.properties || []).some(function(p){
+        return p && p.name && r.name && String(p.name).trim().toLowerCase() === String(r.name).trim().toLowerCase();
+      });
+    }).length;
+    if (currentProps + newProps > caps.properties) {
+      return 'Import blocked: ' + newProps + ' new properties would exceed your ' + String((state._currentOrg && state._currentOrg.plan) || 'free') + ' plan limit (' + caps.properties + ').';
+    }
+  }
+  if (entity === 'tenants') {
+    var currentTenants = (state.tenants || []).filter(function(t){ return t && (t.status || 'active') !== 'inactive'; }).length;
+    var newTenants = rows.filter(function(r){
+      return !(state.tenants || []).some(function(t){
+        return t && t.name && r.name
+          && String(t.name).trim().toLowerCase() === String(r.name).trim().toLowerCase()
+          && String(t.property || '') === String(r.property || '');
+      });
+    }).filter(function(r){
+      return String((r && r.status) || 'active').toLowerCase() !== 'inactive';
+    }).length;
+    if (currentTenants + newTenants > caps.tenants) {
+      return 'Import blocked: ' + newTenants + ' new active tenants would exceed your ' + String((state._currentOrg && state._currentOrg.plan) || 'free') + ' plan limit (' + caps.tenants + ').';
+    }
+  }
+  return '';
+}
+
 function openDataModal(entity) {
   _dmEntity = entity || 'properties';
   _dmPreview = null;
@@ -281,7 +324,7 @@ function _dmParseRows(data, entity) {
         rent: parseFloat(row['Weekly Rent (£)']||row['Rent']||row['rent']||0)||0,
         freq: (row['Frequency']||row['freq']||'weekly').toLowerCase().includes('month')?'monthly':'weekly',
         payDay: row['Payment Day']||row['Pay Day']||row['payDay']||'Monday',
-        whatsapp: row['WhatsApp']||row['Phone']||row['phone']||'',
+        whatsapp: _dmCleanDigits(row['WhatsApp']||row['Phone']||row['phone']||''),
         email: row['Email']||row['email']||'',
         status: (row['Status']||row['status']||'active').toLowerCase().includes('notice')?'notice_given':'active',
         moveIn: row['Move-In Date']||row['Move In']||row['moveIn']||'',
@@ -298,7 +341,7 @@ function _dmParseRows(data, entity) {
       if(!name) return;
       rows.push({
         name: name.trim(),
-        phone: row['Phone']||row['phone']||'',
+        phone: _dmCleanDigits(row['Phone']||row['phone']||''),
         email: row['Email']||row['email']||'',
         bank: row['Bank']||row['bank']||'',
         sortCode: row['Sort Code']||row['sortCode']||'',
@@ -333,6 +376,14 @@ async function _dmConfirmImport() {
   }
 
   var imported=0, skipped=0, total=rows.length;
+  var limitErr = _dmValidatePlanLimitBeforeImport(entity, rows);
+  if (limitErr) {
+    if(btn) btn.disabled=false;
+    if(progressWrap) progressWrap.style.display='none';
+    showToast(limitErr, 'error');
+    alert('⚠️ ' + limitErr);
+    return;
+  }
 
   if(entity==='properties') {
     if(!state.properties) state.properties=[];
@@ -368,7 +419,7 @@ async function _dmConfirmImport() {
       if(!exists) {
         state.tenants.push({
           id:crypto.randomUUID(), name:r.name, property:r.property, room:r.room,
-          rent:r.rent, freq:r.freq, payDay:r.payDay, whatsapp:r.whatsapp, email:r.email,
+          rent:r.rent, freq:r.freq, payDay:r.payDay, whatsapp:_dmCleanDigits(r.whatsapp), email:r.email,
           status:r.status, startDate:r.moveIn||null, moveIn:r.moveIn||null,
           deposit:r.deposit||0, depositStatus:'held', method:r.method, arrears:0, paid:'—', paymentHistory:[]
         });
@@ -385,7 +436,7 @@ async function _dmConfirmImport() {
       var r=rows[i];
       var exists = state.landlords.find(function(l){return l.name&&r.name&&l.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
       if(!exists) {
-        state.landlords.push({id:crypto.randomUUID(),name:r.name,phone:r.phone,email:r.email,bank:r.bank,sortCode:r.sortCode,accountNo:r.accountNo,notes:r.notes,properties:[]});
+        state.landlords.push({id:crypto.randomUUID(),name:r.name,phone:_dmCleanDigits(r.phone),email:r.email,bank:r.bank,sortCode:r.sortCode,accountNo:r.accountNo,notes:r.notes,properties:[]});
         imported++;
       } else { skipped++; }
       if(i%5===4 || i===rows.length-1) {

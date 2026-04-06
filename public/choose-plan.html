@@ -81,9 +81,40 @@
       setMessage('Saving plan...');
       const current = await supa.auth.getUser();
       const existingData = (current && current.data && current.data.user && current.data.user.user_metadata) || {};
+      const userEmail = String((current && current.data && current.data.user && current.data.user.email) || '').trim();
+      const fullName = String((existingData && existingData.full_name) || '').trim();
+      const firstName = fullName ? (fullName.split(/\s+/)[0] || 'there') : (userEmail ? (userEmail.split('@')[0] || 'there') : 'there');
       const newData = Object.assign({}, existingData, { selected_plan: selectedPlan });
       const upd = await supa.auth.updateUser({ data: newData });
       if(upd && upd.error){ setMessage('Could not save plan: ' + upd.error.message); return; }
+
+      // Send welcome only after user explicitly chooses a plan.
+      try {
+        if (userEmail) {
+          const isPaid = selectedPlan === 'starter' || selectedPlan === 'professional' || selectedPlan === 'business';
+          const trialEnd = isPaid
+            ? new Date(Date.now() + 14 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+            : 'N/A';
+          const planLabel = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1);
+          await fetch('/api/email/auth-lifecycle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              templateId: 'welcome_signup',
+              to: userEmail,
+              vars: {
+                first_name: firstName,
+                email: userEmail,
+                plan_name: planLabel,
+                trial_end_date: trialEnd
+              }
+            })
+          });
+        }
+      } catch (_welcomeErr) {
+        // Do not block onboarding if welcome email provider is unavailable.
+      }
+
       if(selectedPlan === 'free'){
         window.location.href = 'index.html';
         return;

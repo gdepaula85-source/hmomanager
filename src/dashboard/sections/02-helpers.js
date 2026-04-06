@@ -34,7 +34,7 @@ function btn(label, onclick, variant='primary', sm=false) {
 }
 
 function waLink(number, message='') {
-  const clean = number.replace(/\D/g,'');
+  const clean = String(number || '').replace(/\D/g,'');
   const msg = encodeURIComponent(message);
   return `https://wa.me/${clean}${msg?'?text='+msg:''}`;
 }

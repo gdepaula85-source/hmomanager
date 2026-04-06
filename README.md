@@ -25,7 +25,7 @@ Express serves the static PropManager UI and a small **AI proxy** (`POST /api/ai
 
 ## Email (two tiers)
 
-1. **Platform / auth** — Sign-up, password reset, and magic links are handled by **Supabase Auth** (configure [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) in the Supabase dashboard if you want emails to go through Resend or your Hostinger mailbox). Subscription/receipt emails typically come from **Stripe** (or your billing provider) if you use it.
+1. **Platform / auth** — App-level lifecycle emails are sent by this Node server (`POST /api/email/auth-lifecycle`) using Resend templates (welcome, verification/reset copy, trial reminders, subscription confirmed, payment failed, monthly portfolio report). Password reset requests use `POST /api/auth/request-password-reset` to generate a secure Supabase recovery link and send the app template.
 
 2. **Org / tenant-facing** — Rent reminders, weekly/monthly reports, and other actions from **Settings → Email** use **`POST /api/email/send`** on this Node server. Messages are sent **From** `noreply@landlordapp.io` (or `MAIL_FROM`) with **Reply-To** set to the organisation’s `billing_email` or `owner_email` (see `organisations` table). No per-client API keys in the browser.
 
@@ -35,7 +35,7 @@ Express serves the static PropManager UI and a small **AI proxy** (`POST /api/ai
 
 **Resend “senders”:** After the domain is verified, you do **not** need a separate “Add sender” action in Resend. You may send from any address on that domain, for example `noreply@landlordapp.io`, `billing@landlordapp.io`, or `support@landlordapp.io`, by setting `MAIL_FROM` (default is `LandlordApp <noreply@landlordapp.io>`). The app uses Resend’s REST API from [`server.js`](server.js) (`POST https://api.resend.com/emails`), which is equivalent to the official `resend` Node SDK.
 
-**Scheduled automation** (weekly/monthly without clicking the button) is not implemented yet; use an external cron or Supabase `pg_cron` later to call a secured endpoint or queue jobs.
+**Scheduled automation** for lifecycle emails is available via `POST /api/email/run-lifecycle-jobs` (secured with `LIFECYCLE_EMAIL_CRON_SECRET`). Use external cron or Supabase `pg_cron` to call it daily.
 
 ## Dashboard scripts
 

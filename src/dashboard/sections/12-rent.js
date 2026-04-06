@@ -122,7 +122,7 @@ function renderRentRow(p) {
     : '&#x1F4C5; Due '+dueDateStr;
 
   var waBase = tenant&&tenant.whatsapp
-    ? 'https://wa.me/'+tenant.whatsapp.replace(/\D/g,'')+'?text=' : '';
+    ? 'https://wa.me/'+String(tenant.whatsapp||'').replace(/\D/g,'')+'?text=' : '';
   var waMsg = encodeURIComponent(
     'Hi '+((p.tenant||'Tenant').split(' ')[0])+', your rent of \u00A3'+(p.amount||0)+
     ' is '+(dueStatus==='overdue'?'overdue. Please pay urgently':'due '+dueDateStr+'. Please arrange payment.')+
@@ -284,7 +284,7 @@ function bulkChaseOverdue(mode) {
     if(mode==='today')   return 'Hi '+fn+', your rent of '+amt+' is due today. Please ensure payment is made. Thank you — Reservations Direct.';
     return 'Hi '+fn+', a rent payment of '+amt+' is outstanding. Please arrange payment at your earliest convenience. Thank you — Reservations Direct.';
   }
-  var allLinks=items.map(function(item){return 'https://wa.me/'+item.t.whatsapp+'?text='+encodeURIComponent(buildMsg(item));});
+  var allLinks=items.map(function(item){return 'https://wa.me/'+String(item.t.whatsapp||'').replace(/\D/g,'')+'?text='+encodeURIComponent(buildMsg(item));});
   window._bulkSendAll=function(){allLinks.forEach(function(u){window.open(u,'_blank');});};
 
   var html='<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
@@ -306,7 +306,7 @@ function bulkChaseOverdue(mode) {
       +'<button onclick="_bulkSendAll()" style="padding:7px 14px;border-radius:8px;border:none;background:#25D366;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#x1F4AC; Send All ('+items.length+')</button>'
       +'</div><div style="max-height:50vh;overflow-y:auto">';
     items.forEach(function(item){
-      var waHref='https://wa.me/'+item.t.whatsapp+'?text='+encodeURIComponent(buildMsg(item));
+      var waHref='https://wa.me/'+String(item.t.whatsapp||'').replace(/\D/g,'')+'?text='+encodeURIComponent(buildMsg(item));
       html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border)">'
         +'<div><div style="font-size:13px;font-weight:700">'+item.t.name+'</div>'
         +'<div style="font-size:11px;color:var(--muted)">'+item.t.property+(item.t.room?' · Rm '+item.t.room:'')+' · £'+item.total+'</div></div>'

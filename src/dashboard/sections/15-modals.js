@@ -192,10 +192,60 @@ function previewMaintModalPhoto(input) {
   reader.readAsDataURL(file);
 }
 
+function _activeTenantRoomSet(propName) {
+  var set = new Set();
+  (state.tenants || []).forEach(function(t) {
+    if (t && t.property === propName && t.status !== 'inactive') {
+      set.add(+t.room || 1);
+    }
+  });
+  return set;
+}
+
+function _derivePropertyRoomsForTenantModal(p) {
+  var rooms = [];
+  if (Array.isArray(p && p.roomList) && p.roomList.length) {
+    rooms = p.roomList.map(function(r) {
+      return {
+        n: +r.n || 1,
+        type: r.type || 'Room',
+        price: +r.price || 0,
+        status: String(r.status || '').toLowerCase()
+      };
+    });
+  } else {
+    var count = Math.max(0, +((p && p.rooms) || 0));
+    if (count > 0) {
+      var weeklyHint = count > 0 && p && p.rent ? Math.round((+p.rent * 12 / 52) / count) : 0;
+      for (var i = 1; i <= count; i++) {
+        rooms.push({ n: i, type: 'Room', price: weeklyHint, status: '' });
+      }
+    }
+  }
+  return rooms.sort(function(a, b) { return a.n - b.n; });
+}
+
 function openModal(type) {
-  const propOpts = state.properties
-    .filter(p=>(p.roomList||[]).some(r=>r.status==='vacant'))
-    .map(p=>{const vac=(p.roomList||[]).filter(r=>r.status==='vacant').length;return `<option value="${p.name}">${p.name} (${vac} room${vac===1?'':'s'} free)</option>`;})
+  const propOpts = (state.properties || [])
+    .map(function(p) {
+      var isWhole = (p.lettingType || 'hmo') === 'whole';
+      if (isWhole) {
+        var hasActive = (state.tenants || []).some(function(t) {
+          return t && t.property === p.name && t.status !== 'inactive';
+        });
+        return '<option value="' + p.name + '">' + p.name + ' (' + (hasActive ? 'occupied' : 'available') + ')</option>';
+      }
+      var rooms = _derivePropertyRoomsForTenantModal(p);
+      var occupiedByTenant = _activeTenantRoomSet(p.name);
+      var vacant = rooms.filter(function(r) {
+        var explicitlyOccupied = r.status === 'occupied';
+        return !occupiedByTenant.has(r.n) && !explicitlyOccupied;
+      }).length;
+      if (!rooms.length) {
+        return '<option value="' + p.name + '">' + p.name + ' (no rooms set up)</option>';
+      }
+      return '<option value="' + p.name + '">' + p.name + ' (' + vacant + ' room' + (vacant === 1 ? '' : 's') + ' free)</option>';
+    })
     .join('');
   const modals = {
     addProp:`
@@ -656,13 +706,18 @@ function refreshRoomDropdown() {
   // HMO — show vacant rooms
   if(roomWrap) roomWrap.style.display = '';
   if(typeWrap) typeWrap.style.display = '';
-  if(!p.roomList) {
+  var rooms = _derivePropertyRoomsForTenantModal(p);
+  if(!rooms.length) {
     var opt = document.createElement('option');
     opt.value = ''; opt.textContent = 'No rooms set up';
     roomSel.appendChild(opt);
     return;
   }
-  var vacRooms = p.roomList.filter(function(r){ return r.status === 'vacant'; });
+  var occupiedByTenant = _activeTenantRoomSet(propName);
+  var vacRooms = rooms.filter(function(r){
+    var explicitlyOccupied = String(r.status || '').toLowerCase() === 'occupied';
+    return !occupiedByTenant.has(r.n) && !explicitlyOccupied;
+  });
   if(!vacRooms.length) {
     var opt = document.createElement('option');
     opt.value = ''; opt.textContent = 'No vacant rooms';

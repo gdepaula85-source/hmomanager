@@ -2,6 +2,16 @@
 function confirmImportProperties() {
   var rows = _importPreview.rows;
   var imported = 0, skipped = 0;
+  var plan = String((state._currentOrg && state._currentOrg.plan) || 'free').toLowerCase();
+  var propCap = plan==='business'?60:plan==='professional'?25:plan==='starter'?15:plan==='trial'?5:3;
+  var currentProps = (state.properties||[]).filter(function(p){ return p && p.status!=='archived'; }).length;
+  var incomingProps = rows.filter(function(r){
+    return !(state.properties||[]).some(function(p){ return p.name&&r.name&&p.name.trim().toLowerCase()===r.name.trim().toLowerCase(); });
+  }).length;
+  if(currentProps + incomingProps > propCap){
+    alert('⚠️ Import blocked: records are exceeding your plan limit. This import adds '+incomingProps+' new properties but your '+plan+' plan allows up to '+propCap+'.');
+    return;
+  }
 
   rows.forEach(function(r) {
     var exists = state.properties.some(function(p){return p.name.trim().toLowerCase()===r.name.trim().toLowerCase();});
@@ -45,6 +55,17 @@ function confirmImportProperties() {
 function confirmImportTenants() {
   var rows = _importPreview.rows;
   var imported = 0, skipped = 0;
+  var plan = String((state._currentOrg && state._currentOrg.plan) || 'free').toLowerCase();
+  var tenantCap = (plan==='business'||plan==='professional') ? 2147483647 : plan==='starter'?75:plan==='trial'?30:15;
+  var currentActive = (state.tenants||[]).filter(function(t){ return t && (t.status||'active')!=='inactive'; }).length;
+  var incomingActive = rows.filter(function(r){
+    var exists=(state.tenants||[]).some(function(t){return t.name&&r.name&&t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.whatsapp===r.whatsapp;});
+    return !exists && String((r&&r.status)||'active').toLowerCase()!=='inactive';
+  }).length;
+  if(currentActive + incomingActive > tenantCap){
+    alert('⚠️ Import blocked: records are exceeding your plan limit. This import adds '+incomingActive+' active tenants but your '+plan+' plan allows up to '+tenantCap+'.');
+    return;
+  }
 
   rows.forEach(function(r) {
     var exists = state.tenants.some(function(t){return t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.whatsapp===r.whatsapp;});
@@ -57,7 +78,7 @@ function confirmImportTenants() {
       payDay: r.freq==='weekly'?'Monday':null,
       payDayOfMonth: r.freq==='monthly'?1:null,
       method:'bank', status:r.status,
-      paid:'—', arrears:0, whatsapp:r.whatsapp,
+      paid:'—', arrears:0, whatsapp:String(r.whatsapp||'').replace(/\D/g,''),
       email:r.email, deposit:r.rent*2, depositStatus:'held',
       moveIn:r.startDate, startDate:r.startDate,
       noticeDate:null, moveOutDate:null, paymentHistory:[]

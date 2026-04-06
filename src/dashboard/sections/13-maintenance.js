@@ -35,7 +35,7 @@ function renderMaintenance() {
             };
             const tc = tradeColors[c.trade] || 'var(--muted)';
             const tbg= tradeColors[c.trade+'-bg'] || 'var(--bg)';
-            const waHref = c.whatsapp ? `https://wa.me/${c.whatsapp.replace(/\D/g,'')}` : '';
+            const waHref = c.whatsapp ? `https://wa.me/${String(c.whatsapp||'').replace(/\D/g,'')}` : '';
             const mailHref = c.email ? `mailto:${c.email}` : '';
             const stars = c.rating ? '★'.repeat(c.rating)+'☆'.repeat(5-c.rating) : '';
             return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px">

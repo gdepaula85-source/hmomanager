@@ -30,7 +30,7 @@ function sendToContractorModal(maintId) {
     +'_Sent via PropManager_';
 
   var cRows = contractors.map(function(c) {
-    var waNum = c.whatsapp ? c.whatsapp.replace(/\D/g,'') : '';
+    var waNum = c.whatsapp ? String(c.whatsapp||'').replace(/\D/g,'') : '';
     var waHref = waNum ? 'https://wa.me/'+waNum+'?text='+encodeURIComponent(jobMsg) : '';
     var mailHref = c.email ? 'mailto:'+c.email
       +'?subject='+encodeURIComponent('[Job Request] '+m.issue+' — '+m.property)

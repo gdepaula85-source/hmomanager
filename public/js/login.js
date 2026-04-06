@@ -124,9 +124,23 @@ async function handleReset(e) {
   const email = document.getElementById('reset-email').value.trim();
   if(!email) { showMsg('Please enter your email address.', 'error'); return; }
   setLoading('reset', true);
-  const { error } = await supa.auth.resetPasswordForEmail(email, {
-    redirectTo: window.ENV.WORKER_URL || window.location.origin + '/index.html'
-  });
+  var error = null;
+  try {
+    const resp = await fetch('/api/auth/request-password-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email,
+        redirectTo: window.ENV.WORKER_URL || window.location.origin + '/index.html'
+      })
+    });
+    if(!resp.ok){
+      const data = await resp.json().catch(function(){ return {}; });
+      error = { message: (data && data.error) || 'Could not send reset email' };
+    }
+  } catch (e2) {
+    error = { message: e2 && e2.message ? e2.message : 'Could not send reset email' };
+  }
   setLoading('reset', false);
   if(error) { showMsg(friendlyError(error.message), 'error'); return; }
   document.getElementById('reset-form').style.display    = 'none';

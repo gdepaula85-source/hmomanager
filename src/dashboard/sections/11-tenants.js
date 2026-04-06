@@ -168,8 +168,8 @@ function renderTenants() {
             ${t.whatsapp
               ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
                   ${t.arrears>0
-                    ? `<a href="https://wa.me/${t.whatsapp.replace(/\D/g,'')}?text=${arrMsg}" target="_blank" class="wa-btn" style="background:#FEF0F3;color:var(--red);border-color:#FECDD3">💬 Chase</a>`
-                    : `<a href="https://wa.me/${t.whatsapp.replace(/\D/g,'')}?text=${rentMsg}" target="_blank" class="wa-btn">💬 Message</a>`
+                    ? `<a href="https://wa.me/${String(t.whatsapp||'').replace(/\D/g,'')}?text=${arrMsg}" target="_blank" class="wa-btn" style="background:#FEF0F3;color:var(--red);border-color:#FECDD3">💬 Chase</a>`
+                    : `<a href="https://wa.me/${String(t.whatsapp||'').replace(/\D/g,'')}?text=${rentMsg}" target="_blank" class="wa-btn">💬 Message</a>`
                   }
                 </div>`
               : '<span style="font-size:11px;color:var(--dim)">No WhatsApp</span>'}

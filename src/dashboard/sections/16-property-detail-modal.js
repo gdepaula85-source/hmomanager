@@ -178,7 +178,7 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
     +hist.map(function(h){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px"><div><div style="font-size:13px;font-weight:600">'+fmt(h.amount)+'</div><div style="font-size:11px;color:var(--muted)">'+h.date+'</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--muted)">'+(h.method==='bank'?'🏦 Bank':'💵 Cash')+'</span><span style="font-size:11px;font-weight:700;color:'+(h.status==='paid'?'var(--green)':'var(--red)')+'">'+h.status+'</span></div></div>';}).join('')
     +'</div>';
 
-  var waBase=t.whatsapp?'https://wa.me/'+t.whatsapp.replace(/\D/g,'')+'?text=':'';
+  var waBase=t.whatsapp?'https://wa.me/'+String(t.whatsapp||'').replace(/\D/g,'')+'?text=':'';
   var firstName=t.name.split(' ')[0];
   var actionsTab='<div style="display:flex;flex-direction:column;gap:12px">';
   if(waBase){
@@ -187,7 +187,7 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
       +'<div style="display:flex;flex-direction:column;gap:6px">'
       +'<a href="'+waBase+encodeURIComponent('Hi '+firstName+', your rent of £'+t.rent+' is due. Please arrange payment. Thank you.')+'" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">💬</span><div><div style="font-size:13px;font-weight:600">Rent Reminder</div><div style="font-size:11px;color:var(--muted)">Gentle reminder about upcoming rent</div></div></a>'
       +(t.arrears>0?'<a href="'+waBase+encodeURIComponent('Hi '+firstName+', you have arrears of £'+t.arrears+'. Please contact us urgently.')+'" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #FECDD3;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">⚠️</span><div><div style="font-size:13px;font-weight:600">Chase Arrears</div><div style="font-size:11px;color:var(--muted)">£'+t.arrears+' outstanding</div></div></a>':'')
-      +'<a href="'+waBase+waBase.split('?')[0].replace('https://wa.me/'+t.whatsapp.replace(/\D/g,'')+'?text=','')+'" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">💬</span><div><div style="font-size:13px;font-weight:600">Open Chat</div><div style="font-size:11px;color:var(--muted)">Open WhatsApp directly</div></div></a>'
+      +'<a href="'+waBase.split('?')[0]+'" target="_blank" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:1px solid #BBF7D0;border-radius:9px;text-decoration:none;color:var(--text)"><span style="font-size:18px">💬</span><div><div style="font-size:13px;font-weight:600">Open Chat</div><div style="font-size:11px;color:var(--muted)">Open WhatsApp directly</div></div></a>'
       +'</div></div>';
   }
   actionsTab+='<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:12px;padding:16px">'

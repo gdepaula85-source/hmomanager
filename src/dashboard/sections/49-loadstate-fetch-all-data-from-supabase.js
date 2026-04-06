@@ -1228,7 +1228,7 @@ function openContractorProfile(id) {
     +'<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Contact</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
     +(c.phone?'<a href="tel:'+c.phone+'" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--text);text-decoration:none">📞 '+c.phone+'</a>':'')
-    +(c.whatsapp?'<a href="https://wa.me/'+c.whatsapp.replace(/\D/g,'')+'" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BBF7D0;background:#F0FDF4;font-size:12px;font-weight:600;color:#16A34A;text-decoration:none">💬 WhatsApp</a>':'')
+    +(c.whatsapp?'<a href="https://wa.me/'+String(c.whatsapp||'').replace(/\D/g,'')+'" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BBF7D0;background:#F0FDF4;font-size:12px;font-weight:600;color:#16A34A;text-decoration:none">💬 WhatsApp</a>':'')
     +(c.email?'<a href="mailto:'+c.email+'" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:9px;border:1px solid #BFDBFE;background:var(--blue-light);font-size:12px;font-weight:600;color:var(--blue);text-decoration:none">✉ '+c.email+'</a>':'')
     +(c.callOutCharge?'<span style="padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--muted)">💷 £'+c.callOutCharge+' call-out</span>':'')
     +'</div>'+(c.notes?'<div style="margin-top:10px;font-size:12px;color:var(--muted);background:var(--bg);padding:8px 12px;border-radius:8px">'+c.notes+'</div>':'')
