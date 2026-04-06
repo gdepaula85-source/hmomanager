@@ -518,6 +518,42 @@ async function startStripeCheckout(plan){
   }
 }
 
+function showStripeCheckoutLoading(message){
+  var overlay = document.getElementById('stripe-checkout-loading');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'stripe-checkout-loading';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '100000';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.background = 'rgba(11,13,18,0.96)';
+    overlay.style.backdropFilter = 'blur(2px)';
+    overlay.innerHTML = ''
+      + '<div style="display:flex;flex-direction:column;align-items:center;gap:14px;color:#fff;font-family:system-ui,sans-serif">'
+      + '  <div style="width:38px;height:38px;border-radius:999px;border:3px solid rgba(255,255,255,.2);border-top-color:#00D897;animation:pmStripeSpin 0.8s linear infinite"></div>'
+      + '  <div id="stripe-checkout-loading-msg" style="font-size:14px;font-weight:600;color:#D6DBEB">Preparing secure checkout…</div>'
+      + '</div>';
+    if (!document.getElementById('pm-stripe-spin-style')) {
+      var style = document.createElement('style');
+      style.id = 'pm-stripe-spin-style';
+      style.textContent = '@keyframes pmStripeSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+      document.head.appendChild(style);
+    }
+    document.body.appendChild(overlay);
+  }
+  var msg = document.getElementById('stripe-checkout-loading-msg');
+  if (msg) msg.textContent = message || 'Preparing secure checkout…';
+  overlay.style.display = 'flex';
+}
+
+function hideStripeCheckoutLoading(){
+  var overlay = document.getElementById('stripe-checkout-loading');
+  if (overlay) overlay.style.display = 'none';
+}
+
 async function openStripeBillingPortal(){
   if(!_currentOrgId){ showToast && showToast('No organisation loaded', 'error'); return; }
   var sr = await supa.auth.getSession();
@@ -546,6 +582,26 @@ async function openStripeBillingPortal(){
 function maybeStartCheckoutFromQuery(){
   try{
     var params = new URLSearchParams(window.location.search || '');
+    var startCheckoutPlan = String(params.get('startCheckout') || '').toLowerCase();
+    if (startCheckoutPlan === 'starter' || startCheckoutPlan === 'professional' || startCheckoutPlan === 'business') {
+      var activeSubId = String((state._currentOrg && state._currentOrg.stripe_subscription_id) || '').trim();
+      if (!activeSubId) {
+        showStripeCheckoutLoading('Preparing secure checkout…');
+        startStripeCheckout(startCheckoutPlan, { clearStartCheckoutParam: true }).then(function(ok){
+          if (!ok) {
+            hideStripeCheckoutLoading();
+            showCheckoutRequired(state._currentOrg || { plan: startCheckoutPlan });
+          }
+        }).catch(function(){
+          hideStripeCheckoutLoading();
+          showCheckoutRequired(state._currentOrg || { plan: startCheckoutPlan });
+        });
+        return;
+      }
+      params.delete('startCheckout');
+      var startCheckoutNext = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
+      window.history.replaceState({}, '', startCheckoutNext);
+    }
     var stripeResult = String(params.get('stripe') || '').toLowerCase();
     if (stripeResult === 'success') {
       showToast && showToast('Payment confirmed. Finalising your subscription…', 'success');
