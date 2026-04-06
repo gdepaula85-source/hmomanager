@@ -2,9 +2,12 @@
 function confirmImportProperties() {
   var rows = _importPreview.rows;
   var imported = 0, skipped = 0;
-  var plan = String((state._currentOrg && state._currentOrg.plan) || 'free').toLowerCase();
-  var propCap = plan==='business'?60:plan==='professional'?25:plan==='starter'?15:plan==='trial'?5:3;
-  var currentProps = (state.properties||[]).filter(function(p){ return p && p.status!=='archived'; }).length;
+  var org0 = state._currentOrg;
+  if (org0 && Array.isArray(org0)) org0 = org0[0];
+  var cfg = state.config || {};
+  var plan = typeof _dmEffectiveOrgPlanKey === 'function' ? _dmEffectiveOrgPlanKey(org0, cfg) : String((org0 && org0.plan) || 'free').toLowerCase();
+  var propCap = typeof _dmPlanCaps === 'function' ? _dmPlanCaps(plan, org0).properties : 3;
+  var currentProps = (state.properties||[]).filter(function(p){ return p && isPropertyActive(p); }).length;
   var incomingProps = rows.filter(function(r){
     return !(state.properties||[]).some(function(p){ return p.name&&r.name&&p.name.trim().toLowerCase()===r.name.trim().toLowerCase(); });
   }).length;
@@ -55,8 +58,11 @@ function confirmImportProperties() {
 function confirmImportTenants() {
   var rows = _importPreview.rows;
   var imported = 0, skipped = 0;
-  var plan = String((state._currentOrg && state._currentOrg.plan) || 'free').toLowerCase();
-  var tenantCap = (plan==='business'||plan==='professional') ? 2147483647 : plan==='starter'?75:plan==='trial'?30:15;
+  var org0 = state._currentOrg;
+  if (org0 && Array.isArray(org0)) org0 = org0[0];
+  var cfg = state.config || {};
+  var plan = typeof _dmEffectiveOrgPlanKey === 'function' ? _dmEffectiveOrgPlanKey(org0, cfg) : String((org0 && org0.plan) || 'free').toLowerCase();
+  var tenantCap = typeof _dmPlanCaps === 'function' ? _dmPlanCaps(plan, org0).tenants : 15;
   var currentActive = (state.tenants||[]).filter(function(t){ return t && (t.status||'active')!=='inactive'; }).length;
   var incomingActive = rows.filter(function(r){
     var exists=(state.tenants||[]).some(function(t){return t.name&&r.name&&t.name.trim().toLowerCase()===r.name.trim().toLowerCase()&&t.whatsapp===r.whatsapp;});

@@ -21,6 +21,8 @@ create table public.properties (
   bedrooms integer null,
   mortgage jsonb null,
   purchase_info jsonb null,
+  status text null default 'active'::text,
+  archived_at date null,
   org_id uuid null,
   constraint properties_pkey primary key (id),
   constraint properties_landlord_id_fkey foreign KEY (landlord_id) references landlords (id),

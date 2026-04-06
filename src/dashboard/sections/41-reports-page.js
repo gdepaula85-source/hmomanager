@@ -5,7 +5,8 @@ function renderReports() {
   var selYear = state.filters.reportYear || new Date().getFullYear();
 
   // Filter properties by company
-  var props = selCo ? state.properties.filter(function(p){return p.companyId===selCo;}) : state.properties;
+  var props0 = selCo ? state.properties.filter(function(p){return p.companyId===selCo;}) : state.properties;
+  var props = props0.filter(isPropertyActive);
   var propNames = props.map(function(p){return p.name;});
   var tenants = state.tenants.filter(function(t){return t.status!=='inactive'&&propNames.indexOf(t.property)>=0;});
   var payments = state.payments.filter(function(p){return propNames.indexOf(p.property||p.propertyName||'')>=0||propNames.indexOf(p.propertyName||'')>=0;});

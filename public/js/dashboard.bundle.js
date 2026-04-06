@@ -33,7 +33,8 @@
       roomSort: "price_asc"
     },
     rentSchedule: [],
-    dashMonth: "2026-03",
+    /** Resolved in renderDashboard to current month (see ensureDashboardMonth). */
+    dashMonth: "",
     propDetailTab: null,
     tenantDetailTab: null,
     roomMedia: {},
@@ -121,6 +122,61 @@
   })();
   var fmt = (n) => "\xA3" + Math.round(Number(n) || 0).toLocaleString("en-GB");
   var pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  function roomNumsEqual(a, b) {
+    return Number(a) === Number(b);
+  }
+  function normalizeTenantRoomTypeKey(raw) {
+    var CANON = ["Single", "Double", "Suite", "Studio", "Whole House"];
+    if (raw == null || raw === "") return "Single";
+    var s = String(raw).trim();
+    s = s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\uFE0F]/gu, "").replace(/\s+/g, " ").trim();
+    if (!s) return "Single";
+    var lower = s.toLowerCase();
+    var byLower = {
+      room: "Single",
+      single: "Single",
+      double: "Double",
+      suite: "Suite",
+      studio: "Studio",
+      "whole property": "Whole House",
+      "whole house": "Whole House"
+    };
+    if (byLower[lower]) return byLower[lower];
+    var w0 = lower.split(/\s+/)[0];
+    if (byLower[w0]) return byLower[w0];
+    var map = {
+      Room: "Single",
+      Single: "Single",
+      Double: "Double",
+      Suite: "Suite",
+      Studio: "Studio",
+      "Whole Property": "Whole House",
+      "Whole House": "Whole House"
+    };
+    if (map[s]) return map[s];
+    if (CANON.indexOf(s) >= 0) return s;
+    return "Single";
+  }
+  function isPaidStatus(v) {
+    return String(v || "").toLowerCase() === "paid";
+  }
+  function isPropertyActive(p) {
+    return !!(p && p.status !== "archived");
+  }
+  function tenantOnLiveProperty(t) {
+    if (!t || !t.property) return false;
+    var pr = (state.properties || []).find(function(p) {
+      return p.name === t.property;
+    });
+    return !pr || pr.status !== "archived";
+  }
+  function propertyLinkedToLandlord(p, ll) {
+    if (!p || !ll) return false;
+    if (ll.id != null && p.landlordId != null && String(p.landlordId) === String(ll.id)) return true;
+    var a = String(p.landlordName || "").trim().toLowerCase();
+    var b = String(ll.name || "").trim().toLowerCase();
+    return a !== "" && b !== "" && a === b;
+  }
   var net = (p) => p.rent - p.landlord;
   var BADGE_COLORS = {
     active: ["#10B981", "#ECFDF5"],
@@ -169,11 +225,12 @@
     return `<a href="${waLink(number, message)}" target="_blank" class="wa-btn">\u{1F4AC} ${label}</a>`;
   }
   function getStats() {
-    const income = state.properties.reduce((s, p) => s + p.rent, 0);
-    const landlord = state.properties.reduce((s, p) => s + p.landlord, 0);
+    const props = (state.properties || []).filter(isPropertyActive);
+    const income = props.reduce((s, p) => s + p.rent, 0);
+    const landlord = props.reduce((s, p) => s + p.landlord, 0);
     const opex = state.expenses.reduce((s, e) => s + e.amount, 0);
-    const rooms = state.properties.reduce((s, p) => s + p.rooms, 0);
-    const occ = state.properties.reduce((s, p) => s + p.occupied, 0);
+    const rooms = props.reduce((s, p) => s + p.rooms, 0);
+    const occ = props.reduce((s, p) => s + p.occupied, 0);
     const paid = state.payments.filter((p) => p.status === "paid");
     const owed = state.payments.filter((p) => p.status === "outstanding");
     const openM = state.maintenance.filter((m) => m.status !== "resolved");
@@ -624,6 +681,10 @@
     };
   }
   function rowToProp(r) {
+    var rawSt = r.status != null ? String(r.status).trim().toLowerCase() : "";
+    var st = rawSt === "archived" ? "archived" : "active";
+    var arch = r.archived_at;
+    var archivedDate = arch ? typeof arch === "string" ? arch.split("T")[0] : "" : null;
     return {
       id: r.id,
       name: r.name || "",
@@ -645,7 +706,9 @@
       lettingType: r.letting_type || "hmo",
       bedrooms: r.bedrooms || null,
       mortgage: r.mortgage || null,
-      purchaseInfo: r.purchase_info || null
+      purchaseInfo: r.purchase_info || null,
+      status: st,
+      archivedDate: archivedDate || void 0
     };
   }
   function rowToTenant(r) {
@@ -822,6 +885,7 @@
     };
   }
   function propToRow(p) {
+    var isArch = p.status === "archived";
     return {
       id: p.id,
       name: p.name || "",
@@ -843,7 +907,9 @@
       letting_type: p.lettingType || "hmo",
       bedrooms: p.bedrooms || null,
       mortgage: p.mortgage || null,
-      purchase_info: p.purchaseInfo || null
+      purchase_info: p.purchaseInfo || null,
+      status: isArch ? "archived" : "active",
+      archived_at: isArch && (p.archivedDate || null) ? String(p.archivedDate).split("T")[0] : null
     };
   }
   function tenantToRow(t) {
@@ -977,8 +1043,8 @@
   function renderNav() {
     const s = getStats();
     const badges = { rent: s.owed.length, maintenance: s.openM.filter((m) => m.priority === "urgent").length };
-    const rooms = state.properties.reduce((a, p) => a + p.rooms, 0);
-    const occ = state.properties.reduce((a, p) => a + p.occupied, 0);
+    const rooms = s.rooms;
+    const occ = s.occ;
     const op = pct(occ, rooms);
     const visibleNav = NAV.filter((n) => canSee(n.id));
     document.getElementById("sb-nav").innerHTML = visibleNav.map((n) => `
@@ -1121,31 +1187,77 @@
       document.getElementById("content").innerHTML = '<div style="padding:40px;text-align:center;color:var(--red)"><div style="font-size:24px">\u26A0\uFE0F</div><div style="font-weight:700;margin:8px 0">Page error</div><div style="font-size:12px;color:var(--muted)">' + e.message + '</div><button onclick="render()" style="margin-top:16px;padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-family:inherit">Retry</button></div>';
     }
   }
+  function _paymentCalendarDateForCollected(p) {
+    if (!p) return /* @__PURE__ */ new Date(0);
+    if (p._paidDateRaw) return new Date(p._paidDateRaw);
+    var months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+    var pd = p.paidDate || p.date;
+    if (pd && typeof pd === "string") {
+      var parts = String(pd).trim().split(/\s+/);
+      if (parts.length === 3 && months[parts[1]] !== void 0) {
+        var d = new Date(+parts[2], months[parts[1]], +parts[0]);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+    if (p._dueDateRaw) return new Date(p._dueDateRaw);
+    if (p.dueDate) {
+      var iso = String(p.dueDate).split("T")[0].split("-");
+      if (iso.length === 3) return new Date(+iso[0], +iso[1] - 1, +iso[2]);
+    }
+    return typeof getDueDateObj === "function" ? getDueDateObj(p) : /* @__PURE__ */ new Date();
+  }
+  function ensureDashboardMonth() {
+    if (!MONTHS || !MONTHS.length) return;
+    var keys = MONTHS.map(function(m) {
+      return m.key;
+    });
+    if (!state.dashMonth || keys.indexOf(state.dashMonth) < 0) {
+      state.dashMonth = keys[keys.length - 1];
+    }
+  }
   function getMonthStats(monthKey) {
     var mo = MONTHS.find(function(m) {
       return m.key === monthKey;
     });
     if (!mo) return null;
+    var dashCo = state.filters && state.filters.dashCompany || "";
+    var dashProps = (dashCo ? state.properties.filter(function(p) {
+      return p.companyId === dashCo;
+    }) : state.properties.slice()).filter(isPropertyActive);
+    var propNames = {};
+    dashProps.forEach(function(p) {
+      propNames[p.name] = 1;
+    });
+    function inDashScope(pay) {
+      if (!dashCo) return true;
+      var pn = pay.propertyName || pay.property || "";
+      return !!propNames[pn];
+    }
     var pool = getFullPaymentPool();
     var pays = pool.filter(function(p) {
+      if (!inDashScope(p)) return false;
       var d = getDueDateObj(p);
       return d >= mo.from && d <= mo.to;
     });
-    var income = pays.filter(function(p) {
-      return p.status === "paid";
-    }).reduce(function(s, p) {
+    var collectedPays = pool.filter(function(p) {
+      if (!isPaidStatus(p.status)) return false;
+      if (!inDashScope(p)) return false;
+      var d = _paymentCalendarDateForCollected(p);
+      return d >= mo.from && d <= mo.to;
+    });
+    var income = collectedPays.reduce(function(s, p) {
       return s + p.amount;
     }, 0);
-    var landlord = state.properties.reduce(function(s, p) {
+    var landlord = dashProps.reduce(function(s, p) {
       return s + p.landlord;
     }, 0);
     var opex = state.expenses.reduce(function(s, e) {
       return s + e.amount;
     }, 0);
-    var occ = state.properties.reduce(function(s, p) {
+    var occ = dashProps.reduce(function(s, p) {
       return s + p.occupied;
     }, 0);
-    var rooms = state.properties.reduce(function(s, p) {
+    var rooms = dashProps.reduce(function(s, p) {
       return s + p.rooms;
     }, 0);
     var schedOutstanding = (state.rentSchedule || []).filter(function(s) {
@@ -1155,7 +1267,11 @@
       return d >= mo.from && d <= mo.to;
     }).length;
     var expectedIncome = Math.round(state.tenants.filter(function(t) {
-      return t.status === "active";
+      if (t.status !== "active" || dashCo && !propNames[t.property]) return false;
+      var pr = state.properties.find(function(x) {
+        return x.name === t.property;
+      });
+      return !pr || pr.status !== "archived";
     }).reduce(function(s, t) {
       return s + (t.freq === "monthly" ? t.rent : (t.rent || 0) * 52 / 12);
     }, 0));
@@ -1170,6 +1286,7 @@
       rooms,
       outstanding: schedOutstanding,
       pays,
+      collectedPays,
       label: mo.label,
       expectedIncome,
       expectedGross,
@@ -1192,21 +1309,42 @@
     if (tip) tip.style.display = "none";
   }
   function renderDashboard() {
-    var selMonth = state.dashMonth || "2026-03";
-    var ms = getMonthStats(selMonth) || getMonthStats("2026-03");
+    ensureDashboardMonth();
+    var selMonth = state.dashMonth;
+    var ms = getMonthStats(selMonth);
+    if (!ms && MONTHS && MONTHS.length) {
+      state.dashMonth = MONTHS[MONTHS.length - 1].key;
+      ms = getMonthStats(state.dashMonth);
+    }
     var s = getStats();
+    var dashCoTrend = state.filters && state.filters.dashCompany || "";
+    var trendPropNames = {};
+    if (dashCoTrend) {
+      state.properties.filter(function(p) {
+        return p.companyId === dashCoTrend && isPropertyActive(p);
+      }).forEach(function(p) {
+        trendPropNames[p.name] = 1;
+      });
+    }
+    function inTrendScope(p) {
+      if (!dashCoTrend) return true;
+      var pn = p.propertyName || p.property || "";
+      return !!trendPropNames[pn];
+    }
     var trend = MONTHS.map(function(mo) {
       var pool = getFullPaymentPool();
-      var pays = pool.filter(function(p) {
-        var d = getDueDateObj(p);
+      var inc = pool.filter(function(p) {
+        if (!isPaidStatus(p.status) || !inTrendScope(p)) return false;
+        var d = _paymentCalendarDateForCollected(p);
         return d >= mo.from && d <= mo.to;
-      });
-      var inc = pays.filter(function(p) {
-        return p.status === "paid";
       }).reduce(function(s2, p) {
         return s2 + p.amount;
       }, 0);
-      var land = state.properties.reduce(function(s2, p) {
+      var land = dashCoTrend ? state.properties.filter(function(p) {
+        return p.companyId === dashCoTrend && isPropertyActive(p);
+      }).reduce(function(s2, p) {
+        return s2 + p.landlord;
+      }, 0) : state.properties.filter(isPropertyActive).reduce(function(s2, p) {
         return s2 + p.landlord;
       }, 0);
       var opex = state.expenses.reduce(function(s2, e) {
@@ -1220,7 +1358,7 @@
     }));
     if (maxV === 0) maxV = 1;
     var lossProps = state.properties.filter(function(p) {
-      return net(p) < 0;
+      return isPropertyActive(p) && net(p) < 0;
     });
     var staffT = state.expenses.filter(function(e) {
       return e.type === "staff";
@@ -1259,9 +1397,7 @@
     var _dashPropNames = _dashProps.map(function(p) {
       return p.name;
     });
-    var collectedAmt = ms.pays.filter(function(p) {
-      return p.status === "paid";
-    }).reduce(function(a, p) {
+    var collectedAmt = (ms.collectedPays || []).reduce(function(a, p) {
       return a + p.amount;
     }, 0);
     html += '<div class="kpi-grid kpi-2" style="margin-bottom:10px">';
@@ -1269,13 +1405,15 @@
     html += kpi("Expected Net Profit", fmt(ms.expectedNet), "After all costs", ms.expectedNet >= 0 ? "#00B894" : "#E8375A", "&#x1F4C8;");
     html += "</div>";
     html += '<div class="kpi-grid kpi-4" style="margin-bottom:22px">';
-    html += kpi("Collected", fmt(collectedAmt), ms.pays.filter(function(p) {
-      return p.status === "paid";
-    }).length + " payments", "#10B981", "&#x2705;");
+    html += kpi("Collected", fmt(collectedAmt), (ms.collectedPays || []).length + " payments", "#10B981", "&#x2705;");
     html += kpi("Landlord Costs", fmt(ms.landlord), pct(ms.landlord, ms.expectedIncome || 1) + "% of income", "#E8375A", "&#x1F3E6;");
     html += kpi("Operating Costs", fmt(ms.opex), "Staff + property + overhead", "#F59E0B", "&#x2699;&#xFE0F;");
     html += kpi("Active Tenants", state.tenants.filter(function(t) {
-      return t.status === "active";
+      if (t.status !== "active") return false;
+      var pr = state.properties.find(function(x) {
+        return x.name === t.property;
+      });
+      return !pr || pr.status !== "archived";
     }).length, state.tenants.filter(function(t) {
       return t.status === "notice_given";
     }).length + " on notice", "#3B82F6", "&#x1F465;");
@@ -1364,10 +1502,16 @@
       if (f === "managed") return ok && p.ownershipType !== "owned";
       return ok;
     });
+    const kpiProps = state.properties.filter(function(p) {
+      if (!isPropertyActive(p)) return false;
+      if (pco && p.companyId !== pco) return false;
+      return true;
+    });
+    const activeTotal = state.properties.filter(isPropertyActive).length;
     const coOpts = '<option value="">&#x1F3E2; All Companies</option>' + (state.companies || []).map((c) => '<option value="' + c.id + '" ' + (pco === c.id ? "selected" : "") + ">" + c.name + "</option>").join("");
     return `
     <div class="page-header">
-      <div><div class="page-title">Properties</div><div class="page-sub">${data.length} of ${state.properties.length} properties</div></div>
+      <div><div class="page-title">Properties</div><div class="page-sub">${f === "archived" ? data.length + " archived" : data.length + " of " + activeTotal + " active"}</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button onclick="openDataModal('properties')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Properties">\u21C5</button>
         <button onclick="propViewDeal()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Deal Analyzer</button>
@@ -1385,11 +1529,11 @@
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Total Portfolio</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
           <div>
-            <div style="font-size:22px;font-weight:800;color:var(--text);font-family:monospace">${state.properties.length}</div>
+            <div style="font-size:22px;font-weight:800;color:var(--text);font-family:monospace">${kpiProps.length}</div>
             <div style="font-size:11px;color:var(--muted)">properties</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${data.reduce((s, p) => s + p.rooms, 0)}</div>
+            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${kpiProps.reduce((s, p) => s + p.rooms, 0)}</div>
             <div style="font-size:11px;color:var(--muted)">total rooms</div>
           </div>
         </div>
@@ -1399,41 +1543,41 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
           <div>
             <div style="font-size:22px;font-weight:800;font-family:monospace;color:${(() => {
-      const occ = data.reduce((s, p) => s + p.occupied, 0);
-      const tot = data.reduce((s, p) => s + p.rooms, 0);
+      const occ = kpiProps.reduce((s, p) => s + p.occupied, 0);
+      const tot = kpiProps.reduce((s, p) => s + p.rooms, 0);
       const pct2 = tot ? Math.round(occ / tot * 100) : 0;
       return pct2 >= 85 ? "var(--green)" : pct2 >= 70 ? "var(--amber)" : "var(--red)";
     })()} ">${(() => {
-      const occ = data.reduce((s, p) => s + p.occupied, 0);
-      const tot = data.reduce((s, p) => s + p.rooms, 0);
+      const occ = kpiProps.reduce((s, p) => s + p.occupied, 0);
+      const tot = kpiProps.reduce((s, p) => s + p.rooms, 0);
       return tot ? Math.round(occ / tot * 100) : 0;
     })()}%</div>
-            <div style="font-size:11px;color:var(--muted)">${data.reduce((s, p) => s + p.occupied, 0)} occupied</div>
+            <div style="font-size:11px;color:var(--muted)">${kpiProps.reduce((s, p) => s + p.occupied, 0)} occupied</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:var(--red);font-family:monospace">${state.properties.reduce((s, p) => s + (p.rooms - p.occupied), 0)}</div>
+            <div style="font-size:18px;font-weight:800;color:var(--red);font-family:monospace">${kpiProps.reduce((s, p) => s + (p.rooms - p.occupied), 0)}</div>
             <div style="font-size:11px;color:var(--muted)">vacant</div>
           </div>
         </div>
         <div style="background:var(--border);border-radius:3px;height:4px;overflow:hidden"><div style="height:100%;border-radius:3px;background:var(--green);width:${(() => {
-      const occ = data.reduce((s, p) => s + p.occupied, 0);
-      const tot = data.reduce((s, p) => s + p.rooms, 0);
+      const occ = kpiProps.reduce((s, p) => s + p.occupied, 0);
+      const tot = kpiProps.reduce((s, p) => s + p.rooms, 0);
       return tot ? Math.round(occ / tot * 100) : 0;
     })()}%"></div></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
       <div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">${fmt(data.reduce((s, p) => s + p.rent, 0))}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">${fmt(kpiProps.reduce((s, p) => s + p.rent, 0))}</div>
         <div style="font-size:10px;font-weight:700;color:var(--green);margin-top:3px">MONTHLY INCOME</div>
       </div>
       <div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">${fmt(data.reduce((s, p) => s + p.landlord, 0))}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">${fmt(kpiProps.reduce((s, p) => s + p.landlord, 0))}</div>
         <div style="font-size:10px;font-weight:700;color:var(--red);margin-top:3px">LANDLORD COSTS</div>
       </div>
-      <div style="background:${data.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green-light)" : "var(--red-light)"};border:1px solid ${data.reduce((s, p) => s + net(p), 0) >= 0 ? "#A7F3D0" : "#FECDD3"};border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:${data.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green)" : "var(--red)"};font-family:monospace">${fmt(data.reduce((s, p) => s + net(p), 0))}</div>
-        <div style="font-size:10px;font-weight:700;color:${data.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green)" : "var(--red)"};margin-top:3px">NET PROFIT/MO</div>
+      <div style="background:${kpiProps.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green-light)" : "var(--red-light)"};border:1px solid ${kpiProps.reduce((s, p) => s + net(p), 0) >= 0 ? "#A7F3D0" : "#FECDD3"};border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:14px;font-weight:800;color:${kpiProps.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green)" : "var(--red)"};font-family:monospace">${fmt(kpiProps.reduce((s, p) => s + net(p), 0))}</div>
+        <div style="font-size:10px;font-weight:700;color:${kpiProps.reduce((s, p) => s + net(p), 0) >= 0 ? "var(--green)" : "var(--red)"};margin-top:3px">NET PROFIT/MO</div>
       </div>
     </div>
 
@@ -1476,6 +1620,7 @@
     </div>`;
   }
   function renderTenants() {
+    if (typeof syncPropertyRoomsFromTenants === "function") syncPropertyRoomsFromTenants();
     const f = state.filters.tenants || "all";
     const q = (state.filters.tenantQ || "").toLowerCase();
     const propFilter = state.filters.tenantProp || "";
@@ -1492,7 +1637,7 @@
     });
     return `
     <div class="page-header">
-      <div><div class="page-title">Tenants</div><div class="page-sub">${state.tenants.filter((t) => t.status === "active").length} active \xB7 ${state.tenants.filter((t) => t.arrears > 0).length} in arrears</div></div>
+      <div><div class="page-title">Tenants</div><div class="page-sub">${state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length} active \xB7 ${state.tenants.filter((t) => t.arrears > 0).length} in arrears</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button onclick="openDataModal('tenants')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Tenants">\u21C5</button>
         ${btn("+ Add Tenant", "openModal('addTenant')")}
@@ -1504,12 +1649,12 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
           <div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Active Tenants</div>
-            <div style="font-size:24px;font-weight:800;color:var(--green);font-family:monospace">${state.tenants.filter((t) => t.status === "active").length}</div>
+            <div style="font-size:24px;font-weight:800;color:var(--green);font-family:monospace">${state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${(() => {
-      const r = state.properties.reduce((s, p) => s + p.rooms, 0);
-      const a = state.tenants.filter((t) => t.status === "active").length;
+      const r = state.properties.filter(isPropertyActive).reduce((s, p) => s + p.rooms, 0);
+      const a = state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length;
       return r ? Math.round(a / r * 100) : 0;
     })()}%</div>
             <div style="font-size:10px;color:var(--muted)">occupancy</div>
@@ -1517,20 +1662,20 @@
         </div>
         <div style="background:var(--border);border-radius:3px;height:4px;margin-top:8px;overflow:hidden">
           <div style="height:100%;border-radius:3px;background:${(() => {
-      const r = state.properties.reduce((s, p) => s + p.rooms, 0);
-      const a = state.tenants.filter((t) => t.status === "active").length;
+      const r = state.properties.filter(isPropertyActive).reduce((s, p) => s + p.rooms, 0);
+      const a = state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length;
       const pct2 = r ? Math.round(a / r * 100) : 0;
       return pct2 >= 90 ? "#10B981" : pct2 >= 70 ? "#F59E0B" : "#EF4444";
     })()};width:${(() => {
-      const r = state.properties.reduce((s, p) => s + p.rooms, 0);
-      const a = state.tenants.filter((t) => t.status === "active").length;
+      const r = state.properties.filter(isPropertyActive).reduce((s, p) => s + p.rooms, 0);
+      const a = state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length;
       return r ? Math.round(a / r * 100) : 0;
     })()}%"></div>
         </div>
       </div>
       ${(function() {
       var act = state.tenants.filter(function(t) {
-        return t.status === "active" || t.status === "notice_given";
+        return (t.status === "active" || t.status === "notice_given") && tenantOnLiveProperty(t);
       });
       var wk = act.filter(function(t) {
         return t.freq === "weekly";
@@ -1548,7 +1693,7 @@
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:${state.tenants.filter((t) => t.arrears > 0 && t.status !== "inactive").length ? "10px" : "14px"}">
       <div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:10px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:var(--green)">${state.tenants.filter((t) => t.status === "active").length}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--green)">${state.tenants.filter((t) => t.status === "active" && tenantOnLiveProperty(t)).length}</div>
         <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-top:2px">Active</div>
       </div>
       <div style="background:${state.tenants.filter((t) => t.status === "notice_given").length ? "var(--amber-light)" : "var(--bg)"};border:1px solid ${state.tenants.filter((t) => t.status === "notice_given").length ? "#FDE68A" : "var(--border)"};border-radius:10px;padding:10px;text-align:center">
@@ -1579,12 +1724,40 @@
         typeStats[t.key] = { occ: 0, total: 0 };
       });
       state.properties.forEach(function(p) {
+        if (!isPropertyActive(p)) return;
         (p.roomList || []).forEach(function(r) {
-          var key = r.type || "Single";
+          var tenant = state.tenants.find(function(t) {
+            return t.property === p.name && t.status !== "inactive" && roomNumsEqual(t.room, r.n);
+          });
+          var key = normalizeTenantRoomTypeKey(tenant && tenant.roomType ? tenant.roomType : r.type);
           if (!typeStats[key]) typeStats[key] = { occ: 0, total: 0 };
           typeStats[key].total++;
-          if (r.status === "occupied") typeStats[key].occ++;
+          var isOcc = !!(tenant && tenant.status !== "inactive") || r.status === "occupied";
+          if (isOcc) typeStats[key].occ++;
         });
+      });
+      state.properties.forEach(function(p) {
+        if (!isPropertyActive(p)) return;
+        if ((p.roomList || []).length) return;
+        var propTenants = state.tenants.filter(function(t) {
+          return t.property === p.name && t.status !== "inactive";
+        });
+        var maxRn = propTenants.reduce(function(m, t) {
+          return Math.max(m, Number(t.room) || 0);
+        }, 0);
+        var n = Math.max(p.rooms || 0, propTenants.length, maxRn);
+        if (n === 0 && propTenants.length === 0) return;
+        if (n === 0) n = propTenants.length;
+        propTenants.forEach(function(t) {
+          var k = normalizeTenantRoomTypeKey(t.roomType);
+          if (!typeStats[k]) typeStats[k] = { occ: 0, total: 0 };
+          typeStats[k].occ++;
+          typeStats[k].total++;
+        });
+        var vacant = Math.max(0, n - propTenants.length);
+        if (vacant > 0) {
+          typeStats["Single"].total += vacant;
+        }
       });
       var active = TYPES;
       var curTypeFilter = state.filters.tenantType || "";
@@ -1612,7 +1785,7 @@
       <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-ico">\u{1F50D}</span><input class="search-inp" placeholder="Search tenants\u2026" value="${state.filters.tenantQ || ""}" oninput="state.filters.tenantQ=this.value;debouncedTenantSearch()"></div>
       <select style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;min-width:160px" onchange="state.filters.tenantProp=this.value;render()">
         <option value="">All Properties</option>
-        ${state.properties.map((p) => `<option value="${p.name}" ${(state.filters.tenantProp || "") === p.name ? "selected" : ""}>${p.name}</option>`).join("")}
+        ${state.properties.filter(isPropertyActive).map((p) => `<option value="${p.name}" ${(state.filters.tenantProp || "") === p.name ? "selected" : ""}>${p.name}</option>`).join("")}
       </select>
     </div>
       ${[{ v: "all", l: "All" }, { v: "active", l: "Active" }, { v: "notice", l: "On Notice" }, { v: "arrears", l: "In Arrears" }, { v: "archived", l: "Archived" }].map((x) => `<button class="filter-btn ${f === x.v ? "active" : ""}" onclick="state.filters.tenants='${x.v}';render()">${x.l}</button>`).join("")}
@@ -2104,6 +2277,20 @@
         _dueDateRaw: new Date(Date.now() - 864e5).toISOString().split("T")[0]
       };
     });
+    var overdueScheduledSum = owed.filter(function(p) {
+      return getDueStatus(p) === "overdue";
+    }).reduce(function(s, p) {
+      return s + p.amount;
+    }, 0);
+    var arrearsOnlySum = arrearsEntries.reduce(function(s, p) {
+      return s + p.amount;
+    }, 0);
+    var totalOverdueMoney = overdueScheduledSum + arrearsOnlySum;
+    var upcomingUnpaidSum = owed.filter(function(p) {
+      return getDueStatus(p) !== "overdue";
+    }).reduce(function(s, p) {
+      return s + p.amount;
+    }, 0);
     overdue = overdue.concat(arrearsEntries);
     var dueToday = owed.filter(function(p) {
       return getDueStatus(p) === "today";
@@ -2118,9 +2305,10 @@
     var totalPaid = paid.reduce(function(s, p) {
       return s + p.amount;
     }, 0).toLocaleString();
-    var totalOwed = owed.reduce(function(s, p) {
+    var owedSum = owed.reduce(function(s, p) {
       return s + p.amount;
-    }, 0).toLocaleString();
+    }, 0);
+    var totalOwed = owedSum.toLocaleString();
     var totalCollected = paid.reduce(function(s, p) {
       return s + p.amount;
     }, 0);
@@ -2173,7 +2361,7 @@
     h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;padding:14px">';
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:10px">';
     h += '<div style="text-align:center"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Collected</div><div style="font-size:15px;font-weight:800;color:var(--green);font-family:monospace">\xA3' + totalPaid + '</div><div style="font-size:10px;color:var(--muted)">' + paid.length + " payments</div></div>";
-    h += '<div style="text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border)"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Outstanding</div><div style="font-size:15px;font-weight:800;color:' + (owed.length > 0 ? "var(--red)" : "var(--muted)") + ';font-family:monospace">\xA3' + totalOwed + '</div><div style="font-size:10px;color:var(--muted)">' + owed.length + " tenants</div></div>";
+    h += '<div style="text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border)"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Unpaid (period)</div><div style="font-size:15px;font-weight:800;color:' + (owed.length > 0 ? "var(--red)" : "var(--muted)") + ';font-family:monospace">\xA3' + totalOwed + '</div><div style="font-size:10px;color:var(--muted)">' + owed.length + ' scheduled</div><div style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.35">Overdue: \xA3' + totalOverdueMoney.toLocaleString() + " \xB7 Due/upcoming: \xA3" + upcomingUnpaidSum.toLocaleString() + "</div></div>";
     h += '<div style="text-align:center"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Expected</div><div style="font-size:15px;font-weight:800;color:var(--text);font-family:monospace">' + fmt(totalExpect) + '</div><div style="font-size:10px;color:var(--muted)">' + rate + "% rate</div></div>";
     h += "</div>";
     h += '<div style="background:var(--border);border-radius:4px;height:5px;margin-bottom:10px">';
@@ -2622,7 +2810,24 @@
     if (t) {
       t.paid = new Date(s.dueDateRaw).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
       var dueDateISO = new Date(s.dueDateRaw).toISOString().split("T")[0];
-      state.payments.push({ id: crypto.randomUUID(), tenant: s.tenantName, tenantName: s.tenantName, tenantId: s.tenantId, property: s.property, propertyName: s.property, amount: s.amount, date: t.paid, dueDate: dueDateISO, paidDate: t.paid, method, status: "paid", _dueDateRaw: s.dueDateRaw });
+      var now = /* @__PURE__ */ new Date();
+      var paidRaw = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      state.payments.push({
+        id: crypto.randomUUID(),
+        tenant: s.tenantName,
+        tenantName: s.tenantName,
+        tenantId: s.tenantId,
+        property: s.property,
+        propertyName: s.property,
+        amount: s.amount,
+        date: t.paid,
+        dueDate: dueDateISO,
+        paidDate: t.paid,
+        method,
+        status: "paid",
+        _dueDateRaw: s.dueDateRaw,
+        _paidDateRaw: paidRaw
+      });
     }
     saveState();
   }
@@ -2768,10 +2973,12 @@
       return;
     }
     var found = false;
+    var paidRaw = /* @__PURE__ */ new Date();
+    paidRaw = new Date(paidRaw.getFullYear(), paidRaw.getMonth(), paidRaw.getDate()).getTime();
     state.payments = state.payments.map(function(p) {
       if (String(p.id) === idStr) {
         found = true;
-        return Object.assign({}, p, { status: "paid", paidMethod: method });
+        return Object.assign({}, p, { status: "paid", paidMethod: method, _paidDateRaw: paidRaw });
       }
       return p;
     });
@@ -2786,12 +2993,23 @@
   }
   function recalcProperty(p) {
     if (!p) return;
-    p.occupied = (p.roomList || []).filter(function(r) {
-      return r.status === "occupied";
-    }).length;
     var tenants = state.tenants.filter(function(t) {
       return t.property === p.name && t.status !== "inactive";
     });
+    var list = p.roomList || [];
+    var fromRooms = list.filter(function(r) {
+      return r.status === "occupied";
+    }).length;
+    if ((p.lettingType || "hmo") === "whole") {
+      p.occupied = tenants.length > 0 ? Math.min(tenants.length, p.rooms || 1) : 0;
+    } else if (list.length) {
+      p.occupied = fromRooms;
+      if (fromRooms === 0 && tenants.length > 0) {
+        p.occupied = Math.min(tenants.length, list.length);
+      }
+    } else {
+      p.occupied = tenants.length;
+    }
     p.rent = Math.round(tenants.reduce(function(s, t) {
       return s + (t.freq === "monthly" ? t.rent : (t.rent || 0) * 52 / 12);
     }, 0));
@@ -2802,7 +3020,7 @@
     });
     if (!p || !p.roomList) return;
     var r = p.roomList.find(function(rm) {
-      return rm.n === roomN;
+      return roomNumsEqual(rm.n, roomN);
     });
     if (r) r.status = "vacant";
     recalcProperty(p);
@@ -2814,13 +3032,15 @@
     var p = state.properties.find(function(x) {
       return x.name === propName;
     });
-    if (!p || !p.roomList) return;
-    var r = p.roomList.find(function(rm) {
-      return rm.n === roomN;
-    });
-    if (r) {
-      r.status = "occupied";
-      if (rentAmount && +rentAmount > 0) r.price = +rentAmount;
+    if (!p) return;
+    if (p.roomList && p.roomList.length) {
+      var r = p.roomList.find(function(rm) {
+        return roomNumsEqual(rm.n, roomN);
+      });
+      if (r) {
+        r.status = "occupied";
+        if (rentAmount && +rentAmount > 0) r.price = +rentAmount;
+      }
     }
     recalcProperty(p);
     if (state.voidDates) delete state.voidDates[p.id + "_" + roomN];
@@ -2880,7 +3100,9 @@
       return String(x.id) === String(id);
     });
     if (!e) return;
-    var propOpts = '<option value="">\u2014 Portfolio-wide \u2014</option>' + state.properties.map(function(p) {
+    var propOpts = '<option value="">\u2014 Portfolio-wide \u2014</option>' + state.properties.filter(function(p) {
+      return isPropertyActive(p) || p.name === e.property;
+    }).map(function(p) {
       return '<option value="' + p.name + '" ' + (e.property === p.name ? "selected" : "") + ">" + p.name + "</option>";
     }).join("");
     var coOpts = '<option value="">\u2014 Unassigned \u2014</option>' + (state.companies || []).map(function(c) {
@@ -3074,7 +3296,7 @@
         var opt = document.createElement("option");
         opt.value = r.n;
         var ten = state.tenants.find(function(t) {
-          return t.property === p.name && t.room === r.n && t.status !== "inactive";
+          return t.property === p.name && roomNumsEqual(t.room, r.n) && t.status !== "inactive";
         });
         opt.textContent = "Room " + r.n + " (" + (r.type || "Room") + ") " + (ten ? "\u2014 " + ten.name : "[Vacant]");
         roomSel.appendChild(opt);
@@ -3094,7 +3316,7 @@
       return;
     }
     var t = state.tenants.find(function(x) {
-      return x.property === propName && x.room === +roomVal && x.status !== "inactive";
+      return x.property === propName && roomNumsEqual(x.room, roomVal) && x.status !== "inactive";
     });
     if (!t) {
       infoBox.style.display = "none";
@@ -3118,7 +3340,7 @@
     var set = /* @__PURE__ */ new Set();
     (state.tenants || []).forEach(function(t) {
       if (t && t.property === propName && t.status !== "inactive") {
-        set.add(+t.room || 1);
+        set.add(Number(t.room) || 1);
       }
     });
     return set;
@@ -3148,7 +3370,25 @@
     });
   }
   function openModal(type) {
-    const propOpts = (state.properties || []).map(function(p) {
+    if (type === "addProp") {
+      var orgM = state._currentOrg;
+      if (orgM && Array.isArray(orgM)) orgM = orgM[0];
+      var cfg = state.config || {};
+      var plan = typeof _dmEffectiveOrgPlanKey === "function" ? _dmEffectiveOrgPlanKey(orgM, cfg) : String(orgM && orgM.plan || "free").toLowerCase();
+      var cap = typeof _dmPlanCaps === "function" ? _dmPlanCaps(plan, orgM).properties : 3;
+      var currentProps = (state.properties || []).filter(function(p) {
+        return p && isPropertyActive(p);
+      }).length;
+      if (currentProps >= cap) {
+        if (typeof showToast === "function") {
+          showToast("Property limit reached for your current plan. Upgrade plan or archive an unused property.", "error");
+        } else {
+          alert("Property limit reached for your current plan. Upgrade plan or archive an unused property.");
+        }
+        return;
+      }
+    }
+    const propOpts = (state.properties || []).filter(isPropertyActive).map(function(p) {
       var isWhole = (p.lettingType || "hmo") === "whole";
       if (isWhole) {
         var hasActive = (state.tenants || []).some(function(t) {
@@ -3427,7 +3667,7 @@
           <select class="inp" id="f-eprop">
             <option value="">\u2014 Portfolio-wide \u2014</option>
             ${(function() {
-        return state.properties.map(function(p) {
+        return state.properties.filter(isPropertyActive).map(function(p) {
           return '<option value="' + p.name + '">' + p.name + "</option>";
         }).join("");
       })()}
@@ -3471,7 +3711,7 @@
       <div class="field"><label class="field-label">Property</label>
         <select class="inp" id="f-mprop" onchange="refreshMaintRoomDropdown()">
           <option value="">Select property\u2026</option>
-          ${state.properties.map(function(p) {
+          ${state.properties.filter(isPropertyActive).map(function(p) {
         return '<option value="' + p.name + '">' + p.name + "</option>";
       }).join("")}
         </select>
@@ -3570,6 +3810,12 @@
     }, 250);
   }
   var _propSearchTimer = null;
+  function cancelPendingPropSearchRefresh() {
+    if (_propSearchTimer) {
+      clearTimeout(_propSearchTimer);
+      _propSearchTimer = null;
+    }
+  }
   function debouncedPropSearch() {
     if (_propSearchTimer) clearTimeout(_propSearchTimer);
     _propSearchTimer = setTimeout(function() {
@@ -3780,9 +4026,13 @@
         notes: "",
         companyId: (document.getElementById("f-company") || { value: "" }).value,
         mortgage: mortgage || null,
-        purchaseInfo: purchaseInfo || null
+        purchaseInfo: purchaseInfo || null,
+        status: "active"
       };
       state.properties.push(newProp);
+      state.filters.propQ = "";
+      cancelPendingPropSearchRefresh();
+      if (typeof recalcProperty === "function") recalcProperty(newProp);
     } else if (type === "tenant") {
       var g = function(id) {
         var el = document.getElementById(id);
@@ -3837,7 +4087,7 @@
         }
       } else {
         var roomTaken = state.tenants.find(function(t) {
-          return t.property === propName && t.room === roomN && t.status !== "inactive";
+          return t.property === propName && roomNumsEqual(t.room, roomN) && t.status !== "inactive";
         });
         if (roomTaken) {
           alert("\u26A0\uFE0F Room " + roomN + " at " + propName + " is already occupied by " + roomTaken.name + ".\nPlease select a different room.");
@@ -3846,7 +4096,7 @@
       }
       if (propObj && propObj.roomList) {
         var rm = propObj.roomList.find(function(r) {
-          return r.n === roomN;
+          return roomNumsEqual(r.n, roomN);
         });
         if (rm) rm.type = roomType;
       }
@@ -3875,6 +4125,7 @@
         paymentHistory: []
       });
       occupyRoom(propName, roomN, rentVal);
+      if (typeof runAfterSupabaseLoad === "function") runAfterSupabaseLoad();
       rebuildAllSchedules();
     } else if (type === "expense") {
       const desc = document.getElementById("f-edesc").value;
@@ -3923,7 +4174,7 @@
       var mtenant = "";
       if (isRoom) {
         var mten = state.tenants.find(function(t) {
-          return t.property === mprop && t.room === mroom && t.status !== "inactive";
+          return t.property === mprop && roomNumsEqual(t.room, mroom) && t.status !== "inactive";
         });
         if (mten) mtenant = mten.name;
       }
@@ -4002,7 +4253,9 @@
           var isMonthly2 = pt.freq === "monthly";
           return '<div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:13px;font-weight:700">' + (pt.property || "Unknown property") + "</div>" + (idx === 0 ? '<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:var(--border);color:var(--muted);font-weight:600">Most recent</span>' : "") + '</div><div style="font-size:12px;color:var(--muted)">' + (pt.room ? "Room " + pt.room + " \xB7 " : "") + "\xA3" + (pt.rent || 0) + "/" + (isMonthly2 ? "mo" : "wk") + '</div><div style="font-size:11px;color:var(--dim);margin-top:4px">' + moveIn + " \u2192 " + moveOut + "</div></div>";
         }).join("") + "</div>";
-      })() : '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">\u{1F3E0} Property & Room</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="field" style="margin:0"><label class="field-label">Property</label><select class="inp" id="td-prop">' + state.properties.map(function(p) {
+      })() : '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">\u{1F3E0} Property & Room</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="field" style="margin:0"><label class="field-label">Property</label><select class="inp" id="td-prop">' + state.properties.filter(function(p) {
+        return isPropertyActive(p) || p.name === t.property;
+      }).map(function(p) {
         return '<option value="' + p.name + '" ' + (t.property === p.name ? "selected" : "") + ">" + p.name + "</option>";
       }).join("") + "</select></div>" + (function() {
         var rp = state.properties.find(function(x) {
@@ -4011,7 +4264,7 @@
         if (!rp || !rp.roomList) return '<div class="field" style="margin:0"><label class="field-label">Room No.</label><input class="inp" id="td-room" type="number" value="' + (t.room || 1) + '"></div>';
         var opts = rp.roomList.map(function(r) {
           var linked = state.tenants.find(function(tt) {
-            return tt.property === rp.name && tt.room === r.n && tt.status !== "inactive" && tt.id !== t.id;
+            return tt.property === rp.name && roomNumsEqual(tt.room, r.n) && tt.status !== "inactive" && tt.id !== t.id;
           });
           var isCurr = r.n === t.room;
           var dis = r.status === "unavailable" || linked && !isCurr ? "disabled" : "";
@@ -4068,6 +4321,7 @@
     actionsTab += '<div style="background:' + noticeBg + ";border:1px solid " + noticeBorder + ';border-radius:12px;padding:16px"><div style="font-size:13px;font-weight:700;color:' + noticeColor + ';margin-bottom:10px">' + (t.status === "notice_given" ? "\u26A0\uFE0F On Notice" : "\u{1F4CB} Give Notice") + "</div>" + countdownHtml + (t.status === "notice_given" ? `<button onclick="cancelTenantNotice('` + t.id + `')" style="margin-top:10px;width:100%;padding:9px;border-radius:9px;border:1px solid #FDE68A;background:#fff;color:var(--amber);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel Notice</button>` : '<div style="margin-top:10px"><label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Move-out Date</label><input type="date" id="notice-moveout-' + t.id + '" class="inp" style="margin:6px 0 10px" min="' + (/* @__PURE__ */ new Date("2026-03-21")).toISOString().split("T")[0] + `"><button onclick="giveTenantNotice('` + t.id + `')" style="width:100%;padding:9px;border-radius:9px;border:none;background:var(--amber);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Give Notice</button></div>`) + "</div>";
     var availRooms = [];
     state.properties.forEach(function(ap) {
+      if (!isPropertyActive(ap)) return;
       (ap.roomList || []).forEach(function(ar) {
         if (ar.status === "vacant") availRooms.push({ propName: ap.name, propId: ap.id, room: ar.n, type: ar.type || "Room", price: ar.price });
       });
@@ -4567,7 +4821,7 @@
               ${["\u{1F6CF}\uFE0F Single", "\u{1F6CF}\uFE0F\u{1F6CF}\uFE0F Double", "\u2728 Suite", "\u{1F3E0} Studio", "\u{1F3E1} Whole House"].map((opt) => `<option value="${opt.split(" ").slice(1).join(" ")}" ${(r.type || "Single") === opt.split(" ").slice(1).join(" ") ? "selected" : ""}>${opt}</option>`).join("")}
             </select>
             <span style="font-size:11px;font-weight:600;color:${r.status === "occupied" ? "var(--green)" : "var(--red)"};background:${r.status === "occupied" ? "var(--green-light)" : "var(--red-light)"};padding:2px 8px;border-radius:5px;flex-shrink:0">${r.status}</span>
-            ${r.status === "occupied" ? `<span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${propTenants.find((t) => t.room === r.n) ? propTenants.find((t) => t.room === r.n).name : "Tenant not linked"}</span>` : ""}
+            ${r.status === "occupied" ? `<span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${propTenants.find((t) => roomNumsEqual(t.room, r.n)) ? propTenants.find((t) => roomNumsEqual(t.room, r.n)).name : "Tenant not linked"}</span>` : ""}
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <div style="display:flex;align-items:center;gap:4px">
@@ -5421,7 +5675,7 @@
     }
     return html;
   }
-  function archiveProperty(id) {
+  async function archiveProperty(id) {
     var p = state.properties.find(function(x) {
       return String(x.id) === String(id);
     });
@@ -5431,9 +5685,19 @@
     });
     var msg = activeT.length > 0 ? "This property has " + activeT.length + " active tenant(s). Archive anyway?\n\nActive tenants will remain linked but property hidden from main view." : 'Archive "' + p.name + '"?\n\nHidden from main view. Restore or delete from Archived tab.';
     if (!confirm(msg)) return;
+    var prevStatus = p.status, prevArch = p.archivedDate;
     p.status = "archived";
     p.archivedDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    saveState();
+    var r = await persistPropertyArchiveToSupabase(p);
+    if (r && r.error) {
+      p.status = prevStatus;
+      p.archivedDate = prevArch;
+      if (typeof showToast === "function") showToast(typeof friendlyDbSaveError === "function" ? friendlyDbSaveError(r.error) : r.error.message || "Could not archive", "error");
+      return;
+    }
+    state.filters.propQ = "";
+    if (typeof cancelPendingPropSearchRefresh === "function") cancelPendingPropSearchRefresh();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     state.filters.props = "archived";
     render();
@@ -5457,19 +5721,31 @@
     state.properties = state.properties.filter(function(x) {
       return String(x.id) !== String(id);
     });
-    saveState();
+    state.filters.propQ = "";
+    if (typeof cancelPendingPropSearchRefresh === "function") cancelPendingPropSearchRefresh();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     render();
     showToast(p.name + " permanently deleted", "success");
   }
-  function restoreProperty(id) {
+  async function restoreProperty(id) {
     var p = state.properties.find(function(x) {
       return String(x.id) === String(id);
     });
     if (!p) return;
+    var prevStatus = p.status, prevArch = p.archivedDate;
     p.status = "active";
     delete p.archivedDate;
-    saveState();
+    var r = await persistPropertyArchiveToSupabase(p);
+    if (r && r.error) {
+      p.status = prevStatus;
+      if (prevArch !== void 0) p.archivedDate = prevArch;
+      if (typeof showToast === "function") showToast(typeof friendlyDbSaveError === "function" ? friendlyDbSaveError(r.error) : r.error.message || "Could not restore", "error");
+      return;
+    }
+    state.filters.propQ = "";
+    if (typeof cancelPendingPropSearchRefresh === "function") cancelPendingPropSearchRefresh();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     state.filters.props = "all";
     render();
@@ -5485,7 +5761,7 @@
     t.status = "inactive";
     t.archivedDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     freeRoom(oldProp, oldRoom);
-    saveState();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     state.filters.tenants = "archived";
     render();
@@ -5512,7 +5788,7 @@
     state.payments = state.payments.filter(function(x) {
       return x.tenantId !== String(id) && x.tenantName !== t.name;
     });
-    saveState();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     render();
     showToast(t.name + " permanently deleted", "success");
@@ -5525,7 +5801,7 @@
     t.status = "active";
     delete t.archivedDate;
     if (t.property && t.room) occupyRoom(t.property, t.room, t.rent);
-    saveState();
+    saveStateImmediate({ silentSuccess: true });
     closeModal();
     state.filters.tenants = "all";
     render();
@@ -5695,7 +5971,7 @@
     }
     state.landlords.forEach(function(ll) {
       var llProps = state.properties.filter(function(p) {
-        return p.landlordName === ll.name && p.landlord > 0;
+        return propertyLinkedToLandlord(p, ll) && p.landlord > 0 && isPropertyActive(p);
       });
       if (!llProps.length) return;
       llProps.forEach(function(prop) {
@@ -5754,7 +6030,7 @@
       });
       lls = lls.filter(function(ll) {
         return state.properties.some(function(p) {
-          return p.landlordName === ll.name && _coProps.indexOf(p.name) >= 0;
+          return propertyLinkedToLandlord(p, ll) && isPropertyActive(p) && _coProps.indexOf(p.name) >= 0;
         });
       });
       var _coLLNames = lls.map(function(ll) {
@@ -5779,7 +6055,7 @@
     }).length;
     var totalMonthly = lls.reduce(function(s, ll) {
       var llProps = (state.properties || []).filter(function(p) {
-        return p.landlordName === ll.name && (!selLLCo || p.companyId === selLLCo);
+        return propertyLinkedToLandlord(p, ll) && isPropertyActive(p) && (!selLLCo || p.companyId === selLLCo);
       });
       return s + llProps.reduce(function(ss, p) {
         return ss + p.landlord;
@@ -5820,9 +6096,9 @@
     });
     sortedLls.forEach(function(ll) {
       var llProps = (state.properties || []).filter(function(p) {
-        return p.landlordName === ll.name;
+        return propertyLinkedToLandlord(p, ll);
       });
-      var llMonthly = llProps.reduce(function(s, p) {
+      var llMonthly = llProps.filter(isPropertyActive).reduce(function(s, p) {
         return s + p.landlord;
       }, 0);
       var llPending = filteredPays.filter(function(p) {
@@ -6003,7 +6279,7 @@
     });
     if (!ll) return;
     var linkedProps = state.properties.filter(function(p) {
-      return p.landlordName === ll.name;
+      return propertyLinkedToLandlord(p, ll);
     });
     var msg = "Delete " + ll.name + "?";
     if (linkedProps.length) msg += "\n\n\u26A0 Linked to " + linkedProps.length + " propert" + (linkedProps.length > 1 ? "ies" : "y") + ". Link will be removed.";
@@ -6012,6 +6288,7 @@
     linkedProps.forEach(function(p) {
       delete p.landlordName;
       delete p.landlordPhone;
+      delete p.landlordId;
     });
     state.landlords = state.landlords.filter(function(x) {
       return String(x.id) !== String(id);
@@ -6035,7 +6312,7 @@
       return p.landlordId === id;
     });
     var llProps = state.properties.filter(function(p) {
-      return p.landlordName === ll.name;
+      return propertyLinkedToLandlord(p, ll);
     });
     var pendingPays = lpays.filter(function(p) {
       return p.status !== "paid";
@@ -6146,6 +6423,7 @@
   function shareAllRoomsWA() {
     var v = [];
     state.properties.forEach(function(p) {
+      if (!isPropertyActive(p)) return;
       (p.roomList || []).forEach(function(r) {
         if (r.status === "vacant") v.push({ p, r });
       });
@@ -6235,6 +6513,7 @@
     window._roomEidMap = {};
     var allV = [], hiddenV = [];
     state.properties.forEach(function(p) {
+      if (!isPropertyActive(p)) return;
       (p.roomList || []).forEach(function(r) {
         if (r._hidden) {
           hiddenV.push({ p, r });
@@ -6279,7 +6558,7 @@
       return s + x.r.price;
     }, 0) * 52 / 12)) + '</div><div style="font-size:10px;color:var(--green);font-weight:700">POTENTIAL/MO</div></div>';
     html += '<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:11px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--blue)">' + state.properties.filter(function(p) {
-      return (p.roomList || []).some(function(r) {
+      return isPropertyActive(p) && (p.roomList || []).some(function(r) {
         return r.status === "vacant" && !r._hidden;
       });
     }).length + '</div><div style="font-size:10px;color:var(--blue);font-weight:700">PROPERTIES</div></div>';
@@ -6637,10 +6916,13 @@
   function confirmImportProperties() {
     var rows = _importPreview.rows;
     var imported = 0, skipped = 0;
-    var plan = String(state._currentOrg && state._currentOrg.plan || "free").toLowerCase();
-    var propCap = plan === "business" ? 60 : plan === "professional" ? 25 : plan === "starter" ? 15 : plan === "trial" ? 5 : 3;
+    var org0 = state._currentOrg;
+    if (org0 && Array.isArray(org0)) org0 = org0[0];
+    var cfg = state.config || {};
+    var plan = typeof _dmEffectiveOrgPlanKey === "function" ? _dmEffectiveOrgPlanKey(org0, cfg) : String(org0 && org0.plan || "free").toLowerCase();
+    var propCap = typeof _dmPlanCaps === "function" ? _dmPlanCaps(plan, org0).properties : 3;
     var currentProps = (state.properties || []).filter(function(p) {
-      return p && p.status !== "archived";
+      return p && isPropertyActive(p);
     }).length;
     var incomingProps = rows.filter(function(r) {
       return !(state.properties || []).some(function(p) {
@@ -6705,8 +6987,11 @@
   function confirmImportTenants() {
     var rows = _importPreview.rows;
     var imported = 0, skipped = 0;
-    var plan = String(state._currentOrg && state._currentOrg.plan || "free").toLowerCase();
-    var tenantCap = plan === "business" || plan === "professional" ? 2147483647 : plan === "starter" ? 75 : plan === "trial" ? 30 : 15;
+    var org0 = state._currentOrg;
+    if (org0 && Array.isArray(org0)) org0 = org0[0];
+    var cfg = state.config || {};
+    var plan = typeof _dmEffectiveOrgPlanKey === "function" ? _dmEffectiveOrgPlanKey(org0, cfg) : String(org0 && org0.plan || "free").toLowerCase();
+    var tenantCap = typeof _dmPlanCaps === "function" ? _dmPlanCaps(plan, org0).tenants : 15;
     var currentActive = (state.tenants || []).filter(function(t) {
       return t && (t.status || "active") !== "inactive";
     }).length;
@@ -6982,6 +7267,7 @@
     if (!state.voidDates) state.voidDates = {};
     var voids = [];
     state.properties.forEach(function(p) {
+      if (!isPropertyActive(p)) return;
       (p.roomList || []).forEach(function(r) {
         if (r.status !== "vacant") return;
         var key = p.id + "_" + r.n;
@@ -7580,15 +7866,39 @@
   function _dmCleanDigits(v) {
     return String(v == null ? "" : v).replace(/\D/g, "");
   }
-  function _dmPlanCaps(plan) {
-    var p = String(plan || "free").toLowerCase();
+  function _dmEffectiveOrgPlanKey(org, cfg) {
+    var o = org;
+    if (o && Array.isArray(o)) o = o[0];
+    var c = cfg || {};
+    return String(o && o.plan != null && o.plan !== "" ? o.plan : c.plan || "free").trim().toLowerCase() || "free";
+  }
+  function _dmResolveOrgBillingStatus(o) {
+    if (!o) return "active";
+    var raw = o.status;
+    if (raw != null && String(raw).trim() !== "") return String(raw).trim().toLowerCase();
+    if (o.trial_ends_at) {
+      var te = new Date(o.trial_ends_at);
+      if (!isNaN(te.getTime()) && te > /* @__PURE__ */ new Date()) return "trial";
+    }
+    return "active";
+  }
+  function _dmPlanCaps(plan, org) {
+    var o = org;
+    if (o && Array.isArray(o)) o = o[0];
+    var cfg = typeof state !== "undefined" && state && state.config ? state.config : {};
+    var p = String(plan != null && plan !== "" ? plan : _dmEffectiveOrgPlanKey(o, cfg)).trim().toLowerCase() || "free";
+    var st = _dmResolveOrgBillingStatus(o);
+    if (st === "trial" && p === "free") p = "trial";
     return {
       properties: p === "business" ? 60 : p === "professional" ? 25 : p === "starter" ? 15 : p === "trial" ? 5 : 3,
       tenants: p === "business" || p === "professional" ? 2147483647 : p === "starter" ? 75 : p === "trial" ? 30 : 15
     };
   }
   function _dmValidatePlanLimitBeforeImport(entity, rows) {
-    var caps = _dmPlanCaps(state && state._currentOrg ? state._currentOrg.plan : "free");
+    var org0 = state && state._currentOrg;
+    if (org0 && Array.isArray(org0)) org0 = org0[0];
+    var cfg = state && state.config ? state.config : {};
+    var caps = _dmPlanCaps(_dmEffectiveOrgPlanKey(org0, cfg), org0);
     if (entity === "properties") {
       var currentProps = (state.properties || []).filter(function(p) {
         return p && p.status !== "archived";
@@ -8203,10 +8513,10 @@
   var _agentRunning = false;
   function buildPortfolioSnapshot() {
     var active = state.tenants.filter(function(t) {
-      return t.status === "active";
+      return t.status === "active" && tenantOnLiveProperty(t);
     });
     var notice = state.tenants.filter(function(t) {
-      return t.status === "notice_given";
+      return t.status === "notice_given" && tenantOnLiveProperty(t);
     });
     var arrears = active.filter(function(t) {
       return (t.arrears || 0) > 0;
@@ -8216,6 +8526,7 @@
     }, 0);
     var vacant = [];
     state.properties.forEach(function(p) {
+      if (!isPropertyActive(p)) return;
       (p.roomList || []).forEach(function(r) {
         if (r.status === "vacant") {
           var days = state.voidDates && state.voidDates[p.id + "_" + r.n] ? Math.floor((/* @__PURE__ */ new Date() - new Date(state.voidDates[p.id + "_" + r.n])) / 864e5) : 0;
@@ -8239,22 +8550,23 @@
     var urgentMaint = openMaint.filter(function(m) {
       return m.priority === "urgent";
     });
-    var totalRooms = state.properties.reduce(function(s, p) {
+    var liveProps = state.properties.filter(isPropertyActive);
+    var totalRooms = liveProps.reduce(function(s, p) {
       return s + p.rooms;
     }, 0);
-    var occRooms = state.properties.reduce(function(s, p) {
+    var occRooms = liveProps.reduce(function(s, p) {
       return s + p.occupied;
     }, 0);
     var expectedMo = Math.round(active.reduce(function(s, t) {
       return s + (t.freq === "monthly" ? t.rent : t.rent * 52 / 12);
     }, 0));
-    var landlordMo = state.properties.reduce(function(s, p) {
+    var landlordMo = liveProps.reduce(function(s, p) {
       return s + p.landlord;
     }, 0);
     return {
       date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
       portfolio: {
-        properties: state.properties.length,
+        properties: liveProps.length,
         totalRooms,
         occupiedRooms: occRooms,
         occupancyPct: Math.round(occRooms / totalRooms * 100),
@@ -8876,9 +9188,10 @@
     var tab = state.filters.reportTab || "pl";
     var selCo = state.filters.reportCompany || "";
     var selYear = state.filters.reportYear || (/* @__PURE__ */ new Date()).getFullYear();
-    var props = selCo ? state.properties.filter(function(p) {
+    var props0 = selCo ? state.properties.filter(function(p) {
       return p.companyId === selCo;
     }) : state.properties;
+    var props = props0.filter(isPropertyActive);
     var propNames = props.map(function(p) {
       return p.name;
     });
@@ -9304,9 +9617,7 @@
     })() + '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' + escapeHtml(first) + '</p><div class="em-alert ' + alertClass + '"><p class="em-alert-title">' + escapeHtml(alertTitle) + '</p><p class="em-alert-body">' + safeSubject + "</p></div>" + safeBody + '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Reply to this email if you have any questions.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">LandlordApp.io</a> \xB7 ' + escapeHtml(company) + "</div></div></body></html>";
   };
   var _saveTimer = null;
-  function saveState() {
-    clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(_doSupaSave, 1500);
+  function _persistLocalKeys() {
     try {
       var localKeys = ["rentSchedule", "roomMedia", "vault", "voidDates", "lateFeeConfig", "propDocs", "users", "companies", "config", "roles", "maintExtras", "dealInputs"];
       localKeys.forEach(function(k) {
@@ -9324,6 +9635,19 @@
       }
     } catch (e) {
     }
+  }
+  function saveState() {
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(function() {
+      _doSupaSave({});
+    }, 1500);
+    _persistLocalKeys();
+  }
+  function saveStateImmediate(opts) {
+    clearTimeout(_saveTimer);
+    _saveTimer = null;
+    _persistLocalKeys();
+    return _doSupaSave(opts || {});
   }
   function showToast(msg, type) {
     var el = document.getElementById("pm-toast");
@@ -9343,6 +9667,23 @@
       el.style.opacity = "0";
     }, 2e3);
   }
+  async function persistPropertyArchiveToSupabase(p) {
+    if (!_currentOrgId || !p || !p.id) {
+      console.warn("persistPropertyArchiveToSupabase: missing org or property id");
+      return { error: { message: "Not signed in or property missing." } };
+    }
+    var isArch = p.status === "archived";
+    var archivedAt = isArch && p.archivedDate ? String(p.archivedDate).split("T")[0] : null;
+    var res = await supa.from("properties").update({
+      status: isArch ? "archived" : "active",
+      archived_at: archivedAt
+    }).eq("id", String(p.id)).eq("org_id", _currentOrgId).select("id");
+    if (res.error) return res;
+    if (!res.data || res.data.length === 0) {
+      return { error: { message: "Could not update property (no row updated). Check RLS policies allow update on properties for your org." } };
+    }
+    return res;
+  }
   async function _supaUpsert(table, rows, opts) {
     try {
       var r = await supa.from(table).upsert(rows, opts);
@@ -9356,6 +9697,12 @@
       return { message: e.message || "Save failed" };
     }
   }
+  function isPlanOrOrgLockSaveError(err) {
+    var msg = String(err && err.message || "");
+    return /Plan limit reached/i.test(msg) || /Organisation is\s+(paused|cancelled)/i.test(msg);
+  }
+  var _lastPlanLimitToastAt = 0;
+  var PLAN_LIMIT_TOAST_COOLDOWN_MS = 18e4;
   function friendlyDbSaveError(err) {
     var msg = String(err && err.message || "");
     if (!msg) return "Could not save changes. Please try again.";
@@ -9373,7 +9720,8 @@
     }
     return msg.length > 180 ? "Could not save changes. Please try again." : msg;
   }
-  async function _doSupaSave() {
+  async function _doSupaSave(opts) {
+    opts = opts || {};
     if (!_currentOrgId) {
       console.warn("_doSupaSave: no org_id \u2014 skipping save");
       return;
@@ -9386,7 +9734,7 @@
     var landlordRows = withOrg(state.landlords.map(landlordToRow));
     var propRows = withOrg(state.properties.map(function(p) {
       var r = propToRow(p);
-      delete r.room_list;
+      if (r.archived_at == null || r.archived_at === "") delete r.archived_at;
       return r;
     }));
     var tenantRows = withOrg(state.tenants.map(function(t) {
@@ -9415,10 +9763,17 @@
       return !!e;
     });
     if (firstErr) {
+      if (isPlanOrOrgLockSaveError(firstErr)) {
+        var now = Date.now();
+        if (now - _lastPlanLimitToastAt < PLAN_LIMIT_TOAST_COOLDOWN_MS) {
+          return;
+        }
+        _lastPlanLimitToastAt = now;
+      }
       if (typeof showToast === "function") showToast(friendlyDbSaveError(firstErr), "error");
       return;
     }
-    if (typeof showToast === "function") showToast("\u2713 Saved", "success");
+    if (!opts.silentSuccess && typeof showToast === "function") showToast("\u2713 Saved", "success");
   }
   async function loadState() {
     if (!_currentOrgId) {
@@ -10096,6 +10451,7 @@
     var companies = state.companies || [];
     var cfg = state.config || {};
     var org = state._currentOrg || {};
+    if (Array.isArray(org)) org = org[0] || {};
     var hiddenV = [];
     if (window._roomEidMap === void 0) window._roomEidMap = {};
     (state.properties || []).forEach(function(p) {
@@ -10110,13 +10466,16 @@
       professional: { label: "Professional", price: 89, color: "#10B981", bg: "#ECFDF5", border: "#A7F3D0", props: 25, seats: 5 },
       business: { label: "Business", price: 149, color: "#8B5CF6", bg: "#F5F3FF", border: "#DDD6FE", props: 60, seats: 15 }
     };
-    var plan = org.plan || "free";
-    var status = org.status || "active";
-    var planCfg = PLANS[plan] || PLANS.free;
+    var planKey = String(org.plan != null && org.plan !== "" ? org.plan : cfg.plan || "free").trim().toLowerCase() || "free";
+    var status = String(org.status || "active").trim().toLowerCase();
+    var planCfg = PLANS[planKey] || PLANS.free;
+    if (status === "trial" && planKey === "free") planCfg = PLANS.trial;
     var trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
     var daysLeft = trialEnd ? Math.ceil((trialEnd - /* @__PURE__ */ new Date()) / 864e5) : null;
     var isTrial = status === "trial";
-    var propCount = state.properties.length;
+    var propCount = (state.properties || []).filter(function(p) {
+      return isPropertyActive(p);
+    }).length;
     var tenantCount = state.tenants.filter(function(t) {
       return t.status !== "inactive";
     }).length;
@@ -10133,13 +10492,9 @@
       var pct2 = usagePct(used, max);
       return '<div style="height:5px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:5px"><div style="height:100%;width:' + pct2 + "%;background:" + usageColor(pct2) + ';border-radius:3px;transition:width .4s"></div></div>';
     }
-    var _planLimits = { "free": 3, "trial": 5, "starter": 15, "professional": 25, "business": 60, "enterprise": 9999 };
-    var _curPlan = (org.plan || cfg.plan || "free").toLowerCase();
-    var _planLimit = _planLimits[_curPlan] || 5;
-    var _propCount = (state.properties || []).filter(function(p) {
-      return p.status !== "archived";
-    }).length;
-    var _limitWarn = _propCount > _planLimit ? '<div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:0;display:flex;align-items:center;gap:12px"><span style="font-size:22px">\u26A0\uFE0F</span><div><div style="font-size:13px;font-weight:700;color:#92400E">Plan Limit Exceeded</div><div style="font-size:12px;color:#78350F">You have <strong>' + _propCount + "</strong> properties but your <strong>" + _curPlan.charAt(0).toUpperCase() + _curPlan.slice(1) + "</strong> plan allows up to <strong>" + _planLimit + "</strong>. Consider upgrading or archiving unused properties.</div></div></div>" : "";
+    var _planLimit = typeof _dmPlanCaps === "function" ? _dmPlanCaps(planKey, org).properties : 5;
+    var _propCount = propCount;
+    var _limitWarn = _propCount > _planLimit ? '<div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:0;display:flex;align-items:center;gap:12px"><span style="font-size:22px">\u26A0\uFE0F</span><div><div style="font-size:13px;font-weight:700;color:#92400E">Plan Limit Exceeded</div><div style="font-size:12px;color:#78350F">You have <strong>' + _propCount + "</strong> active properties but your <strong>" + planCfg.label + "</strong> plan allows up to <strong>" + _planLimit + "</strong>. Consider upgrading or archiving unused properties.</div></div></div>" : "";
     var html = '<div class="page-header"><div><div class="page-title">&#x2699;&#xFE0F; Settings</div><div class="page-sub">Subscription, branding &amp; company profiles</div></div></div>';
     html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:20px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">';
@@ -10156,7 +10511,7 @@
     html += "</div></div>";
     if (isTrial) {
       html += `<button onclick="startStripeCheckout('starter')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>`;
-    } else if (plan === "free") {
+    } else if (planKey === "free") {
       html += `<button onclick="startStripeCheckout('starter')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Start 14-day paid trial</button>`;
     } else {
       html += '<button onclick="openStripeBillingPortal()" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Manage plan</button>';
@@ -10171,7 +10526,7 @@
     html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
     html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Active Tenants</div>';
     html += '<div style="font-size:18px;font-weight:800;font-family:monospace;color:var(--text)">' + tenantCount + "</div>";
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">' + (plan === "free" ? "Up to 15" : plan === "starter" ? "Up to 75" : plan === "trial" ? "Up to 30" : "Unlimited") + "</div>";
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">' + (planKey === "starter" ? "Up to 75" : planKey === "trial" || isTrial ? "Up to 30" : planKey === "free" ? "Up to 15" : "Unlimited") + "</div>";
     html += "</div>";
     html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
     html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Users (seats)</div>';
@@ -10179,7 +10534,7 @@
     html += usageBar(userCount, planCfg.seats);
     html += "</div>";
     html += "</div>";
-    if (isTrial || plan === "free" || plan === "starter") {
+    if (isTrial || planKey === "free" || planKey === "starter") {
       html += '<div style="border-top:1px solid var(--border);padding-top:14px">';
       html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Available Plans</div>';
       html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
@@ -10188,7 +10543,7 @@
         ["professional", "Professional", "\xA389/mo", "25 properties \xB7 5 users"],
         ["business", "Business", "\xA3149/mo", "60 properties \xB7 15 users"]
       ].forEach(function(p) {
-        var isCurrent = p[0] === plan;
+        var isCurrent = p[0] === planKey;
         html += '<div style="border:1.5px solid ' + (isCurrent ? "var(--accent)" : "var(--border)") + ";border-radius:9px;padding:12px;background:" + (isCurrent ? "var(--accent-light)" : "var(--bg)") + '">';
         html += '<div style="font-size:12px;font-weight:700;color:' + (isCurrent ? "var(--accent-dark)" : "var(--text)") + '">' + p[1] + "</div>";
         html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">' + p[2] + "</div>";
@@ -10789,39 +11144,53 @@
       }, 3e3);
     }
   };
-  function runAfterSupabaseLoad() {
+  function syncPropertyRoomsFromTenants() {
     state.properties.forEach(function(p) {
-      if (!p.roomList) return;
-      p.roomList.forEach(function(r) {
-        var tenant = state.tenants.find(function(t) {
-          return t.property === p.name && t.room === r.n && t.status !== "inactive";
-        });
-        r.status = tenant ? "occupied" : "vacant";
-        if (tenant && tenant.rent > 0) r.price = tenant.rent;
-      });
-      p.occupied = p.roomList.filter(function(r) {
-        return r.status === "occupied";
-      }).length;
-      var occupiedPrices = p.roomList.filter(function(r) {
-        return r.status === "occupied" && r.price > 0;
-      }).map(function(r) {
-        return r.price;
-      });
-      if (occupiedPrices.length) {
-        var avgPrice = Math.round(occupiedPrices.reduce(function(s, v) {
-          return s + v;
-        }, 0) / occupiedPrices.length);
-        p.roomList.forEach(function(r) {
-          if (r.status === "vacant" && r.price === 0) r.price = avgPrice;
-        });
-      }
       var propTenants = state.tenants.filter(function(t) {
         return t.property === p.name && t.status !== "inactive";
       });
+      if (Array.isArray(p.roomList) && p.roomList.length) {
+        p.roomList.forEach(function(r) {
+          var tenant = state.tenants.find(function(t) {
+            return t.property === p.name && t.status !== "inactive" && roomNumsEqual(t.room, r.n);
+          });
+          r.status = tenant ? "occupied" : "vacant";
+          if (tenant && tenant.rent > 0) r.price = tenant.rent;
+        });
+        var occFromRooms = p.roomList.filter(function(r) {
+          return r.status === "occupied";
+        }).length;
+        if ((p.lettingType || "hmo") !== "whole" && propTenants.length > 0 && occFromRooms === 0) {
+          p.occupied = Math.min(propTenants.length, p.roomList.length);
+        } else if ((p.lettingType || "hmo") === "whole" && propTenants.length > 0) {
+          p.occupied = Math.min(propTenants.length, p.rooms || 1);
+        } else {
+          p.occupied = occFromRooms;
+        }
+        var occupiedPrices = p.roomList.filter(function(r) {
+          return r.status === "occupied" && r.price > 0;
+        }).map(function(r) {
+          return r.price;
+        });
+        if (occupiedPrices.length) {
+          var avgPrice = Math.round(occupiedPrices.reduce(function(s, v) {
+            return s + v;
+          }, 0) / occupiedPrices.length);
+          p.roomList.forEach(function(r) {
+            if (r.status === "vacant" && r.price === 0) r.price = avgPrice;
+          });
+        }
+      } else {
+        p.occupied = propTenants.length;
+        if (!p.rooms || p.rooms < p.occupied) p.rooms = p.occupied;
+      }
       p.rent = Math.round(propTenants.reduce(function(s, t) {
         return s + (t.freq === "monthly" ? t.rent : (t.rent || 0) * 52 / 12);
       }, 0));
     });
+  }
+  function runAfterSupabaseLoad() {
+    syncPropertyRoomsFromTenants();
     rebuildAllSchedules();
     var today = /* @__PURE__ */ new Date();
     today.setHours(0, 0, 0, 0);
@@ -11025,6 +11394,12 @@
     openPropDetail(propId);
   }
   if (typeof window !== "undefined") {
+    window.roomNumsEqual = roomNumsEqual;
+    window.normalizeTenantRoomTypeKey = normalizeTenantRoomTypeKey;
+    window.isPaidStatus = isPaidStatus;
+    window.isPropertyActive = isPropertyActive;
+    window.tenantOnLiveProperty = tenantOnLiveProperty;
+    window.propertyLinkedToLandlord = propertyLinkedToLandlord;
     window.badge = badge;
     window.kpi = kpi;
     window.btn = btn;
@@ -11082,6 +11457,8 @@
     window.saveRoomNotesBtn = saveRoomNotesBtn;
     window.goto = goto;
     window.render = render;
+    window._paymentCalendarDateForCollected = _paymentCalendarDateForCollected;
+    window.ensureDashboardMonth = ensureDashboardMonth;
     window.getMonthStats = getMonthStats;
     window.showChartTip = showChartTip;
     window.hideChartTip = hideChartTip;
@@ -11144,6 +11521,7 @@
     window.openModal = openModal;
     window.closeModal = closeModal;
     window.debouncedTenantSearch = debouncedTenantSearch;
+    window.cancelPendingPropSearchRefresh = cancelPendingPropSearchRefresh;
     window.debouncedPropSearch = debouncedPropSearch;
     window.onFreqChange = onFreqChange;
     window.refreshRoomDropdown = refreshRoomDropdown;
@@ -11180,9 +11558,7 @@
     window.loadDealScenario = loadDealScenario;
     window.deleteDealScenario = deleteDealScenario;
     window.renderPropFinanceTab = renderPropFinanceTab;
-    window.archiveProperty = archiveProperty;
     window.deletePropPermanent = deletePropPermanent;
-    window.restoreProperty = restoreProperty;
     window.archiveTenant = archiveTenant;
     window.deleteTenantPermanent = deleteTenantPermanent;
     window.restoreTenant = restoreTenant;
@@ -11240,6 +11616,8 @@
     window.saveRoomNotes = saveRoomNotes;
     window.removeRoomVideo = removeRoomVideo;
     window._dmCleanDigits = _dmCleanDigits;
+    window._dmEffectiveOrgPlanKey = _dmEffectiveOrgPlanKey;
+    window._dmResolveOrgBillingStatus = _dmResolveOrgBillingStatus;
     window._dmPlanCaps = _dmPlanCaps;
     window._dmValidatePlanLimitBeforeImport = _dmValidatePlanLimitBeforeImport;
     window.openDataModal = openDataModal;
@@ -11272,8 +11650,11 @@
     window.renderReportCashFlow = renderReportCashFlow;
     window.renderReportForecast = renderReportForecast;
     window.exportReportCSV = exportReportCSV;
+    window._persistLocalKeys = _persistLocalKeys;
     window.saveState = saveState;
+    window.saveStateImmediate = saveStateImmediate;
     window.showToast = showToast;
+    window.isPlanOrOrgLockSaveError = isPlanOrOrgLockSaveError;
     window.friendlyDbSaveError = friendlyDbSaveError;
     window.getEmailConfig = getEmailConfig;
     window.renderEmailSettings = renderEmailSettings;
@@ -11309,6 +11690,7 @@
     window.shareAllMaintWA = shareAllMaintWA;
     window.shareAllPropDocs = shareAllPropDocs;
     window.clearSavedState = clearSavedState;
+    window.syncPropertyRoomsFromTenants = syncPropertyRoomsFromTenants;
     window.runAfterSupabaseLoad = runAfterSupabaseLoad;
     window.getPropDocMeta = getPropDocMeta;
     window.getDaysUntilExpiry = getDaysUntilExpiry;
@@ -11324,12 +11706,15 @@
     window.openPropDetail = openPropDetail;
     window.runDealAI = runDealAI;
     window.syncRoomPhotosBackground = syncRoomPhotosBackground;
+    window.archiveProperty = archiveProperty;
+    window.restoreProperty = restoreProperty;
     window.handlePhotoUpload = handlePhotoUpload;
     window.removeRoomPhoto = removeRoomPhoto;
     window.handleVideoUpload = handleVideoUpload;
     window.uploadTenantDoc = uploadTenantDoc;
     window._dmConfirmImport = _dmConfirmImport;
     window.runAIAgent = runAIAgent;
+    window.persistPropertyArchiveToSupabase = persistPropertyArchiveToSupabase;
     window._supaUpsert = _supaUpsert;
     window._doSupaSave = _doSupaSave;
     window.loadState = loadState;

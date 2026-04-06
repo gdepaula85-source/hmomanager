@@ -4,6 +4,12 @@ function rowToLandlord(r){
     bank:r.bank||'',sortCode:r.sort_code||'',accountNo:r.account_no||'',notes:r.notes||''};
 }
 function rowToProp(r){
+  var rawSt = r.status != null ? String(r.status).trim().toLowerCase() : '';
+  var st = rawSt === 'archived' ? 'archived' : 'active';
+  var arch = r.archived_at;
+  var archivedDate = arch
+    ? (typeof arch === 'string' ? arch.split('T')[0] : '')
+    : null;
   return {id:r.id,name:r.name||'',address:r.address||'',postcode:r.postcode||'',
     area:r.area||'',type:r.type||'HMO',rooms:r.rooms||0,occupied:r.occupied||0,
     rent:parseFloat(r.rent)||0,landlord:parseFloat(r.landlord_rent)||0,
@@ -15,7 +21,9 @@ function rowToProp(r){
     lettingType:r.letting_type||'hmo',
     bedrooms:r.bedrooms||null,
     mortgage:r.mortgage||null,
-    purchaseInfo:r.purchase_info||null};
+    purchaseInfo:r.purchase_info||null,
+    status:st,
+    archivedDate:archivedDate||undefined};
 }
 function rowToTenant(r){
   return {id:r.id,name:r.name||'',property:r.property_name||'',

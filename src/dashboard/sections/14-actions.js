@@ -84,7 +84,17 @@ function rebuildTenantSchedule(tenantId){
 function markSchedulePaid(schedId,method){
   var s=state.rentSchedule.find(function(x){return String(x.id)===String(schedId);});if(!s)return;s.status='paid';
   var t=state.tenants.find(function(x){return x.id===s.tenantId;});
-  if(t){t.paid=new Date(s.dueDateRaw).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});var dueDateISO=new Date(s.dueDateRaw).toISOString().split('T')[0];state.payments.push({id:crypto.randomUUID(),tenant:s.tenantName,tenantName:s.tenantName,tenantId:s.tenantId,property:s.property,propertyName:s.property,amount:s.amount,date:t.paid,dueDate:dueDateISO,paidDate:t.paid,method:method,status:'paid',_dueDateRaw:s.dueDateRaw});}
+  if(t){
+    t.paid=new Date(s.dueDateRaw).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    var dueDateISO=new Date(s.dueDateRaw).toISOString().split('T')[0];
+    var now=new Date();
+    var paidRaw=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+    state.payments.push({
+      id:crypto.randomUUID(),tenant:s.tenantName,tenantName:s.tenantName,tenantId:s.tenantId,
+      property:s.property,propertyName:s.property,amount:s.amount,date:t.paid,dueDate:dueDateISO,paidDate:t.paid,
+      method:method,status:'paid',_dueDateRaw:s.dueDateRaw,_paidDateRaw:paidRaw
+    });
+  }
 
   saveState();
 }
@@ -202,7 +212,8 @@ function markPaid(id,method){
   }
   if(idStr.indexOf('_sch_')>=0){markSchedulePaid(id,method);render();return;}
   var found=false;
-  state.payments=state.payments.map(function(p){if(String(p.id)===idStr){found=true;return Object.assign({},p,{status:'paid',paidMethod:method});}return p;});
+  var paidRaw=new Date(); paidRaw=new Date(paidRaw.getFullYear(),paidRaw.getMonth(),paidRaw.getDate()).getTime();
+  state.payments=state.payments.map(function(p){if(String(p.id)===idStr){found=true;return Object.assign({},p,{status:'paid',paidMethod:method,_paidDateRaw:paidRaw});}return p;});
   if(!found){var s=state.rentSchedule.find(function(x){return String(x.id)===idStr;});if(s)markSchedulePaid(id,method);}
   saveState();
   render();
@@ -210,9 +221,19 @@ function markPaid(id,method){
 
 function recalcProperty(p) {
   if(!p) return;
-  p.occupied = (p.roomList||[]).filter(function(r){return r.status==='occupied';}).length;
-  // Income is always calculated from actual tenant rents — never manually entered
   var tenants = state.tenants.filter(function(t){return t.property===p.name&&t.status!=='inactive';});
+  var list = p.roomList||[];
+  var fromRooms = list.filter(function(r){return r.status==='occupied';}).length;
+  if ((p.lettingType||'hmo')==='whole') {
+    p.occupied = tenants.length > 0 ? Math.min(tenants.length, p.rooms||1) : 0;
+  } else if (list.length) {
+    p.occupied = fromRooms;
+    if (fromRooms===0 && tenants.length>0) {
+      p.occupied = Math.min(tenants.length, list.length);
+    }
+  } else {
+    p.occupied = tenants.length;
+  }
   p.rent = Math.round(tenants.reduce(function(s,t){
     return s + (t.freq==='monthly' ? t.rent : (t.rent||0)*52/12);
   }, 0));
@@ -220,7 +241,7 @@ function recalcProperty(p) {
 function freeRoom(propName, roomN) {
   var p = state.properties.find(function(x){return x.name===propName;});
   if(!p||!p.roomList) return;
-  var r = p.roomList.find(function(rm){return rm.n===roomN;});
+  var r = p.roomList.find(function(rm){return roomNumsEqual(rm.n, roomN);});
   if(r) r.status = 'vacant';
   recalcProperty(p);
   if(!state.voidDates) state.voidDates={};
@@ -229,11 +250,13 @@ function freeRoom(propName, roomN) {
 }
 function occupyRoom(propName, roomN, rentAmount) {
   var p = state.properties.find(function(x){return x.name===propName;});
-  if(!p||!p.roomList) return;
-  var r = p.roomList.find(function(rm){return rm.n===roomN;});
-  if(r) {
-    r.status = 'occupied';
-    if(rentAmount && +rentAmount > 0) r.price = +rentAmount;
+  if(!p) return;
+  if(p.roomList && p.roomList.length){
+    var r = p.roomList.find(function(rm){return roomNumsEqual(rm.n, roomN);});
+    if(r) {
+      r.status = 'occupied';
+      if(rentAmount && +rentAmount > 0) r.price = +rentAmount;
+    }
   }
   recalcProperty(p);
   if(state.voidDates) delete state.voidDates[p.id+'_'+roomN];
@@ -267,7 +290,7 @@ function editExpModal(id){
   var e=state.expenses.find(function(x){return String(x.id)===String(id);});
   if(!e) return;
   var propOpts='<option value="">— Portfolio-wide —</option>'
-    +state.properties.map(function(p){return '<option value="'+p.name+'" '+(e.property===p.name?'selected':'')+'>'+p.name+'</option>';}).join('');
+    +state.properties.filter(function(p){return isPropertyActive(p)||p.name===e.property;}).map(function(p){return '<option value="'+p.name+'" '+(e.property===p.name?'selected':'')+'>'+p.name+'</option>';}).join('');
   var coOpts='<option value="">— Unassigned —</option>'
     +(state.companies||[]).map(function(c){return '<option value="'+c.id+'" '+(e.companyId===c.id?'selected':'')+'>'+c.name+'</option>';}).join('');
   var freqVal = e.freq||'one-off';

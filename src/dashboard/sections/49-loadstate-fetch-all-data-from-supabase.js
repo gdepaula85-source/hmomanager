@@ -621,6 +621,7 @@ function renderSettings() {
   var companies = state.companies || [];
   var cfg = state.config || {};
   var org = state._currentOrg || {};
+  if (Array.isArray(org)) org = org[0] || {};
 
   // Compute hiddenV locally (was previously leaked from renderRooms scope)
   var hiddenV = [];
@@ -639,15 +640,16 @@ function renderSettings() {
     professional: { label:'Professional',  price:89,  color:'#10B981', bg:'#ECFDF5', border:'#A7F3D0', props:25, seats:5  },
     business:     { label:'Business',      price:149, color:'#8B5CF6', bg:'#F5F3FF', border:'#DDD6FE', props:60, seats:15 },
   };
-  var plan     = org.plan || 'free';
-  var status   = org.status || 'active';
-  var planCfg  = PLANS[plan] || PLANS.free;
+  var planKey  = String((org.plan != null && org.plan !== '') ? org.plan : (cfg.plan || 'free')).trim().toLowerCase() || 'free';
+  var status   = String(org.status || 'active').trim().toLowerCase();
+  var planCfg  = PLANS[planKey] || PLANS.free;
+  if (status === 'trial' && planKey === 'free') planCfg = PLANS.trial;
   var trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
   var daysLeft = trialEnd ? Math.ceil((trialEnd - new Date()) / 86400000) : null;
   var isTrial  = status === 'trial';
 
-  // Usage counts
-  var propCount   = state.properties.length;
+  // Usage counts (billing uses active properties only — archived must not count toward caps)
+  var propCount   = (state.properties||[]).filter(function(p){return isPropertyActive(p);}).length;
   var tenantCount = state.tenants.filter(function(t){return t.status!=='inactive';}).length;
   var userCount   = (state.users||[]).filter(function(u){return u.status==='active';}).length;
 
@@ -659,16 +661,14 @@ function renderSettings() {
       +'<div style="height:100%;width:'+pct+'%;background:'+usageColor(pct)+';border-radius:3px;transition:width .4s"></div></div>';
   }
 
-  // Plan limit check
-  var _planLimits={'free':3,'trial':5,'starter':15,'professional':25,'business':60,'enterprise':9999};
-  var _curPlan=(org.plan||cfg.plan||'free').toLowerCase();
-  var _planLimit=_planLimits[_curPlan]||5;
-  var _propCount=(state.properties||[]).filter(function(p){return p.status!=='archived';}).length;
+  // Plan limit check (same rules as _dmPlanCaps / add-property gate)
+  var _planLimit = typeof _dmPlanCaps === 'function' ? _dmPlanCaps(planKey, org).properties : 5;
+  var _propCount = propCount;
   var _limitWarn=_propCount>_planLimit
     ?'<div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:0;display:flex;align-items:center;gap:12px">'
      +'<span style="font-size:22px">⚠️</span>'
      +'<div><div style="font-size:13px;font-weight:700;color:#92400E">Plan Limit Exceeded</div>'
-     +'<div style="font-size:12px;color:#78350F">You have <strong>'+_propCount+'</strong> properties but your <strong>'+_curPlan.charAt(0).toUpperCase()+_curPlan.slice(1)+'</strong> plan allows up to <strong>'+_planLimit+'</strong>. Consider upgrading or archiving unused properties.</div></div></div>'
+     +'<div style="font-size:12px;color:#78350F">You have <strong>'+_propCount+'</strong> active properties but your <strong>'+planCfg.label+'</strong> plan allows up to <strong>'+_planLimit+'</strong>. Consider upgrading or archiving unused properties.</div></div></div>'
     :'';
   var html = '<div class="page-header">'
     + '<div><div class="page-title">&#x2699;&#xFE0F; Settings</div>'
@@ -695,7 +695,7 @@ function renderSettings() {
   if(isTrial) {
     html += '<button onclick="startStripeCheckout(\'starter\')" '
       + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>';
-  } else if (plan === 'free') {
+  } else if (planKey === 'free') {
     html += '<button onclick="startStripeCheckout(\'starter\')" '
       + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Start 14-day paid trial</button>';
   } else {
@@ -716,7 +716,7 @@ function renderSettings() {
   html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
   html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Active Tenants</div>';
   html += '<div style="font-size:18px;font-weight:800;font-family:monospace;color:var(--text)">'+tenantCount+'</div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(plan==='free'?'Up to 15':plan==='starter'?'Up to 75':plan==='trial'?'Up to 30':'Unlimited')+'</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(planKey==='starter'?'Up to 75':(planKey==='trial'||isTrial)?'Up to 30':planKey==='free'?'Up to 15':'Unlimited')+'</div>';
   html += '</div>';
   // Users / seats
   html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
@@ -727,14 +727,14 @@ function renderSettings() {
   html += '</div>';
 
   // Pricing & upgrade options (shown during trial or on lower plans)
-  if(isTrial || plan === 'free' || plan === 'starter') {
+  if(isTrial || planKey === 'free' || planKey === 'starter') {
     html += '<div style="border-top:1px solid var(--border);padding-top:14px">';
     html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Available Plans</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
     [['starter','Starter','£49/mo','15 properties · 3 users'],
      ['professional','Professional','£89/mo','25 properties · 5 users'],
      ['business','Business','£149/mo','60 properties · 15 users']].forEach(function(p){
-      var isCurrent = p[0] === plan;
+      var isCurrent = p[0] === planKey;
       html += '<div style="border:1.5px solid '+(isCurrent?'var(--accent)':'var(--border)')+';border-radius:9px;padding:12px;background:'+(isCurrent?'var(--accent-light)':'var(--bg)')+'">';
       html += '<div style="font-size:12px;font-weight:700;color:'+(isCurrent?'var(--accent-dark)':'var(--text)')+'">'+p[1]+'</div>';
       html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">'+p[2]+'</div>';

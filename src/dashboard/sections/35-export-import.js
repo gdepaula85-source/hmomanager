@@ -11,8 +11,34 @@ function _dmCleanDigits(v) {
   return String(v == null ? '' : v).replace(/\D/g, '');
 }
 
-function _dmPlanCaps(plan) {
-  var p = String(plan || 'free').toLowerCase();
+/** Match Settings page: resolve plan from org then config. */
+function _dmEffectiveOrgPlanKey(org, cfg) {
+  var o = org;
+  if (o && Array.isArray(o)) o = o[0];
+  var c = cfg || {};
+  return String((o && o.plan != null && o.plan !== '') ? o.plan : (c.plan || 'free')).trim().toLowerCase() || 'free';
+}
+
+function _dmResolveOrgBillingStatus(o) {
+  if (!o) return 'active';
+  var raw = o.status;
+  if (raw != null && String(raw).trim() !== '') return String(raw).trim().toLowerCase();
+  // API/embed sometimes omits status; trial window still implies trial caps (same as Settings when status+trial+free).
+  if (o.trial_ends_at) {
+    var te = new Date(o.trial_ends_at);
+    if (!isNaN(te.getTime()) && te > new Date()) return 'trial';
+  }
+  return 'active';
+}
+
+function _dmPlanCaps(plan, org) {
+  var o = org;
+  if (o && Array.isArray(o)) o = o[0];
+  var cfg = (typeof state !== 'undefined' && state && state.config) ? state.config : {};
+  var p = String(plan != null && plan !== '' ? plan : _dmEffectiveOrgPlanKey(o, cfg)).trim().toLowerCase() || 'free';
+  var st = _dmResolveOrgBillingStatus(o);
+  // Orgs often keep plan=free during status=trial; DB/trial caps are 5 properties — match that here.
+  if (st === 'trial' && p === 'free') p = 'trial';
   return {
     properties: p === 'business' ? 60 : p === 'professional' ? 25 : p === 'starter' ? 15 : p === 'trial' ? 5 : 3,
     tenants: p === 'business' || p === 'professional' ? 2147483647 : p === 'starter' ? 75 : p === 'trial' ? 30 : 15
@@ -20,7 +46,10 @@ function _dmPlanCaps(plan) {
 }
 
 function _dmValidatePlanLimitBeforeImport(entity, rows) {
-  var caps = _dmPlanCaps(state && state._currentOrg ? state._currentOrg.plan : 'free');
+  var org0 = state && state._currentOrg;
+  if (org0 && Array.isArray(org0)) org0 = org0[0];
+  var cfg = state && state.config ? state.config : {};
+  var caps = _dmPlanCaps(_dmEffectiveOrgPlanKey(org0, cfg), org0);
   if (entity === 'properties') {
     var currentProps = (state.properties || []).filter(function(p){ return p && p.status !== 'archived'; }).length;
     var newProps = rows.filter(function(r){

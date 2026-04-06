@@ -1,9 +1,6 @@
 // ── saveState: debounced upsert to Supabase ───────────────
 var _saveTimer = null;
-function saveState(){
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(_doSupaSave, 1500);
-  // Save local-only state immediately to localStorage
+function _persistLocalKeys(){
   try {
     var localKeys = ['rentSchedule','roomMedia','vault','voidDates','lateFeeConfig','propDocs','users','companies','config','roles','maintExtras','dealInputs'];
     localKeys.forEach(function(k){
@@ -12,9 +9,20 @@ function saveState(){
         catch(e) { console.warn('localStorage full for key:', k, e); }
       }
     });
-    // Persist current page so refresh returns to same page
     try { localStorage.setItem('pm_local_page', state.page); } catch(e) {}
   } catch(e) {}
+}
+function saveState(){
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function(){ _doSupaSave({}); }, 1500);
+  _persistLocalKeys();
+}
+/** Flush to Supabase now (e.g. archive/restore). Default saveState() waits 1.5s — refresh before then loses changes. */
+function saveStateImmediate(opts){
+  clearTimeout(_saveTimer);
+  _saveTimer = null;
+  _persistLocalKeys();
+  return _doSupaSave(opts || {});
 }
 function showToast(msg, type) {
   var el = document.getElementById('pm-toast');
@@ -33,6 +41,32 @@ function showToast(msg, type) {
   el._t = setTimeout(function(){ el.style.opacity='0'; }, 2000);
 }
 
+/** Single-row patch for archive/restore — awaited in UI so refresh always sees DB truth. */
+async function persistPropertyArchiveToSupabase(p) {
+  if (!_currentOrgId || !p || !p.id) {
+    console.warn('persistPropertyArchiveToSupabase: missing org or property id');
+    return { error: { message: 'Not signed in or property missing.' } };
+  }
+  var isArch = p.status === 'archived';
+  var archivedAt = isArch && p.archivedDate
+    ? String(p.archivedDate).split('T')[0]
+    : null;
+  var res = await supa
+    .from('properties')
+    .update({
+      status: isArch ? 'archived' : 'active',
+      archived_at: archivedAt
+    })
+    .eq('id', String(p.id))
+    .eq('org_id', _currentOrgId)
+    .select('id');
+  if (res.error) return res;
+  if (!res.data || res.data.length === 0) {
+    return { error: { message: 'Could not update property (no row updated). Check RLS policies allow update on properties for your org.' } };
+  }
+  return res;
+}
+
 async function _supaUpsert(table, rows, opts) {
   try {
     var r = await supa.from(table).upsert(rows, opts);
@@ -46,6 +80,15 @@ async function _supaUpsert(table, rows, opts) {
     return { message: e.message || 'Save failed' };
   }
 }
+
+function isPlanOrOrgLockSaveError(err) {
+  var msg = String((err && err.message) || '');
+  return /Plan limit reached/i.test(msg) || /Organisation is\s+(paused|cancelled)/i.test(msg);
+}
+
+/** Avoid spamming toasts when DB rejects every autosave (e.g. over property cap). */
+var _lastPlanLimitToastAt = 0;
+var PLAN_LIMIT_TOAST_COOLDOWN_MS = 180000;
 
 function friendlyDbSaveError(err){
   var msg = String((err && err.message) || '');
@@ -65,7 +108,8 @@ function friendlyDbSaveError(err){
   return msg.length > 180 ? 'Could not save changes. Please try again.' : msg;
 }
 
-async function _doSupaSave(){
+async function _doSupaSave(opts){
+  opts = opts || {};
   if(!_currentOrgId) { console.warn('_doSupaSave: no org_id — skipping save'); return; }
   // Stamp org_id on every row before saving
   function withOrg(rows){ return rows.map(function(r){ return Object.assign({}, r, {org_id: _currentOrgId}); }); }
@@ -73,7 +117,7 @@ async function _doSupaSave(){
   var landlordRows = withOrg(state.landlords.map(landlordToRow));
   var propRows = withOrg(state.properties.map(function(p){
     var r = propToRow(p);
-    delete r.room_list;
+    if (r.archived_at == null || r.archived_at === '') delete r.archived_at;
     return r;
   }));
   var tenantRows = withOrg(state.tenants.map(function(t){
@@ -97,8 +141,15 @@ async function _doSupaSave(){
   ]);
   var firstErr = (errors||[]).find(function(e){ return !!e; });
   if(firstErr){
+    if (isPlanOrOrgLockSaveError(firstErr)) {
+      var now = Date.now();
+      if (now - _lastPlanLimitToastAt < PLAN_LIMIT_TOAST_COOLDOWN_MS) {
+        return;
+      }
+      _lastPlanLimitToastAt = now;
+    }
     if(typeof showToast === 'function') showToast(friendlyDbSaveError(firstErr), 'error');
     return;
   }
-  if(typeof showToast === 'function') showToast('✓ Saved', 'success');
+  if(!opts.silentSuccess && typeof showToast === 'function') showToast('✓ Saved', 'success');
 }

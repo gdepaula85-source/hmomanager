@@ -441,13 +441,18 @@ function renderRent() {
         _dueDateRaw: new Date(Date.now() - 86400000).toISOString().split('T')[0]
       };
     });
+  var overdueScheduledSum = owed.filter(function(p){ return getDueStatus(p)==='overdue'; }).reduce(function(s,p){ return s+p.amount; }, 0);
+  var arrearsOnlySum = arrearsEntries.reduce(function(s,p){ return s+p.amount; }, 0);
+  var totalOverdueMoney = overdueScheduledSum + arrearsOnlySum;
+  var upcomingUnpaidSum = owed.filter(function(p){ return getDueStatus(p)!=='overdue'; }).reduce(function(s,p){ return s+p.amount; }, 0);
   overdue = overdue.concat(arrearsEntries);
   var dueToday=owed.filter(function(p){return getDueStatus(p)==='today';});
   var tomorrow=owed.filter(function(p){return getDueStatus(p)==='tomorrow';});
   var cashColl=owed.filter(function(p){return p.method==='cash';});
   var activeData=rentTab==='overdue'?overdue:rentTab==='today'?dueToday:rentTab==='tomorrow'?tomorrow:rentTab==='paid'?paidForTab:cashColl;
   var totalPaid=paid.reduce(function(s,p){return s+p.amount;},0).toLocaleString();
-  var totalOwed=owed.reduce(function(s,p){return s+p.amount;},0).toLocaleString();
+  var owedSum = owed.reduce(function(s,p){ return s+p.amount; }, 0);
+  var totalOwed = owedSum.toLocaleString();
   // Expected = sum of all payments scheduled in this period (paid + outstanding)
   // This makes the bar and rate reflect the chosen period correctly
   // Expected = only scheduled amounts (paid + outstanding in period), NOT all historical payments
@@ -486,7 +491,7 @@ function renderRent() {
   // Top row: Collected / Outstanding / Expected
   h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:10px">';
   h+='<div style="text-align:center"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Collected</div><div style="font-size:15px;font-weight:800;color:var(--green);font-family:monospace">£'+totalPaid+'</div><div style="font-size:10px;color:var(--muted)">'+paid.length+' payments</div></div>';
-  h+='<div style="text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border)"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Outstanding</div><div style="font-size:15px;font-weight:800;color:'+(owed.length>0?'var(--red)':'var(--muted)')+';font-family:monospace">£'+totalOwed+'</div><div style="font-size:10px;color:var(--muted)">'+owed.length+' tenants</div></div>';
+  h+='<div style="text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border)"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Unpaid (period)</div><div style="font-size:15px;font-weight:800;color:'+(owed.length>0?'var(--red)':'var(--muted)')+';font-family:monospace">£'+totalOwed+'</div><div style="font-size:10px;color:var(--muted)">'+owed.length+' scheduled</div><div style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.35">Overdue: £'+totalOverdueMoney.toLocaleString()+' · Due/upcoming: £'+upcomingUnpaidSum.toLocaleString()+'</div></div>';
   h+='<div style="text-align:center"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Expected</div><div style="font-size:15px;font-weight:800;color:var(--text);font-family:monospace">'+fmt(totalExpect)+'</div><div style="font-size:10px;color:var(--muted)">'+rate+'% rate</div></div>';
   h+='</div>';
   // Progress bar

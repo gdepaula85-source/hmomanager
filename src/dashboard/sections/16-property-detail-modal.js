@@ -116,13 +116,13 @@ var financialsTab = (function(){
           +'<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🏠 Property & Room</div>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
             +'<div class="field" style="margin:0"><label class="field-label">Property</label>'
-              +'<select class="inp" id="td-prop">'+state.properties.map(function(p){return '<option value="'+p.name+'" '+(t.property===p.name?'selected':'')+'>'+p.name+'</option>';}).join('')+'</select>'
+              +'<select class="inp" id="td-prop">'+state.properties.filter(function(p){return isPropertyActive(p)||p.name===t.property;}).map(function(p){return '<option value="'+p.name+'" '+(t.property===p.name?'selected':'')+'>'+p.name+'</option>';}).join('')+'</select>'
             +'</div>'
             +(function(){
               var rp=state.properties.find(function(x){return x.name===t.property;});
               if(!rp||!rp.roomList) return '<div class="field" style="margin:0"><label class="field-label">Room No.</label><input class="inp" id="td-room" type="number" value="'+(t.room||1)+'"></div>';
               var opts=rp.roomList.map(function(r){
-                var linked=state.tenants.find(function(tt){return tt.property===rp.name&&tt.room===r.n&&tt.status!=='inactive'&&tt.id!==t.id;});
+                var linked=state.tenants.find(function(tt){return tt.property===rp.name&&roomNumsEqual(tt.room,r.n)&&tt.status!=='inactive'&&tt.id!==t.id;});
                 var isCurr=r.n===t.room;
                 var dis=(r.status==='unavailable'||(linked&&!isCurr))?'disabled':'';
                 var lbl='Rm '+r.n+' ('+(r.type||'Room')+') £'+r.price+'/wk'+(isCurr?' ✓':'')+(linked&&!isCurr?' (taken)':'');
@@ -261,6 +261,7 @@ var histTab='<div style="margin-bottom:12px"><div style="font-size:13px;font-wei
   // Build available rooms for "move to room" section
   var availRooms = [];
   state.properties.forEach(function(ap){
+    if(!isPropertyActive(ap)) return;
     (ap.roomList||[]).forEach(function(ar){
       if(ar.status==='vacant') availRooms.push({propName:ap.name,propId:ap.id,room:ar.n,type:ar.type||'Room',price:ar.price});
     });
@@ -768,7 +769,7 @@ async function openPropDetail(id) {
               ${['🛏️ Single','🛏️🛏️ Double','✨ Suite','🏠 Studio','🏡 Whole House'].map(opt=>`<option value="${opt.split(' ').slice(1).join(' ')}" ${(r.type||'Single')===opt.split(' ').slice(1).join(' ')?'selected':''}>${opt}</option>`).join('')}
             </select>
             <span style="font-size:11px;font-weight:600;color:${r.status==='occupied'?'var(--green)':'var(--red)'};background:${r.status==='occupied'?'var(--green-light)':'var(--red-light)'};padding:2px 8px;border-radius:5px;flex-shrink:0">${r.status}</span>
-            ${r.status==='occupied'?`<span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${propTenants.find(t=>t.room===r.n)?propTenants.find(t=>t.room===r.n).name:'Tenant not linked'}</span>`:''}
+            ${r.status==='occupied'?`<span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${propTenants.find(t=>roomNumsEqual(t.room,r.n))?propTenants.find(t=>roomNumsEqual(t.room,r.n)).name:'Tenant not linked'}</span>`:''}
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <div style="display:flex;align-items:center;gap:4px">

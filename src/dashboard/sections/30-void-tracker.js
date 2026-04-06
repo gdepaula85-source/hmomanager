@@ -79,6 +79,7 @@ function renderVoidTracker() {
   if(!state.voidDates) state.voidDates = {};
   var voids = [];
   state.properties.forEach(function(p) {
+    if(!isPropertyActive(p)) return;
     (p.roomList||[]).forEach(function(r) {
       if(r.status !== 'vacant') return;
       var key = p.id+'_'+r.n;

@@ -4,6 +4,7 @@ function landlordToRow(l){
     bank:l.bank||'',sort_code:l.sortCode||'',account_no:l.accountNo||'',notes:l.notes||''};
 }
 function propToRow(p){
+  var isArch = p.status === 'archived';
   return {id:p.id,name:p.name||'',address:p.address||'',postcode:p.postcode||'',
     area:p.area||'',type:p.type||'HMO',rooms:p.rooms||0,occupied:p.occupied||0,
     rent:p.rent||0,landlord_rent:p.landlord||0,landlord_id:p.landlordId||null,
@@ -14,7 +15,9 @@ function propToRow(p){
     letting_type:p.lettingType||'hmo',
     bedrooms:p.bedrooms||null,
     mortgage:p.mortgage||null,
-    purchase_info:p.purchaseInfo||null};
+    purchase_info:p.purchaseInfo||null,
+    status:isArch?'archived':'active',
+    archived_at:isArch&&(p.archivedDate||null)?String(p.archivedDate).split('T')[0]:null};
 }
 function tenantToRow(t){
   return {id:t.id,name:t.name||'',property_id:t.propertyId||null,

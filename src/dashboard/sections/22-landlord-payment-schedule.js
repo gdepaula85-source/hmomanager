@@ -19,7 +19,9 @@ function ensureLandlordSchedule() {
   }
 
   state.landlords.forEach(function(ll) {
-    var llProps = state.properties.filter(function(p){return p.landlordName===ll.name && p.landlord>0;});
+    var llProps = state.properties.filter(function(p){
+      return propertyLinkedToLandlord(p, ll) && p.landlord>0 && isPropertyActive(p);
+    });
     if(!llProps.length) return;
 
     llProps.forEach(function(prop) {
@@ -77,7 +79,9 @@ function renderLandlords() {
   var selLLCo = state.filters.landlordCompany||'';
   if(selLLCo){
     var _coProps=state.properties.filter(function(p){return p.companyId===selLLCo;}).map(function(p){return p.name;});
-    lls=lls.filter(function(ll){return state.properties.some(function(p){return p.landlordName===ll.name&&_coProps.indexOf(p.name)>=0;});});
+    lls=lls.filter(function(ll){return state.properties.some(function(p){
+      return propertyLinkedToLandlord(p, ll)&&isPropertyActive(p)&&_coProps.indexOf(p.name)>=0;
+    });});
     // Also filter payments to only those for this company's landlords
     var _coLLNames = lls.map(function(ll){return ll.name;});
     filteredPays = filteredPays.filter(function(p){
@@ -93,7 +97,7 @@ function renderLandlords() {
   var pendingCount = filteredPays.filter(function(p){return p.status==='pending';}).length;
   var totalMonthly = lls.reduce(function(s,ll){
     var llProps = (state.properties||[]).filter(function(p){
-      return p.landlordName===ll.name && (!selLLCo || p.companyId===selLLCo);
+      return propertyLinkedToLandlord(p, ll) && isPropertyActive(p) && (!selLLCo || p.companyId===selLLCo);
     });
     return s + llProps.reduce(function(ss,p){return ss+p.landlord;},0);
   },0);
@@ -138,8 +142,8 @@ function renderLandlords() {
   });
 
   sortedLls.forEach(function(ll) {
-    var llProps    = (state.properties||[]).filter(function(p){return p.landlordName===ll.name;});
-    var llMonthly  = llProps.reduce(function(s,p){return s+p.landlord;},0);
+    var llProps    = (state.properties||[]).filter(function(p){return propertyLinkedToLandlord(p, ll);});
+    var llMonthly  = llProps.filter(isPropertyActive).reduce(function(s,p){return s+p.landlord;},0);
     var llPending  = filteredPays.filter(function(p){return p.landlordId===ll.id&&p.status==='pending';});
     var llPaid     = filteredPays.filter(function(p){return p.landlordId===ll.id&&p.status==='paid';});
     var initials   = ll.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2);
@@ -319,12 +323,16 @@ function saveNewLandlord(){
 
 function deleteLandlord(id){
   var ll=state.landlords.find(function(x){return String(x.id)===String(id);});if(!ll)return;
-  var linkedProps=state.properties.filter(function(p){return p.landlordName===ll.name;});
+  var linkedProps=state.properties.filter(function(p){return propertyLinkedToLandlord(p, ll);});
   var msg='Delete '+ll.name+'?';
   if(linkedProps.length) msg+='\n\n⚠ Linked to '+linkedProps.length+' propert'+(linkedProps.length>1?'ies':'y')+'. Link will be removed.';
   msg+='\n\nThis cannot be undone.';
   if(!confirm(msg)) return;
-  linkedProps.forEach(function(p){delete p.landlordName;delete p.landlordPhone;});
+  linkedProps.forEach(function(p){
+    delete p.landlordName;
+    delete p.landlordPhone;
+    delete p.landlordId;
+  });
   state.landlords=state.landlords.filter(function(x){return String(x.id)!==String(id);});
   try{supa.from('landlords').delete().eq('id',String(id)).then(function(){});}catch(e){}
   closeModal();saveState();render();
@@ -334,7 +342,7 @@ function deleteLandlord(id){
 function openLandlordDetail(id){
   var ll=state.landlords.find(function(x){return String(x.id)===String(id);});if(!ll)return;
   var lpays=(state.landlordPayments||[]).filter(function(p){return p.landlordId===id;});
-  var llProps=state.properties.filter(function(p){return p.landlordName===ll.name;});
+  var llProps=state.properties.filter(function(p){return propertyLinkedToLandlord(p, ll);});
   var pendingPays=lpays.filter(function(p){return p.status!=='paid';});
   var paidPays=lpays.filter(function(p){return p.status==='paid';}).sort(function(a,b){return (b.dueDate||'').localeCompare(a.dueDate||'');}).slice(0,6);
   var shownPays=pendingPays.concat(paidPays);

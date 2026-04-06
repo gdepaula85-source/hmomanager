@@ -11,7 +11,8 @@ export const state = {
     propQ:'', tenantQ:'', tenantProp:'', roomQ:'', roomArea:'all', roomType:'all', roomSort:'price_asc'
   },
   rentSchedule:[],
-  dashMonth:'2026-03',
+  /** Resolved in renderDashboard to current month (see ensureDashboardMonth). */
+  dashMonth:'',
   propDetailTab:null,
   tenantDetailTab:null,
   roomMedia:{},

@@ -28,8 +28,8 @@ const DUE_DATES = {};
 function renderNav() {
   const s = getStats();
   const badges = {rent:s.owed.length, maintenance:s.openM.filter(m=>m.priority==='urgent').length};
-  const rooms = state.properties.reduce((a,p)=>a+p.rooms,0);
-  const occ = state.properties.reduce((a,p)=>a+p.occupied,0);
+  const rooms = s.rooms;
+  const occ = s.occ;
   const op = pct(occ,rooms);
 
   const visibleNav = NAV.filter(n=>canSee(n.id));

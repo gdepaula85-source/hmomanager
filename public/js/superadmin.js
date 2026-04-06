@@ -113,26 +113,43 @@ async function loadData() {
   try {
     await loadConfig(); // load plan/trial config first
     var { data, error } = await supa.from('organisations').select('*').order('created_at', {ascending:false});
-    if(error) throw error;
+    if (error) throw error;
     orgs = data || [];
     lastLoaded = new Date();
     updateBadges();
     navigate(currentPage);
   } catch(e) {
+    var hint = '';
+    if (e && (e.code === '42501' || (e.message && e.message.toLowerCase().indexOf('permission') >= 0))) {
+      hint = '<div style="font-size:11px;color:var(--muted);margin-top:10px;max-width:420px;line-height:1.5">If the list is empty but organisations exist in the database, run <code style="font-size:10px">db/superadmin_rls_policies.sql</code> in the Supabase SQL editor so superadmin JWTs can read <code style="font-size:10px">organisations</code>.</div>';
+    }
     document.getElementById('content').innerHTML =
-      '<div class="empty"><div class="empty-icon">⚠️</div><div style="font-size:14px;font-weight:600;margin-bottom:8px">Could not load data</div><div style="font-size:12px;color:var(--muted)">' + e.message + '</div></div>';
+      '<div class="empty"><div class="empty-icon">⚠️</div><div style="font-size:14px;font-weight:600;margin-bottom:8px">Could not load data</div><div style="font-size:12px;color:var(--muted)">' + (e && e.message ? e.message : String(e)) + '</div>' + hint + '</div>';
   }
+}
+
+/** Trial tab: classic trial status/plan, active free tier, or orgs still inside trial_ends_at. */
+function isTrialsTabOrg(o) {
+  if (!o || o.status === 'cancelled') return false;
+  if (o.status === 'trial' || o.plan === 'trial') return true;
+  if (o.plan === 'free' && o.status === 'active') return true;
+  if (o.trial_ends_at) {
+    try {
+      return new Date(o.trial_ends_at) > new Date();
+    } catch (err) { return false; }
+  }
+  return false;
 }
 
 function updateBadges() {
   document.getElementById('badge-total').textContent     = orgs.length;
-  document.getElementById('badge-trials').textContent    = orgs.filter(o=>o.status==='trial').length;
+  document.getElementById('badge-trials').textContent    = orgs.filter(isTrialsTabOrg).length;
   document.getElementById('badge-cancelled').textContent = orgs.filter(o=>o.status==='cancelled').length;
 }
 
 // ── Navigation ────────────────────────────────────────────────
 var PAGE_TITLES = {
-  dashboard:'Dashboard', companies:'All Companies', trials:'Trials',
+  dashboard:'Dashboard', companies:'All Companies', trials:'Trials & free',
   cancelled:'Cancelled', revenue:'MRR & Plans', activity:'Activity',
   settings:'Plans & Pricing'
 };
@@ -148,7 +165,7 @@ function navigate(page) {
   var pages = {
     dashboard:  renderDashboard,
     companies:  ()=>renderOrgList(orgs),
-    trials:     ()=>renderOrgList(orgs.filter(o=>o.status==='trial')),
+    trials:     ()=>renderOrgList(orgs.filter(isTrialsTabOrg)),
     cancelled:  ()=>renderOrgList(orgs.filter(o=>o.status==='cancelled')),
     revenue:    renderRevenue,
     activity:   renderActivity,
@@ -646,7 +663,7 @@ function orgForm(o) {
       <div class="row-2">
         <div class="field"><label>Plan</label>
           <select class="inp" id="of-plan">
-            ${['trial','starter','professional','business'].map(p=>`<option value="${p}" ${isEdit&&o.plan===p?'selected':''}>${p}</option>`).join('')}
+            ${['trial','free','starter','professional','business'].map(p=>`<option value="${p}" ${isEdit&&o.plan===p?'selected':''}>${p}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Status</label>

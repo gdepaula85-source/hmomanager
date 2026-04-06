@@ -125,6 +125,7 @@ function clearSavedState(){
 }
 var _origRender=render;
 render=function(){
+  // During boot we skip painting so org-scoped data never flashes wrong; after boot always repaint.
   if(_appBootPending) return;
   _origRender();
   // Debounce saveState — prevents expensive serialisation on every rapid render
@@ -149,27 +150,43 @@ render=function(){
     },3000);
   }
 };
-function runAfterSupabaseLoad(){
+/** Sync room vacant/occupied + per-property rent from tenants (same as after loadState). Safe to call on Tenants tab render. */
+function syncPropertyRoomsFromTenants(){
   state.properties.forEach(function(p){
-    if(!p.roomList) return;
-    p.roomList.forEach(function(r){
-      var tenant = state.tenants.find(function(t){
-        return t.property===p.name && t.room===r.n && t.status!=='inactive';
-      });
-      r.status = tenant ? 'occupied' : 'vacant';
-      if(tenant && tenant.rent > 0) r.price = tenant.rent;
-    });
-    p.occupied = p.roomList.filter(function(r){return r.status==='occupied';}).length;
-    var occupiedPrices = p.roomList.filter(function(r){return r.status==='occupied'&&r.price>0;}).map(function(r){return r.price;});
-    if(occupiedPrices.length) {
-      var avgPrice = Math.round(occupiedPrices.reduce(function(s,v){return s+v;},0)/occupiedPrices.length);
-      p.roomList.forEach(function(r){if(r.status==='vacant'&&r.price===0) r.price=avgPrice;});
-    }
     var propTenants = state.tenants.filter(function(t){return t.property===p.name&&t.status!=='inactive';});
+    if(Array.isArray(p.roomList) && p.roomList.length){
+      p.roomList.forEach(function(r){
+        var tenant = state.tenants.find(function(t){
+          return t.property===p.name && t.status!=='inactive' && roomNumsEqual(t.room, r.n);
+        });
+        r.status = tenant ? 'occupied' : 'vacant';
+        if(tenant && tenant.rent > 0) r.price = tenant.rent;
+      });
+      var occFromRooms = p.roomList.filter(function(r){return r.status==='occupied';}).length;
+      if ((p.lettingType||'hmo')!=='whole' && propTenants.length > 0 && occFromRooms === 0) {
+        p.occupied = Math.min(propTenants.length, p.roomList.length);
+      } else if ((p.lettingType||'hmo')==='whole' && propTenants.length > 0) {
+        p.occupied = Math.min(propTenants.length, p.rooms || 1);
+      } else {
+        p.occupied = occFromRooms;
+      }
+      var occupiedPrices = p.roomList.filter(function(r){return r.status==='occupied'&&r.price>0;}).map(function(r){return r.price;});
+      if(occupiedPrices.length) {
+        var avgPrice = Math.round(occupiedPrices.reduce(function(s,v){return s+v;},0)/occupiedPrices.length);
+        p.roomList.forEach(function(r){if(r.status==='vacant'&&r.price===0) r.price=avgPrice;});
+      }
+    } else {
+      // Fallback for older properties lacking roomList.
+      p.occupied = propTenants.length;
+      if(!p.rooms || p.rooms < p.occupied) p.rooms = p.occupied;
+    }
     p.rent = Math.round(propTenants.reduce(function(s,t){
       return s + (t.freq==='monthly' ? t.rent : (t.rent||0)*52/12);
     }, 0));
   });
+}
+function runAfterSupabaseLoad(){
+  syncPropertyRoomsFromTenants();
   rebuildAllSchedules();
   var today = new Date();
   today.setHours(0,0,0,0);

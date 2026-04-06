@@ -151,7 +151,7 @@ function refreshMaintRoomDropdown() {
     p.roomList.forEach(function(r){
       var opt = document.createElement('option');
       opt.value = r.n;
-      var ten = state.tenants.find(function(t){return t.property===p.name&&t.room===r.n&&t.status!=='inactive';});
+      var ten = state.tenants.find(function(t){return t.property===p.name&&roomNumsEqual(t.room,r.n)&&t.status!=='inactive';});
       opt.textContent = 'Room '+r.n+' ('+(r.type||'Room')+') '+(ten?'— '+ten.name:'[Vacant]');
       roomSel.appendChild(opt);
     });
@@ -170,7 +170,7 @@ function refreshMaintTenantInfo() {
     infoBox.style.display = 'none';
     return;
   }
-  var t = state.tenants.find(function(x){return x.property===propName&&x.room===+roomVal&&x.status!=='inactive';});
+  var t = state.tenants.find(function(x){return x.property===propName&&roomNumsEqual(x.room,roomVal)&&x.status!=='inactive';});
   if(!t) { infoBox.style.display='none'; return; }
   var phone = t.whatsapp ? '+'+t.whatsapp : '—';
   infoEl.innerHTML =
@@ -196,7 +196,7 @@ function _activeTenantRoomSet(propName) {
   var set = new Set();
   (state.tenants || []).forEach(function(t) {
     if (t && t.property === propName && t.status !== 'inactive') {
-      set.add(+t.room || 1);
+      set.add(Number(t.room) || 1);
     }
   });
   return set;
@@ -226,7 +226,23 @@ function _derivePropertyRoomsForTenantModal(p) {
 }
 
 function openModal(type) {
-  const propOpts = (state.properties || [])
+  if (type === 'addProp') {
+    var orgM = state._currentOrg;
+    if (orgM && Array.isArray(orgM)) orgM = orgM[0];
+    var cfg = state.config || {};
+    var plan = typeof _dmEffectiveOrgPlanKey === 'function' ? _dmEffectiveOrgPlanKey(orgM, cfg) : String((orgM && orgM.plan) || 'free').toLowerCase();
+    var cap = typeof _dmPlanCaps === 'function' ? _dmPlanCaps(plan, orgM).properties : 3;
+    var currentProps = (state.properties || []).filter(function(p) { return p && isPropertyActive(p); }).length;
+    if (currentProps >= cap) {
+      if (typeof showToast === 'function') {
+        showToast('Property limit reached for your current plan. Upgrade plan or archive an unused property.', 'error');
+      } else {
+        alert('Property limit reached for your current plan. Upgrade plan or archive an unused property.');
+      }
+      return;
+    }
+  }
+  const propOpts = (state.properties || []).filter(isPropertyActive)
     .map(function(p) {
       var isWhole = (p.lettingType || 'hmo') === 'whole';
       if (isWhole) {
@@ -504,7 +520,7 @@ function openModal(type) {
         <div class="field"><label class="field-label">Property (optional)</label>
           <select class="inp" id="f-eprop">
             <option value="">— Portfolio-wide —</option>
-            ${(function(){return state.properties.map(function(p){return '<option value="'+p.name+'">'+p.name+'</option>';}).join('');})()}
+            ${(function(){return state.properties.filter(isPropertyActive).map(function(p){return '<option value="'+p.name+'">'+p.name+'</option>';}).join('');})()}
           </select>
         </div>
         <div class="field"><label class="field-label">🏢 Company</label>
@@ -544,7 +560,7 @@ function openModal(type) {
       <div class="field"><label class="field-label">Property</label>
         <select class="inp" id="f-mprop" onchange="refreshMaintRoomDropdown()">
           <option value="">Select property…</option>
-          ${state.properties.map(function(p){return '<option value="'+p.name+'">'+p.name+'</option>';}).join('')}
+          ${state.properties.filter(isPropertyActive).map(function(p){return '<option value="'+p.name+'">'+p.name+'</option>';}).join('')}
         </select>
       </div>
       <div class="row-2">
@@ -641,6 +657,12 @@ function debouncedTenantSearch() {
 }
 
 var _propSearchTimer = null;
+function cancelPendingPropSearchRefresh() {
+  if (_propSearchTimer) {
+    clearTimeout(_propSearchTimer);
+    _propSearchTimer = null;
+  }
+}
 function debouncedPropSearch() {
   if(_propSearchTimer) clearTimeout(_propSearchTimer);
   _propSearchTimer = setTimeout(function() {
@@ -866,8 +888,13 @@ function saveModal(type) {
       companyId: (document.getElementById('f-company')||{value:''}).value,
       mortgage:     mortgage     || null,
       purchaseInfo: purchaseInfo || null,
+      status:       'active',
     };
     state.properties.push(newProp);
+    // So the new card is not hidden by an active search string; cancel stale debounced re-renders.
+    state.filters.propQ = '';
+    cancelPendingPropSearchRefresh();
+    if (typeof recalcProperty === 'function') recalcProperty(newProp);
   } else if(type==='tenant'){
     var g = function(id){ var el=document.getElementById(id); return el?el.value:null; };
     var name = g('f-tname'); if(!name||!name.trim()) return;
@@ -898,12 +925,12 @@ function saveModal(type) {
       var wholeTaken = state.tenants.find(function(t){ return t.property===propName && t.status==='active'; });
       if(wholeTaken){ alert('⚠️ '+propName+' already has an active tenant ('+wholeTaken.name+').\nMark them as inactive before adding a new one.'); return; }
     } else {
-      var roomTaken = state.tenants.find(function(t){ return t.property===propName && t.room===roomN && t.status!=='inactive'; });
+      var roomTaken = state.tenants.find(function(t){ return t.property===propName && roomNumsEqual(t.room, roomN) && t.status!=='inactive'; });
       if(roomTaken){ alert('⚠️ Room '+roomN+' at '+propName+' is already occupied by '+roomTaken.name+'.\nPlease select a different room.'); return; }
     }
     // Update room type on the property roomList
     if(propObj && propObj.roomList){
-      var rm = propObj.roomList.find(function(r){return r.n===roomN;});
+      var rm = propObj.roomList.find(function(r){return roomNumsEqual(r.n, roomN);});
       if(rm) rm.type = roomType;
     }
     state.tenants.push({
@@ -915,6 +942,7 @@ function saveModal(type) {
       moveOutDate:null, email:'', paymentHistory:[]
     });
     occupyRoom(propName, roomN, rentVal);
+    if (typeof runAfterSupabaseLoad === 'function') runAfterSupabaseLoad();
     rebuildAllSchedules();
   } else if(type==='expense'){
     const desc=document.getElementById('f-edesc').value;
@@ -947,7 +975,7 @@ function saveModal(type) {
     // Find tenant in that room
     var mtenant = '';
     if(isRoom) {
-      var mten = state.tenants.find(function(t){return t.property===mprop&&t.room===mroom&&t.status!=='inactive';});
+      var mten = state.tenants.find(function(t){return t.property===mprop&&roomNumsEqual(t.room,mroom)&&t.status!=='inactive';});
       if(mten) mtenant = mten.name;
     }
     // Get photo

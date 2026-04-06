@@ -57,7 +57,7 @@ function shareRoomWA(pid,rn){
 
 function shareAllRoomsWA(){
   var v=[];
-  state.properties.forEach(function(p){(p.roomList||[]).forEach(function(r){if(r.status==='vacant')v.push({p:p,r:r});});});
+  state.properties.forEach(function(p){if(!isPropertyActive(p))return;(p.roomList||[]).forEach(function(r){if(r.status==='vacant')v.push({p:p,r:r});});});
   if(!v.length){alert('No vacant rooms to share.');return;}
   var NL='\n';
   var msg='🏠 *Available Rooms — Reservations Direct*'+NL;
@@ -142,6 +142,7 @@ function renderRooms(){
   // Build available rooms: vacant + notice_given with moveOutDate (available from date)
   var allV=[], hiddenV=[];
   state.properties.forEach(function(p){
+    if(!isPropertyActive(p)) return;
     (p.roomList||[]).forEach(function(r){
       if(r._hidden) {
         hiddenV.push({p:p,r:r}); // collect separately — shown at bottom
@@ -175,7 +176,7 @@ function renderRooms(){
   html+='<div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:11px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--red)">'+trueVacant+'</div><div style="font-size:10px;color:var(--red);font-weight:700">VACANT</div></div>';
   html+=(comingSoon?'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:11px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:800;color:#B45309">'+comingSoon+'</div><div style="font-size:10px;color:#B45309;font-weight:700">COMING SOON</div></div>':'');
   html+='<div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:11px;padding:12px;text-align:center"><div style="font-size:14px;font-weight:800;color:var(--green)">'+fmt(Math.round(allV.filter(function(x){return !x.availFrom;}).reduce(function(s,x){return s+x.r.price;},0)*52/12))+'</div><div style="font-size:10px;color:var(--green);font-weight:700">POTENTIAL/MO</div></div>';
-  html+='<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:11px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--blue)">'+state.properties.filter(function(p){return(p.roomList||[]).some(function(r){return r.status==='vacant'&&!r._hidden;});}).length+'</div><div style="font-size:10px;color:var(--blue);font-weight:700">PROPERTIES</div></div>';
+  html+='<div style="background:var(--blue-light);border:1px solid #BFDBFE;border-radius:11px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--blue)">'+state.properties.filter(function(p){return isPropertyActive(p)&&(p.roomList||[]).some(function(r){return r.status==='vacant'&&!r._hidden;});}).length+'</div><div style="font-size:10px;color:var(--blue);font-weight:700">PROPERTIES</div></div>';
   html+='</div>';
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">';
   html+='<select class="inp" style="max-width:140px" onchange="state.filters.roomArea=this.value;render()"><option value="all">All Areas</option>'+areas.map(function(a){return '<option value="'+a+'" '+(f.area===a?'selected':'')+'>'+a+'</option>';}).join('')+'</select>';

@@ -2,12 +2,13 @@
 var _agentRunning = false;
 
 function buildPortfolioSnapshot() {
-  var active  = state.tenants.filter(function(t){return t.status==='active';});
-  var notice  = state.tenants.filter(function(t){return t.status==='notice_given';});
+  var active  = state.tenants.filter(function(t){return t.status==='active'&&tenantOnLiveProperty(t);});
+  var notice  = state.tenants.filter(function(t){return t.status==='notice_given'&&tenantOnLiveProperty(t);});
   var arrears = active.filter(function(t){return (t.arrears||0)>0;});
   var arrTotal = arrears.reduce(function(s,t){return s+(t.arrears||0);},0);
   var vacant = [];
   state.properties.forEach(function(p){
+    if(!isPropertyActive(p)) return;
     (p.roomList||[]).forEach(function(r){
       if(r.status==='vacant'){
         var days = state.voidDates&&state.voidDates[p.id+'_'+r.n]
@@ -24,13 +25,14 @@ function buildPortfolioSnapshot() {
   var llOverdueTotal = llOverdue.reduce(function(s,p){return s+p.amount;},0);
   var openMaint   = state.maintenance.filter(function(m){return m.status==='open';});
   var urgentMaint = openMaint.filter(function(m){return m.priority==='urgent';});
-  var totalRooms = state.properties.reduce(function(s,p){return s+p.rooms;},0);
-  var occRooms   = state.properties.reduce(function(s,p){return s+p.occupied;},0);
+  var liveProps = state.properties.filter(isPropertyActive);
+  var totalRooms = liveProps.reduce(function(s,p){return s+p.rooms;},0);
+  var occRooms   = liveProps.reduce(function(s,p){return s+p.occupied;},0);
   var expectedMo = Math.round(active.reduce(function(s,t){return s+(t.freq==='monthly'?t.rent:t.rent*52/12);},0));
-  var landlordMo = state.properties.reduce(function(s,p){return s+p.landlord;},0);
+  var landlordMo = liveProps.reduce(function(s,p){return s+p.landlord;},0);
   return {
     date: new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
-    portfolio:{properties:state.properties.length,totalRooms:totalRooms,occupiedRooms:occRooms,
+    portfolio:{properties:liveProps.length,totalRooms:totalRooms,occupiedRooms:occRooms,
       occupancyPct:Math.round(occRooms/totalRooms*100),vacantRooms:totalRooms-occRooms,
       expectedIncome:expectedMo,landlordCosts:landlordMo,netProfit:expectedMo-landlordMo},
     tenants:{active:active.length,onNotice:notice.length,inArrears:arrears.length,totalArrears:arrTotal,

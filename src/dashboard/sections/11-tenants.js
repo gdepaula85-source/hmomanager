@@ -1,5 +1,7 @@
 // ── TENANTS ───────────────────────────────────────────────────────────────────
 function renderTenants() {
+  // Match post–loadState room/tenant sync so KPIs stay correct after adds/edits without a full refresh.
+  if (typeof syncPropertyRoomsFromTenants === 'function') syncPropertyRoomsFromTenants();
   const f = state.filters.tenants||'all';
   const q = (state.filters.tenantQ||'').toLowerCase();
   const propFilter = state.filters.tenantProp||'';
@@ -17,7 +19,7 @@ function renderTenants() {
 
   return `
     <div class="page-header">
-      <div><div class="page-title">Tenants</div><div class="page-sub">${state.tenants.filter(t=>t.status==='active').length} active · ${state.tenants.filter(t=>t.arrears>0).length} in arrears</div></div>
+      <div><div class="page-title">Tenants</div><div class="page-sub">${state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length} active · ${state.tenants.filter(t=>t.arrears>0).length} in arrears</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button onclick="openDataModal('tenants')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Tenants">⇅</button>
         ${btn('+ Add Tenant',"openModal('addTenant')")}
@@ -29,19 +31,19 @@ function renderTenants() {
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
           <div>
             <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Active Tenants</div>
-            <div style="font-size:24px;font-weight:800;color:var(--green);font-family:monospace">${state.tenants.filter(t=>t.status==='active').length}</div>
+            <div style="font-size:24px;font-weight:800;color:var(--green);font-family:monospace">${state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length}</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${(()=>{const r=state.properties.reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active').length;return r?Math.round(a/r*100):0;})()}%</div>
+            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${(()=>{const r=state.properties.filter(isPropertyActive).reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length;return r?Math.round(a/r*100):0;})()}%</div>
             <div style="font-size:10px;color:var(--muted)">occupancy</div>
           </div>
         </div>
         <div style="background:var(--border);border-radius:3px;height:4px;margin-top:8px;overflow:hidden">
-          <div style="height:100%;border-radius:3px;background:${(()=>{const r=state.properties.reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active').length;const pct=r?Math.round(a/r*100):0;return pct>=90?'#10B981':pct>=70?'#F59E0B':'#EF4444';})()};width:${(()=>{const r=state.properties.reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active').length;return r?Math.round(a/r*100):0;})()}%"></div>
+          <div style="height:100%;border-radius:3px;background:${(()=>{const r=state.properties.filter(isPropertyActive).reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length;const pct=r?Math.round(a/r*100):0;return pct>=90?'#10B981':pct>=70?'#F59E0B':'#EF4444';})()};width:${(()=>{const r=state.properties.filter(isPropertyActive).reduce((s,p)=>s+p.rooms,0);const a=state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length;return r?Math.round(a/r*100):0;})()}%"></div>
         </div>
       </div>
       ${(function(){
-        var act=state.tenants.filter(function(t){return t.status==='active'||t.status==='notice_given';});
+        var act=state.tenants.filter(function(t){return(t.status==='active'||t.status==='notice_given')&&tenantOnLiveProperty(t);});
         var wk=act.filter(function(t){return t.freq==='weekly';}).reduce(function(s,t){return s+t.rent;},0);
         var mo=act.filter(function(t){return t.freq==='monthly';}).reduce(function(s,t){return s+t.rent;},0);
         var total=Math.round(wk*52/12+mo);
@@ -55,7 +57,7 @@ function renderTenants() {
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:${state.tenants.filter(t=>t.arrears>0&&t.status!=='inactive').length?'10px':'14px'}">
       <div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:10px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:var(--green)">${state.tenants.filter(t=>t.status==='active').length}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--green)">${state.tenants.filter(t=>t.status==='active'&&tenantOnLiveProperty(t)).length}</div>
         <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-top:2px">Active</div>
       </div>
       <div style="background:${state.tenants.filter(t=>t.status==='notice_given').length?'var(--amber-light)':'var(--bg)'};border:1px solid ${state.tenants.filter(t=>t.status==='notice_given').length?'#FDE68A':'var(--border)'};border-radius:10px;padding:10px;text-align:center">
@@ -85,12 +87,42 @@ function renderTenants() {
       var typeStats = {};
       TYPES.forEach(function(t){ typeStats[t.key] = {occ:0, total:0}; });
       state.properties.forEach(function(p){
+        if(!isPropertyActive(p)) return;
         (p.roomList||[]).forEach(function(r){
-          var key = r.type||'Single';
+          var tenant = state.tenants.find(function(t){
+            return t.property===p.name && t.status!=='inactive' && roomNumsEqual(t.room, r.n);
+          });
+          var key = normalizeTenantRoomTypeKey(tenant && tenant.roomType ? tenant.roomType : r.type);
           if(!typeStats[key]) typeStats[key] = {occ:0, total:0};
           typeStats[key].total++;
-          if(r.status==='occupied') typeStats[key].occ++;
+          var isOcc = !!(tenant && tenant.status!=='inactive') || (r.status==='occupied');
+          if(isOcc) typeStats[key].occ++;
         });
+      });
+      // Properties with no roomList (legacy / not yet synced): must still count toward totals even when
+      // another property already has a roomList — otherwise KPIs show only the newest property until refresh.
+      state.properties.forEach(function(p){
+        if(!isPropertyActive(p)) return;
+        if ((p.roomList||[]).length) return;
+        var propTenants = state.tenants.filter(function(t){
+          return t.property === p.name && t.status !== 'inactive';
+        });
+        var maxRn = propTenants.reduce(function(m, t) {
+          return Math.max(m, Number(t.room) || 0);
+        }, 0);
+        var n = Math.max(p.rooms || 0, propTenants.length, maxRn);
+        if (n === 0 && propTenants.length === 0) return;
+        if (n === 0) n = propTenants.length;
+        propTenants.forEach(function(t){
+          var k = normalizeTenantRoomTypeKey(t.roomType);
+          if (!typeStats[k]) typeStats[k] = { occ: 0, total: 0 };
+          typeStats[k].occ++;
+          typeStats[k].total++;
+        });
+        var vacant = Math.max(0, n - propTenants.length);
+        if (vacant > 0) {
+          typeStats['Single'].total += vacant;
+        }
       });
       // Show ALL 5 types always so the row is always full
       var active = TYPES;
@@ -119,7 +151,7 @@ function renderTenants() {
       <div class="search-wrap" style="flex:1;min-width:160px"><span class="search-ico">🔍</span><input class="search-inp" placeholder="Search tenants…" value="${state.filters.tenantQ||''}" oninput="state.filters.tenantQ=this.value;debouncedTenantSearch()"></div>
       <select style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;min-width:160px" onchange="state.filters.tenantProp=this.value;render()">
         <option value="">All Properties</option>
-        ${state.properties.map(p=>`<option value="${p.name}" ${(state.filters.tenantProp||'')=== p.name?'selected':''}>${p.name}</option>`).join('')}
+        ${state.properties.filter(isPropertyActive).map(p=>`<option value="${p.name}" ${(state.filters.tenantProp||'')=== p.name?'selected':''}>${p.name}</option>`).join('')}
       </select>
     </div>
       ${[{v:'all',l:'All'},{v:'active',l:'Active'},{v:'notice',l:'On Notice'},{v:'arrears',l:'In Arrears'},{v:'archived',l:'Archived'}].map(x=>`<button class="filter-btn ${f===x.v?'active':''}" onclick="state.filters.tenants='${x.v}';render()">${x.l}</button>`).join('')}

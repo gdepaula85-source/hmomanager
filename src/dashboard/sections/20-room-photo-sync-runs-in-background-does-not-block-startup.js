@@ -237,13 +237,23 @@ function renderPropFinanceTab(p, propTenants) {
   return html;
 }
 
-function archiveProperty(id){
+async function archiveProperty(id){
   var p=state.properties.find(function(x){return String(x.id)===String(id);});if(!p)return;
   var activeT=state.tenants.filter(function(t){return t.property===p.name&&(t.status==='active'||t.status==='notice_given');});
   var msg=activeT.length>0?'This property has '+activeT.length+' active tenant(s). Archive anyway?\n\nActive tenants will remain linked but property hidden from main view.':'Archive "'+p.name+'"?\n\nHidden from main view. Restore or delete from Archived tab.';
   if(!confirm(msg)) return;
+  var prevStatus=p.status,prevArch=p.archivedDate;
   p.status='archived';p.archivedDate=new Date().toISOString().split('T')[0];
-  saveState();closeModal();state.filters.props='archived';render();
+  var r=await persistPropertyArchiveToSupabase(p);
+  if(r&&r.error){
+    p.status=prevStatus;p.archivedDate=prevArch;
+    if(typeof showToast==='function')showToast(typeof friendlyDbSaveError==='function'?friendlyDbSaveError(r.error):(r.error.message||'Could not archive'),'error');
+    return;
+  }
+  state.filters.propQ = '';
+  if (typeof cancelPendingPropSearchRefresh === 'function') cancelPendingPropSearchRefresh();
+  saveStateImmediate({silentSuccess:true});closeModal();state.filters.props='archived';
+  render();
   showToast(p.name+' archived','success');
 }
 function deletePropPermanent(id){
@@ -252,12 +262,23 @@ function deletePropPermanent(id){
   if(!confirm('PERMANENTLY DELETE "'+p.name+'"?\n\nThis cannot be undone.')) return;
   try{supa.from('properties').delete().eq('id',String(id)).then(function(){});}catch(e){}
   state.properties=state.properties.filter(function(x){return String(x.id)!==String(id);});
-  saveState();closeModal();render();showToast(p.name+' permanently deleted','success');
+  state.filters.propQ = '';
+  if (typeof cancelPendingPropSearchRefresh === 'function') cancelPendingPropSearchRefresh();
+  saveStateImmediate({silentSuccess:true});closeModal();render();showToast(p.name+' permanently deleted','success');
 }
-function restoreProperty(id){
+async function restoreProperty(id){
   var p=state.properties.find(function(x){return String(x.id)===String(id);});if(!p)return;
+  var prevStatus=p.status,prevArch=p.archivedDate;
   p.status='active';delete p.archivedDate;
-  saveState();closeModal();state.filters.props='all';render();showToast(p.name+' restored','success');
+  var r=await persistPropertyArchiveToSupabase(p);
+  if(r&&r.error){
+    p.status=prevStatus;if(prevArch!==undefined)p.archivedDate=prevArch;
+    if(typeof showToast==='function')showToast(typeof friendlyDbSaveError==='function'?friendlyDbSaveError(r.error):(r.error.message||'Could not restore'),'error');
+    return;
+  }
+  state.filters.propQ = '';
+  if (typeof cancelPendingPropSearchRefresh === 'function') cancelPendingPropSearchRefresh();
+  saveStateImmediate({silentSuccess:true});closeModal();state.filters.props='all';render();showToast(p.name+' restored','success');
 }
 function archiveTenant(id){
   var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
@@ -265,7 +286,7 @@ function archiveTenant(id){
   var oldProp=t.property,oldRoom=t.room;
   t.status='inactive';t.archivedDate=new Date().toISOString().split('T')[0];
   freeRoom(oldProp,oldRoom);
-  saveState();closeModal();state.filters.tenants='archived';render();showToast(t.name+' archived','success');
+  saveStateImmediate({silentSuccess:true});closeModal();state.filters.tenants='archived';render();showToast(t.name+' archived','success');
 }
 function deleteTenantPermanent(id){
   var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
@@ -274,13 +295,13 @@ function deleteTenantPermanent(id){
   try{supa.from('tenants').delete().eq('id',String(id)).then(function(){});}catch(e){}
   state.tenants=state.tenants.filter(function(x){return String(x.id)!==String(id);});
   state.payments=state.payments.filter(function(x){return x.tenantId!==String(id)&&x.tenantName!==t.name;});
-  saveState();closeModal();render();showToast(t.name+' permanently deleted','success');
+  saveStateImmediate({silentSuccess:true});closeModal();render();showToast(t.name+' permanently deleted','success');
 }
 function restoreTenant(id){
   var t=state.tenants.find(function(x){return String(x.id)===String(id);});if(!t)return;
   t.status='active';delete t.archivedDate;
   if(t.property&&t.room) occupyRoom(t.property,t.room,t.rent);
-  saveState();closeModal();state.filters.tenants='all';render();showToast(t.name+' restored','success');
+  saveStateImmediate({silentSuccess:true});closeModal();state.filters.tenants='all';render();showToast(t.name+' restored','success');
 }
 function savePropDetail(id) {
   const p = state.properties.find(x=>x.id===id);

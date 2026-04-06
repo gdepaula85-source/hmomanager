@@ -1,28 +1,74 @@
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
+/** Which calendar month a paid payment belongs in for "Collected" KPIs — paid date first, not rent due date. */
+function _paymentCalendarDateForCollected(p) {
+  if (!p) return new Date(0);
+  if (p._paidDateRaw) return new Date(p._paidDateRaw);
+  var months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  var pd = p.paidDate || p.date;
+  if (pd && typeof pd === 'string') {
+    var parts = String(pd).trim().split(/\s+/);
+    if (parts.length === 3 && months[parts[1]] !== undefined) {
+      var d = new Date(+parts[2], months[parts[1]], +parts[0]);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  if (p._dueDateRaw) return new Date(p._dueDateRaw);
+  if (p.dueDate) {
+    var iso = String(p.dueDate).split('T')[0].split('-');
+    if (iso.length === 3) return new Date(+iso[0], +iso[1]-1, +iso[2]);
+  }
+  return typeof getDueDateObj === 'function' ? getDueDateObj(p) : new Date();
+}
+
+/** Keep dashboard month in sync with the rolling MONTHS list (last key = current calendar month). */
+function ensureDashboardMonth() {
+  if (!MONTHS || !MONTHS.length) return;
+  var keys = MONTHS.map(function(m) { return m.key; });
+  if (!state.dashMonth || keys.indexOf(state.dashMonth) < 0) {
+    state.dashMonth = keys[keys.length - 1];
+  }
+}
+
 function getMonthStats(monthKey) {
   var mo = MONTHS.find(function(m){return m.key===monthKey;});
   if(!mo) return null;
+  var dashCo = (state.filters && state.filters.dashCompany) || '';
+  var dashProps = (dashCo ? state.properties.filter(function(p){return p.companyId===dashCo;}) : state.properties.slice()).filter(isPropertyActive);
+  var propNames = {};
+  dashProps.forEach(function(p){ propNames[p.name]=1; });
+  function inDashScope(pay) {
+    if (!dashCo) return true;
+    var pn = pay.propertyName || pay.property || '';
+    return !!propNames[pn];
+  }
   var pool = getFullPaymentPool();
-  var pays = pool.filter(function(p){var d=getDueDateObj(p);return d>=mo.from&&d<=mo.to;});
-  var income = pays.filter(function(p){return p.status==='paid';}).reduce(function(s,p){return s+p.amount;},0);
-  var landlord = state.properties.reduce(function(s,p){return s+p.landlord;},0);
+  var pays = pool.filter(function(p){if(!inDashScope(p))return false;var d=getDueDateObj(p);return d>=mo.from&&d<=mo.to;});
+  var collectedPays = pool.filter(function(p){
+    if (!isPaidStatus(p.status)) return false;
+    if (!inDashScope(p)) return false;
+    var d = _paymentCalendarDateForCollected(p);
+    return d>=mo.from && d<=mo.to;
+  });
+  var income = collectedPays.reduce(function(s,p){return s+p.amount;},0);
+  var landlord = dashProps.reduce(function(s,p){return s+p.landlord;},0);
   var opex = state.expenses.reduce(function(s,e){return s+e.amount;},0);
-  var occ = state.properties.reduce(function(s,p){return s+p.occupied;},0);
-  var rooms = state.properties.reduce(function(s,p){return s+p.rooms;},0);
-  // Outstanding: count unpaid entries from rentSchedule in this month
+  var occ = dashProps.reduce(function(s,p){return s+p.occupied;},0);
+  var rooms = dashProps.reduce(function(s,p){return s+p.rooms;},0);
   var schedOutstanding = (state.rentSchedule||[]).filter(function(s){
     if(s.status==='paid') return false;
     if(!s.dueDateRaw) return false;
     var d = new Date(s.dueDateRaw);
     return d>=mo.from && d<=mo.to;
   }).length;
-  // Expected income = weekly rent × 52/12 for all active tenants
-  var expectedIncome = Math.round(state.tenants.filter(function(t){return t.status==='active';})
-    .reduce(function(s,t){return s+(t.freq==='monthly'?t.rent:(t.rent||0)*52/12);},0));
+  var expectedIncome = Math.round(state.tenants.filter(function(t){
+    if (t.status !== 'active' || (dashCo && !propNames[t.property])) return false;
+    var pr = state.properties.find(function(x){ return x.name === t.property; });
+    return !pr || pr.status !== 'archived';
+  }).reduce(function(s,t){return s+(t.freq==='monthly'?t.rent:(t.rent||0)*52/12);},0));
   var expectedGross = expectedIncome - landlord;
   var expectedNet   = expectedIncome - landlord - opex;
   return {income:income, landlord:landlord, opex:opex, profit:income-landlord-opex,
-          occ:occ, rooms:rooms, outstanding:schedOutstanding, pays:pays,
+          occ:occ, rooms:rooms, outstanding:schedOutstanding, pays:pays, collectedPays:collectedPays,
           label:mo.label, expectedIncome:expectedIncome,
           expectedGross:expectedGross, expectedNet:expectedNet};
 }
@@ -39,16 +85,38 @@ function showChartTip(e, text) {
 function hideChartTip(){var tip=document.getElementById('chart-tip');if(tip)tip.style.display='none';}
 
 function renderDashboard() {
-  var selMonth = state.dashMonth || '2026-03';
-  var ms = getMonthStats(selMonth) || getMonthStats('2026-03');
+  ensureDashboardMonth();
+  var selMonth = state.dashMonth;
+  var ms = getMonthStats(selMonth);
+  if (!ms && MONTHS && MONTHS.length) {
+    state.dashMonth = MONTHS[MONTHS.length - 1].key;
+    ms = getMonthStats(state.dashMonth);
+  }
   var s = getStats();
 
   // Build 6-month trend from real payment data
+  var dashCoTrend = (state.filters && state.filters.dashCompany) || '';
+  var trendPropNames = {};
+  if (dashCoTrend) {
+    state.properties.filter(function(p){return p.companyId===dashCoTrend&&isPropertyActive(p);}).forEach(function(p){ trendPropNames[p.name]=1; });
+  }
+  function inTrendScope(p) {
+    if (!dashCoTrend) return true;
+    var pn = p.propertyName || p.property || '';
+    return !!trendPropNames[pn];
+  }
   var trend = MONTHS.map(function(mo) {
     var pool = getFullPaymentPool();
-    var pays = pool.filter(function(p){var d=getDueDateObj(p);return d>=mo.from&&d<=mo.to;});
-    var inc  = pays.filter(function(p){return p.status==='paid';}).reduce(function(s,p){return s+p.amount;},0);
-    var land = state.properties.reduce(function(s,p){return s+p.landlord;},0);
+    var inc = pool
+      .filter(function(p){
+        if (!isPaidStatus(p.status) || !inTrendScope(p)) return false;
+        var d = _paymentCalendarDateForCollected(p);
+        return d>=mo.from&&d<=mo.to;
+      })
+      .reduce(function(s,p){return s+p.amount;},0);
+    var land = dashCoTrend
+      ? state.properties.filter(function(p){return p.companyId===dashCoTrend&&isPropertyActive(p);}).reduce(function(s,p){return s+p.landlord;},0)
+      : state.properties.filter(isPropertyActive).reduce(function(s,p){return s+p.landlord;},0);
     var opex = state.expenses.reduce(function(s,e){return s+e.amount;},0);
     var costs= land+opex;
     return {m:mo.label.split(' ')[0], key:mo.key, i:inc, c:costs, p:inc-costs, label:mo.label};
@@ -56,7 +124,7 @@ function renderDashboard() {
   var maxV = Math.max.apply(null, trend.map(function(t){return Math.max(t.i,t.c);}));
   if(maxV===0) maxV=1;
 
-  var lossProps = state.properties.filter(function(p){return net(p)<0;});
+  var lossProps = state.properties.filter(function(p){return isPropertyActive(p)&&net(p)<0;});
   var staffT = state.expenses.filter(function(e){return e.type==='staff';}).reduce(function(a,e){return a+e.amount;},0);
   var propT  = state.expenses.filter(function(e){return e.type==='property';}).reduce(function(a,e){return a+e.amount;},0);
   var overT  = state.expenses.filter(function(e){return e.type==='overhead';}).reduce(function(a,e){return a+e.amount;},0);
@@ -82,17 +150,21 @@ function renderDashboard() {
   var _dashPropNames = _dashProps.map(function(p){return p.name;});
 
   // KPIs — Row 1: Expected Income + Expected Net Profit
-  var collectedAmt = ms.pays.filter(function(p){return p.status==='paid';}).reduce(function(a,p){return a+p.amount;},0);
+  var collectedAmt = (ms.collectedPays||[]).reduce(function(a,p){return a+p.amount;},0);
   html += '<div class="kpi-grid kpi-2" style="margin-bottom:10px">';
   html += kpi('Expected Income', fmt(ms.expectedIncome), ms.occ+'/'+ms.rooms+' rooms occupied', '#00B894', '&#x1F4B0;');
   html += kpi('Expected Net Profit', fmt(ms.expectedNet), 'After all costs', ms.expectedNet>=0?'#00B894':'#E8375A', '&#x1F4C8;');
   html += '</div>';
   // Row 2: Actual collected + costs
   html += '<div class="kpi-grid kpi-4" style="margin-bottom:22px">';
-  html += kpi('Collected', fmt(collectedAmt), ms.pays.filter(function(p){return p.status==='paid';}).length+' payments', '#10B981', '&#x2705;');
+  html += kpi('Collected', fmt(collectedAmt), (ms.collectedPays||[]).length+' payments', '#10B981', '&#x2705;');
   html += kpi('Landlord Costs', fmt(ms.landlord), pct(ms.landlord,ms.expectedIncome||1)+'% of income', '#E8375A', '&#x1F3E6;');
   html += kpi('Operating Costs', fmt(ms.opex), 'Staff + property + overhead', '#F59E0B', '&#x2699;&#xFE0F;');
-  html += kpi('Active Tenants', state.tenants.filter(function(t){return t.status==='active';}).length, state.tenants.filter(function(t){return t.status==='notice_given';}).length+' on notice', '#3B82F6', '&#x1F465;');
+  html += kpi('Active Tenants', state.tenants.filter(function(t){
+    if (t.status !== 'active') return false;
+    var pr = state.properties.find(function(x){ return x.name === t.property; });
+    return !pr || pr.status !== 'archived';
+  }).length, state.tenants.filter(function(t){return t.status==='notice_given';}).length+' on notice', '#3B82F6', '&#x1F465;');
   html += '</div>';
 
   // Tooltip div
@@ -180,10 +252,16 @@ function renderProperties() {
     if(f==='managed') return ok&&p.ownershipType!=='owned';
     return ok;
   });
+  const kpiProps = state.properties.filter(function(p){
+    if(!isPropertyActive(p)) return false;
+    if(pco && p.companyId!==pco) return false;
+    return true;
+  });
+  const activeTotal = state.properties.filter(isPropertyActive).length;
   const coOpts = '<option value="">&#x1F3E2; All Companies</option>'+(state.companies||[]).map(c=>'<option value="'+c.id+'" '+(pco===c.id?'selected':'')+'>'+c.name+'</option>').join('');
   return `
     <div class="page-header">
-      <div><div class="page-title">Properties</div><div class="page-sub">${data.length} of ${state.properties.length} properties</div></div>
+      <div><div class="page-title">Properties</div><div class="page-sub">${f==='archived'?data.length+' archived':data.length+' of '+activeTotal+' active'}</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button onclick="openDataModal('properties')" style="padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit" title="Import / Export Properties">⇅</button>
         <button onclick="propViewDeal()" style="padding:9px 14px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent-dark);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Deal Analyzer</button>
@@ -201,11 +279,11 @@ function renderProperties() {
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Total Portfolio</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
           <div>
-            <div style="font-size:22px;font-weight:800;color:var(--text);font-family:monospace">${state.properties.length}</div>
+            <div style="font-size:22px;font-weight:800;color:var(--text);font-family:monospace">${kpiProps.length}</div>
             <div style="font-size:11px;color:var(--muted)">properties</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${data.reduce((s,p)=>s+p.rooms,0)}</div>
+            <div style="font-size:18px;font-weight:800;color:var(--muted);font-family:monospace">${kpiProps.reduce((s,p)=>s+p.rooms,0)}</div>
             <div style="font-size:11px;color:var(--muted)">total rooms</div>
           </div>
         </div>
@@ -214,29 +292,29 @@ function renderProperties() {
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Occupancy</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px">
           <div>
-            <div style="font-size:22px;font-weight:800;font-family:monospace;color:${(()=>{const occ=data.reduce((s,p)=>s+p.occupied,0);const tot=data.reduce((s,p)=>s+p.rooms,0);const pct=tot?Math.round(occ/tot*100):0;return pct>=85?'var(--green)':pct>=70?'var(--amber)':'var(--red)';})()} ">${(()=>{const occ=data.reduce((s,p)=>s+p.occupied,0);const tot=data.reduce((s,p)=>s+p.rooms,0);return tot?Math.round(occ/tot*100):0;})()}%</div>
-            <div style="font-size:11px;color:var(--muted)">${data.reduce((s,p)=>s+p.occupied,0)} occupied</div>
+            <div style="font-size:22px;font-weight:800;font-family:monospace;color:${(()=>{const occ=kpiProps.reduce((s,p)=>s+p.occupied,0);const tot=kpiProps.reduce((s,p)=>s+p.rooms,0);const pct=tot?Math.round(occ/tot*100):0;return pct>=85?'var(--green)':pct>=70?'var(--amber)':'var(--red)';})()} ">${(()=>{const occ=kpiProps.reduce((s,p)=>s+p.occupied,0);const tot=kpiProps.reduce((s,p)=>s+p.rooms,0);return tot?Math.round(occ/tot*100):0;})()}%</div>
+            <div style="font-size:11px;color:var(--muted)">${kpiProps.reduce((s,p)=>s+p.occupied,0)} occupied</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:var(--red);font-family:monospace">${state.properties.reduce((s,p)=>s+(p.rooms-p.occupied),0)}</div>
+            <div style="font-size:18px;font-weight:800;color:var(--red);font-family:monospace">${kpiProps.reduce((s,p)=>s+(p.rooms-p.occupied),0)}</div>
             <div style="font-size:11px;color:var(--muted)">vacant</div>
           </div>
         </div>
-        <div style="background:var(--border);border-radius:3px;height:4px;overflow:hidden"><div style="height:100%;border-radius:3px;background:var(--green);width:${(()=>{const occ=data.reduce((s,p)=>s+p.occupied,0);const tot=data.reduce((s,p)=>s+p.rooms,0);return tot?Math.round(occ/tot*100):0;})()}%"></div></div>
+        <div style="background:var(--border);border-radius:3px;height:4px;overflow:hidden"><div style="height:100%;border-radius:3px;background:var(--green);width:${(()=>{const occ=kpiProps.reduce((s,p)=>s+p.occupied,0);const tot=kpiProps.reduce((s,p)=>s+p.rooms,0);return tot?Math.round(occ/tot*100):0;})()}%"></div></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
       <div style="background:var(--green-light);border:1px solid #A7F3D0;border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">${fmt(data.reduce((s,p)=>s+p.rent,0))}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--green);font-family:monospace">${fmt(kpiProps.reduce((s,p)=>s+p.rent,0))}</div>
         <div style="font-size:10px;font-weight:700;color:var(--green);margin-top:3px">MONTHLY INCOME</div>
       </div>
       <div style="background:var(--red-light);border:1px solid #FECDD3;border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">${fmt(data.reduce((s,p)=>s+p.landlord,0))}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--red);font-family:monospace">${fmt(kpiProps.reduce((s,p)=>s+p.landlord,0))}</div>
         <div style="font-size:10px;font-weight:700;color:var(--red);margin-top:3px">LANDLORD COSTS</div>
       </div>
-      <div style="background:${data.reduce((s,p)=>s+net(p),0)>=0?'var(--green-light)':'var(--red-light)'};border:1px solid ${data.reduce((s,p)=>s+net(p),0)>=0?'#A7F3D0':'#FECDD3'};border-radius:12px;padding:12px;text-align:center">
-        <div style="font-size:14px;font-weight:800;color:${data.reduce((s,p)=>s+net(p),0)>=0?'var(--green)':'var(--red)'};font-family:monospace">${fmt(data.reduce((s,p)=>s+net(p),0))}</div>
-        <div style="font-size:10px;font-weight:700;color:${data.reduce((s,p)=>s+net(p),0)>=0?'var(--green)':'var(--red)'};margin-top:3px">NET PROFIT/MO</div>
+      <div style="background:${kpiProps.reduce((s,p)=>s+net(p),0)>=0?'var(--green-light)':'var(--red-light)'};border:1px solid ${kpiProps.reduce((s,p)=>s+net(p),0)>=0?'#A7F3D0':'#FECDD3'};border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:14px;font-weight:800;color:${kpiProps.reduce((s,p)=>s+net(p),0)>=0?'var(--green)':'var(--red)'};font-family:monospace">${fmt(kpiProps.reduce((s,p)=>s+net(p),0))}</div>
+        <div style="font-size:10px;font-weight:700;color:${kpiProps.reduce((s,p)=>s+net(p),0)>=0?'var(--green)':'var(--red)'};margin-top:3px">NET PROFIT/MO</div>
       </div>
     </div>
 
