@@ -159,3 +159,79 @@ var buildTenantOutboundHtml = function (subjectLine, textBody, tenantMeta) {
     '</div></div></body></html>'
   );
 };
+
+var buildTriggerEmailHtml = function (templateId, subjectLine, textBody, meta) {
+  var id = String(templateId || '').toLowerCase();
+  var m = meta || {};
+  var safeSubject = escapeHtml(subjectLine || 'Notification');
+  var safeBody = String(textBody || '')
+    .split(/\n/)
+    .filter(function (ln) { return String(ln).trim().length; })
+    .map(function (ln) { return '<p class="em-p">' + escapeHtml(ln) + '</p>'; })
+    .join('');
+
+  if (id === 'weekly_report' || id === 'monthly_report' || id === 'test') {
+    return buildManagerReportHtml(id === 'test' ? 'test' : id === 'monthly_report' ? 'monthly' : 'weekly', m.stats || {}, subjectLine, textBody);
+  }
+
+  var alertClass = 'green';
+  var alertTitle = 'Update';
+  if (id === 'rent_reminder_3day') { alertClass = 'green'; alertTitle = 'Rent due in 3 days'; }
+  else if (id === 'rent_reminder_day') { alertClass = 'amber'; alertTitle = 'Rent due today'; }
+  else if (id === 'rent_overdue_3day') { alertClass = 'amber'; alertTitle = 'Rent overdue by 3 days'; }
+  else if (id === 'rent_overdue_week') { alertClass = 'red'; alertTitle = 'Rent overdue by 7 days'; }
+  else if (id === 'move_in_welcome') { alertClass = 'green'; alertTitle = 'Welcome to your new home'; }
+  else if (id === 'notice_confirm') { alertClass = 'amber'; alertTitle = 'Notice to vacate confirmed'; }
+  else if (id === 'compliance_expiry') { alertClass = 'red'; alertTitle = 'Compliance expiry alert'; }
+
+  var company = m.companyName || 'Your property manager';
+  var phone = m.companyPhone || '';
+  var emailC = m.companyEmail || '';
+  var first = m.firstName || 'there';
+
+  var styles = [
+    '.em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}',
+    '.em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:24px 28px}',
+    '.em-body{background:#fff;padding:32px}',
+    '.em-greeting{font-size:20px;font-weight:700;color:#0F172A;margin:0 0 12px;line-height:1.35}',
+    '.em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 14px}',
+    '.em-alert{border-radius:10px;padding:14px 18px;margin:0 0 16px}',
+    '.em-alert.red{background:#FEF0F3;border-left:3px solid #E8375A}',
+    '.em-alert.amber{background:#FFFBEB;border-left:3px solid #F59E0B}',
+    '.em-alert.green{background:#E8F8F5;border-left:3px solid #00B894}',
+    '.em-alert-title{font-size:13px;font-weight:700;color:#0F172A;margin:0 0 4px}',
+    '.em-alert-body{font-size:13px;color:#475569;margin:0}',
+    '.em-footer{background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8}',
+    '.em-footer a{color:#00B894;text-decoration:none}',
+  ].join('');
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' +
+    safeSubject +
+    '</title><style>' +
+    styles +
+    '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td><div style="font-size:20px;font-weight:800;color:#fff">' +
+    escapeHtml(company) +
+    '</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:4px">Property management</div></td><td align="right" style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">' +
+    (function () {
+      var h = '';
+      if (phone) h += escapeHtml(phone);
+      if (phone && emailC) h += '<br>';
+      if (emailC) h += escapeHtml(emailC);
+      return h || '&nbsp;';
+    })() +
+    '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' +
+    escapeHtml(first) +
+    '</p><div class="em-alert ' +
+    alertClass +
+    '"><p class="em-alert-title">' +
+    escapeHtml(alertTitle) +
+    '</p><p class="em-alert-body">' +
+    safeSubject +
+    '</p></div>' +
+    safeBody +
+    '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Reply to this email if you have any questions.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">LandlordApp.io</a> · ' +
+    escapeHtml(company) +
+    '</div></div></body></html>'
+  );
+};

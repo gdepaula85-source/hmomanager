@@ -49,52 +49,6 @@
   <!-- SIGNUP FORM -->
   <form id="signup-form" style="display:none" onsubmit="handleSignup(event)">
 
-    <!-- Plan banner (shown when arriving from pricing page) -->
-    <div class="plan-banner" id="plan-banner" style="display:none">
-      <div class="plan-banner-icon">🎯</div>
-      <div class="plan-banner-text">
-        Starting with <span class="plan-banner-name" id="plan-banner-name">Professional</span> trial
-        <br><span style="font-size:11px">14 days free · No card required</span>
-      </div>
-      <button type="button" class="plan-change" onclick="showPlanPicker()">Change</button>
-    </div>
-
-    <!-- Plan selector (shown when no plan pre-selected or user clicks Change) -->
-    <div class="plan-selector" id="plan-picker" style="display:none">
-      <label>Choose your plan (14-day free trial)</label>
-      <div class="plan-options">
-        <label class="plan-opt">
-          <input type="radio" name="signup-plan" value="starter" onchange="onPlanChange()">
-          <div class="plan-opt-box">
-            <div class="plan-opt-name">Starter</div>
-            <div class="plan-opt-price">£49/mo after trial</div>
-          </div>
-        </label>
-        <label class="plan-opt">
-          <input type="radio" name="signup-plan" value="professional" onchange="onPlanChange()">
-          <div class="plan-opt-box">
-            <div class="plan-opt-badge">Popular</div>
-            <div class="plan-opt-name">Professional</div>
-            <div class="plan-opt-price">£89/mo after trial</div>
-          </div>
-        </label>
-        <label class="plan-opt">
-          <input type="radio" name="signup-plan" value="business" onchange="onPlanChange()">
-          <div class="plan-opt-box">
-            <div class="plan-opt-name">Business</div>
-            <div class="plan-opt-price">£149/mo after trial</div>
-          </div>
-        </label>
-        <label class="plan-opt">
-          <input type="radio" name="signup-plan" value="trial" checked onchange="onPlanChange()">
-          <div class="plan-opt-box">
-            <div class="plan-opt-name">Just exploring</div>
-            <div class="plan-opt-price">Free trial only</div>
-          </div>
-        </label>
-      </div>
-    </div>
-
     <div class="field">
       <label>Full name</label>
       <input type="text" id="signup-name" placeholder="Gleydson De Paula" autocomplete="name" required>
@@ -116,7 +70,7 @@
     </div>
     <button type="submit" class="btn-submit" id="signup-btn">
       <div class="spinner" id="signup-spinner"></div>
-      <span id="signup-btn-text">Start free trial</span>
+      <span id="signup-btn-text">Create account</span>
     </button>
     <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--dim)">
       No credit card required · Cancel anytime

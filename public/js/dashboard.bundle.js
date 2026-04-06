@@ -412,15 +412,21 @@
     var name = session.user.user_metadata && session.user.user_metadata.full_name || email.split("@")[0];
     var companyName = session.user.user_metadata && session.user.user_metadata.company_name || name + "'s Properties";
     companyName = String(companyName).trim() || name + "'s Properties";
-    var selectedPlan = session.user.user_metadata && session.user.user_metadata.selected_plan || "trial";
+    var selectedPlan = session.user.user_metadata && session.user.user_metadata.selected_plan;
+    if (!selectedPlan) {
+      window.location.href = "choose-plan.html";
+      return false;
+    }
+    selectedPlan = String(selectedPlan).toLowerCase();
+    var isPaidSignupPlan = selectedPlan === "starter" || selectedPlan === "professional" || selectedPlan === "business";
     var slug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
-    var trialEnd = new Date(Date.now() + 14 * 864e5).toISOString();
+    var trialEnd = isPaidSignupPlan ? new Date(Date.now() + 14 * 864e5).toISOString() : null;
     var { data: newOrg, error: orgErr } = await supa.from("organisations").insert([{
       name: companyName,
       slug,
       owner_email: email,
-      plan: selectedPlan !== "trial" ? selectedPlan : "trial",
-      status: "trial",
+      plan: isPaidSignupPlan ? selectedPlan : "free",
+      status: isPaidSignupPlan ? "trial" : "active",
       trial_ends_at: trialEnd
     }]).select().single();
     if (orgErr || !newOrg) {
@@ -511,6 +517,10 @@
           runAfterSupabaseLoad();
           if (!canSee(state.page)) state.page = "dashboard";
           render();
+          try {
+            maybeStartCheckoutFromQuery();
+          } catch (e3) {
+          }
           try {
             saveState();
           } catch (e2) {
@@ -9018,6 +9028,69 @@
       return h || "&nbsp;";
     })() + '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' + escapeHtml(first) + "</p>" + paras + '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Questions? Reply to this email or contact us using the details above.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">LandlordApp.io</a> \xB7 ' + escapeHtml(company) + "</div></div></body></html>";
   };
+  var buildTriggerEmailHtml = function(templateId, subjectLine, textBody, meta) {
+    var id = String(templateId || "").toLowerCase();
+    var m = meta || {};
+    var safeSubject = escapeHtml(subjectLine || "Notification");
+    var safeBody = String(textBody || "").split(/\n/).filter(function(ln) {
+      return String(ln).trim().length;
+    }).map(function(ln) {
+      return '<p class="em-p">' + escapeHtml(ln) + "</p>";
+    }).join("");
+    if (id === "weekly_report" || id === "monthly_report" || id === "test") {
+      return buildManagerReportHtml(id === "test" ? "test" : id === "monthly_report" ? "monthly" : "weekly", m.stats || {}, subjectLine, textBody);
+    }
+    var alertClass = "green";
+    var alertTitle = "Update";
+    if (id === "rent_reminder_3day") {
+      alertClass = "green";
+      alertTitle = "Rent due in 3 days";
+    } else if (id === "rent_reminder_day") {
+      alertClass = "amber";
+      alertTitle = "Rent due today";
+    } else if (id === "rent_overdue_3day") {
+      alertClass = "amber";
+      alertTitle = "Rent overdue by 3 days";
+    } else if (id === "rent_overdue_week") {
+      alertClass = "red";
+      alertTitle = "Rent overdue by 7 days";
+    } else if (id === "move_in_welcome") {
+      alertClass = "green";
+      alertTitle = "Welcome to your new home";
+    } else if (id === "notice_confirm") {
+      alertClass = "amber";
+      alertTitle = "Notice to vacate confirmed";
+    } else if (id === "compliance_expiry") {
+      alertClass = "red";
+      alertTitle = "Compliance expiry alert";
+    }
+    var company = m.companyName || "Your property manager";
+    var phone = m.companyPhone || "";
+    var emailC = m.companyEmail || "";
+    var first = m.firstName || "there";
+    var styles = [
+      ".em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}",
+      ".em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:24px 28px}",
+      ".em-body{background:#fff;padding:32px}",
+      ".em-greeting{font-size:20px;font-weight:700;color:#0F172A;margin:0 0 12px;line-height:1.35}",
+      ".em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 14px}",
+      ".em-alert{border-radius:10px;padding:14px 18px;margin:0 0 16px}",
+      ".em-alert.red{background:#FEF0F3;border-left:3px solid #E8375A}",
+      ".em-alert.amber{background:#FFFBEB;border-left:3px solid #F59E0B}",
+      ".em-alert.green{background:#E8F8F5;border-left:3px solid #00B894}",
+      ".em-alert-title{font-size:13px;font-weight:700;color:#0F172A;margin:0 0 4px}",
+      ".em-alert-body{font-size:13px;color:#475569;margin:0}",
+      ".em-footer{background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8}",
+      ".em-footer a{color:#00B894;text-decoration:none}"
+    ].join("");
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + safeSubject + "</title><style>" + styles + '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td><div style="font-size:20px;font-weight:800;color:#fff">' + escapeHtml(company) + '</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:4px">Property management</div></td><td align="right" style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">' + (function() {
+      var h = "";
+      if (phone) h += escapeHtml(phone);
+      if (phone && emailC) h += "<br>";
+      if (emailC) h += escapeHtml(emailC);
+      return h || "&nbsp;";
+    })() + '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' + escapeHtml(first) + '</p><div class="em-alert ' + alertClass + '"><p class="em-alert-title">' + escapeHtml(alertTitle) + '</p><p class="em-alert-body">' + safeSubject + "</p></div>" + safeBody + '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Reply to this email if you have any questions.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">LandlordApp.io</a> \xB7 ' + escapeHtml(company) + "</div></div></body></html>";
+  };
   var _saveTimer = null;
   function saveState() {
     clearTimeout(_saveTimer);
@@ -9061,10 +9134,32 @@
   async function _supaUpsert(table, rows, opts) {
     try {
       var r = await supa.from(table).upsert(rows, opts);
-      if (r.error) console.warn("Save warning [" + table + "]:", r.error.message);
+      if (r.error) {
+        console.warn("Save warning [" + table + "]:", r.error.message);
+        return r.error;
+      }
+      return null;
     } catch (e) {
       console.warn("Save error [" + table + "]:", e.message);
+      return { message: e.message || "Save failed" };
     }
+  }
+  function friendlyDbSaveError(err) {
+    var msg = String(err && err.message || "");
+    if (!msg) return "Could not save changes. Please try again.";
+    if (/Plan limit reached:\s*max\s*\d+\s*properties/i.test(msg)) {
+      return "Property limit reached for your current plan. Upgrade plan or archive an unused property.";
+    }
+    if (/Plan limit reached:\s*max\s*\d+\s*active tenants/i.test(msg)) {
+      return "Active tenant limit reached for your current plan. Upgrade plan or set inactive tenants first.";
+    }
+    if (/Plan limit reached:\s*max\s*\d+\s*users/i.test(msg)) {
+      return "User seat limit reached for your current plan. Upgrade plan before inviting more users.";
+    }
+    if (/Organisation is\s+(paused|cancelled)/i.test(msg)) {
+      return "This organisation is not active, so changes are locked. Reactivate billing to continue.";
+    }
+    return msg.length > 180 ? "Could not save changes. Please try again." : msg;
   }
   async function _doSupaSave() {
     if (!_currentOrgId) {
@@ -9088,7 +9183,7 @@
       if (!r.portal_password) delete r.portal_password;
       return r;
     }));
-    await Promise.all([
+    var errors = await Promise.all([
       _supaUpsert("landlords", landlordRows, { onConflict: "id" }),
       _supaUpsert("properties", propRows, { onConflict: "id" }),
       _supaUpsert("tenants", tenantRows, { onConflict: "id" }),
@@ -9104,6 +9199,13 @@
         { onConflict: "property_id,month_key", ignoreDuplicates: false }
       )
     ]);
+    var firstErr = (errors || []).find(function(e) {
+      return !!e;
+    });
+    if (firstErr) {
+      if (typeof showToast === "function") showToast(friendlyDbSaveError(firstErr), "error");
+      return;
+    }
     if (typeof showToast === "function") showToast("\u2713 Saved", "success");
   }
   async function loadState() {
@@ -9444,11 +9546,10 @@
       return false;
     }
     kind = kind || "tenant";
+    var templateId = String(extra.templateId || "").toLowerCase();
     var html = extra.html;
     if (!html) {
-      if (kind === "report") {
-        html = buildManagerReportHtml(extra.reportType || "weekly", extra.stats || {}, subject, body);
-      } else if (kind === "tenant") {
+      if (templateId && typeof buildTriggerEmailHtml === "function") {
         var cx = getCompanyEmailContext();
         if (extra.tenant) {
           if (extra.tenant.firstName) cx.firstName = extra.tenant.firstName;
@@ -9456,7 +9557,24 @@
           if (extra.tenant.companyPhone) cx.companyPhone = extra.tenant.companyPhone;
           if (extra.tenant.companyEmail) cx.companyEmail = extra.tenant.companyEmail;
         }
-        html = buildTenantOutboundHtml(subject, body, cx);
+        html = buildTriggerEmailHtml(templateId, subject, body, {
+          companyName: cx.companyName,
+          companyPhone: cx.companyPhone,
+          companyEmail: cx.companyEmail,
+          firstName: cx.firstName,
+          stats: extra.stats || {}
+        });
+      } else if (kind === "report") {
+        html = buildManagerReportHtml(extra.reportType || "weekly", extra.stats || {}, subject, body);
+      } else if (kind === "tenant") {
+        var cx2 = getCompanyEmailContext();
+        if (extra.tenant) {
+          if (extra.tenant.firstName) cx2.firstName = extra.tenant.firstName;
+          if (extra.tenant.companyName) cx2.companyName = extra.tenant.companyName;
+          if (extra.tenant.companyPhone) cx2.companyPhone = extra.tenant.companyPhone;
+          if (extra.tenant.companyEmail) cx2.companyEmail = extra.tenant.companyEmail;
+        }
+        html = buildTenantOutboundHtml(subject, body, cx2);
       }
     }
     var payload = { orgId: _currentOrgId, to, subject, text: body, kind };
@@ -9512,6 +9630,7 @@
     }).length + " tenants\nSent: " + (/* @__PURE__ */ new Date()).toLocaleString("en-GB");
     var shortDate = (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     await sendEmail(to, "LandlordApp \xB7 connection test (" + shortDate + ")", body, "report", {
+      templateId: "test",
       reportType: "test",
       stats: {
         propsLen: props.length,
@@ -9558,7 +9677,7 @@
         log.push({ name: t.name, to: preview.to, subject: preview.subject });
         if (!dryRun) {
           var firstN = (t.name || "there").trim().split(/\s+/)[0] || "there";
-          sendEmail(preview.to, preview.subject, preview.body, "tenant", { tenant: { firstName: firstN } });
+          sendEmail(preview.to, preview.subject, preview.body, "tenant", { templateId: tid, tenant: { firstName: firstN } });
         }
         sent++;
       });
@@ -9595,6 +9714,7 @@
       return m.status !== "resolved";
     }).length : "Monthly P&L\n" + now + "\n\nGross Income: \xA3" + income.toLocaleString() + "\nLandlord Costs: \xA3" + costs.toLocaleString() + "\nNet Profit: \xA3" + (income - costs).toLocaleString() + "\nMargin: " + (income ? Math.round((income - costs) / income * 100) : 0) + "%\nOccupancy: " + occPct + "%";
     await sendEmail(to, subject, body, "report", {
+      templateId: type === "monthly" ? "monthly_report" : "weekly_report",
       reportType: type,
       stats: {
         propsLen: props.length,
@@ -9675,6 +9795,20 @@
       showToast && showToast("Billing portal error: " + e.message, "error");
     }
   }
+  function maybeStartCheckoutFromQuery() {
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      var plan = String(params.get("startCheckout") || "").toLowerCase();
+      if (plan !== "starter" && plan !== "professional" && plan !== "business") return;
+      params.delete("startCheckout");
+      var next = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || "");
+      window.history.replaceState({}, "", next);
+      setTimeout(function() {
+        startStripeCheckout(plan);
+      }, 300);
+    } catch (_e) {
+    }
+  }
   function renderSettings() {
     var companies = state.companies || [];
     var cfg = state.config || {};
@@ -9687,14 +9821,15 @@
       });
     });
     var PLANS = {
+      free: { label: "Free", price: 0, color: "#64748B", bg: "#F8FAFC", border: "#CBD5E1", props: 3, seats: 2 },
       trial: { label: "Free Trial", price: 0, color: "#F5A623", bg: "#FFFBEB", border: "#FDE68A", props: 5, seats: 3 },
       starter: { label: "Starter", price: 49, color: "#3B82F6", bg: "#EFF6FF", border: "#BFDBFE", props: 15, seats: 3 },
       professional: { label: "Professional", price: 89, color: "#10B981", bg: "#ECFDF5", border: "#A7F3D0", props: 25, seats: 5 },
       business: { label: "Business", price: 149, color: "#8B5CF6", bg: "#F5F3FF", border: "#DDD6FE", props: 60, seats: 15 }
     };
-    var plan = org.plan || "trial";
-    var status = org.status || "trial";
-    var planCfg = PLANS[plan] || PLANS.trial;
+    var plan = org.plan || "free";
+    var status = org.status || "active";
+    var planCfg = PLANS[plan] || PLANS.free;
     var trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
     var daysLeft = trialEnd ? Math.ceil((trialEnd - /* @__PURE__ */ new Date()) / 864e5) : null;
     var isTrial = status === "trial";
@@ -9716,7 +9851,7 @@
       return '<div style="height:5px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:5px"><div style="height:100%;width:' + pct2 + "%;background:" + usageColor(pct2) + ';border-radius:3px;transition:width .4s"></div></div>';
     }
     var _planLimits = { "free": 3, "trial": 5, "starter": 15, "professional": 25, "business": 60, "enterprise": 9999 };
-    var _curPlan = (org.plan || cfg.plan || "trial").toLowerCase();
+    var _curPlan = (org.plan || cfg.plan || "free").toLowerCase();
     var _planLimit = _planLimits[_curPlan] || 5;
     var _propCount = (state.properties || []).filter(function(p) {
       return p.status !== "archived";
@@ -9738,6 +9873,8 @@
     html += "</div></div>";
     if (isTrial) {
       html += `<button onclick="startStripeCheckout('starter')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>`;
+    } else if (plan === "free") {
+      html += `<button onclick="startStripeCheckout('starter')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Start 14-day paid trial</button>`;
     } else {
       html += '<button onclick="openStripeBillingPortal()" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Manage plan</button>';
     }
@@ -9751,7 +9888,7 @@
     html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
     html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Active Tenants</div>';
     html += '<div style="font-size:18px;font-weight:800;font-family:monospace;color:var(--text)">' + tenantCount + "</div>";
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">' + (plan === "starter" ? "Up to 75" : plan === "trial" ? "Up to 30" : "Unlimited") + "</div>";
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">' + (plan === "free" ? "Up to 15" : plan === "starter" ? "Up to 75" : plan === "trial" ? "Up to 30" : "Unlimited") + "</div>";
     html += "</div>";
     html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
     html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Users (seats)</div>';
@@ -9759,7 +9896,7 @@
     html += usageBar(userCount, planCfg.seats);
     html += "</div>";
     html += "</div>";
-    if (isTrial || plan === "starter") {
+    if (isTrial || plan === "free" || plan === "starter") {
       html += '<div style="border-top:1px solid var(--border);padding-top:14px">';
       html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Available Plans</div>';
       html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
@@ -10845,12 +10982,14 @@
     window.exportReportCSV = exportReportCSV;
     window.saveState = saveState;
     window.showToast = showToast;
+    window.friendlyDbSaveError = friendlyDbSaveError;
     window.getEmailConfig = getEmailConfig;
     window.renderEmailSettings = renderEmailSettings;
     window.saveEmailField = saveEmailField;
     window.toggleEmailTrigger = toggleEmailTrigger;
     window.previewEmailForTenant = previewEmailForTenant;
     window.getCompanyEmailContext = getCompanyEmailContext;
+    window.maybeStartCheckoutFromQuery = maybeStartCheckoutFromQuery;
     window.renderSettings = renderSettings;
     window.uploadLogo = uploadLogo;
     window.removeLogo = removeLogo;

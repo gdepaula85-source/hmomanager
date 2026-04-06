@@ -2,8 +2,6 @@ const SUPA_URL = window.ENV.SUPA_URL;
 const SUPA_KEY = window.ENV.SUPA_KEY;
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-const PLAN_LABELS = { trial:'Free Trial', starter:'Starter', professional:'Professional', business:'Business' };
-
 // ── On load: check session + read URL params ───────────────────
 (async function() {
   try {
@@ -11,48 +9,12 @@ const PLAN_LABELS = { trial:'Free Trial', starter:'Starter', professional:'Profe
     if (session) { window.location.href = 'index.html'; return; }
   } catch(e) {}
 
-  // Read URL params
   var params = new URLSearchParams(location.search);
-  var planParam = params.get('plan');
   var tabParam  = params.get('tab');
-
-  if(tabParam === 'signup' || planParam) {
+  if(tabParam === 'signup') {
     switchTab('signup');
   }
-
-  if(planParam && PLAN_LABELS[planParam]) {
-    // Pre-select plan from pricing page
-    selectPlan(planParam);
-    // Show banner, hide picker
-    document.getElementById('plan-banner').style.display = 'flex';
-    document.getElementById('plan-banner-name').textContent = PLAN_LABELS[planParam];
-    document.getElementById('plan-picker').style.display = 'none';
-  } else if(tabParam === 'signup') {
-    // No plan — show picker
-    document.getElementById('plan-banner').style.display = 'none';
-    document.getElementById('plan-picker').style.display = 'block';
-  }
 })();
-
-function selectPlan(plan) {
-  var radios = document.querySelectorAll('input[name="signup-plan"]');
-  radios.forEach(function(r){ r.checked = r.value === plan; });
-}
-
-function getSelectedPlan() {
-  var checked = document.querySelector('input[name="signup-plan"]:checked');
-  return checked ? checked.value : 'trial';
-}
-
-function showPlanPicker() {
-  document.getElementById('plan-banner').style.display = 'none';
-  document.getElementById('plan-picker').style.display = 'block';
-}
-
-function onPlanChange() {
-  var plan = getSelectedPlan();
-  document.getElementById('plan-banner-name').textContent = PLAN_LABELS[plan] || plan;
-}
 
 // ── Tab switching ──────────────────────────────────────────────
 function switchTab(tab) {
@@ -111,7 +73,6 @@ async function handleSignup(e) {
   const company  = document.getElementById('signup-company').value.trim();
   const email    = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
-  const plan     = getSelectedPlan();
 
   if(!name || !email || !password) { showMsg('Please fill in all required fields.', 'error'); return; }
 
@@ -122,7 +83,6 @@ async function handleSignup(e) {
       data: {
         full_name:    name,
         company_name: company || name + "'s Properties",
-        selected_plan: plan,   // stored in user metadata, read by resolveOrg()
       }
     }
   });
@@ -133,8 +93,8 @@ async function handleSignup(e) {
     showMsg('✓ Account created! Check your email to confirm, then log in.', 'success');
     document.getElementById('signup-form').style.display = 'none';
   } else {
-    showMsg('✓ Account created — loading your dashboard…', 'success');
-    setTimeout(() => { window.location.href = 'index.html'; }, 800);
+    showMsg('✓ Account created — choose your plan…', 'success');
+    setTimeout(() => { window.location.href = 'choose-plan.html'; }, 600);
   }
   setLoading('signup', false);
 }

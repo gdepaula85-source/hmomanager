@@ -82,6 +82,20 @@ async function upsertOrgStripeStateFromSubscription(orgId, subscription) {
     .eq('id', orgId);
 }
 
+async function setOrgFreePlan(orgId) {
+  if (!supabaseAdmin || !orgId) return;
+  await supabaseAdmin
+    .from('organisations')
+    .update({
+      plan: 'free',
+      status: 'active',
+      stripe_subscription_id: null,
+      mrr: 0,
+      trial_ends_at: null,
+    })
+    .eq('id', orgId);
+}
+
 async function resolveOrgIdForStripeSubscription(subscription) {
   const metaOrgId = subscription?.metadata?.orgId;
   if (metaOrgId) return metaOrgId;
@@ -365,6 +379,27 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   const body = req.body || {};
   const orgId = body.orgId;
   const plan = String(body.plan || '').toLowerCase();
+  if (plan === 'free') {
+    const { data: mem, error: memErr } = await supabaseAdmin
+      .from('org_members')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (memErr || !mem) {
+      return res.status(403).json({ error: 'Not a member of this organisation' });
+    }
+    const { data: org, error: orgErr } = await supabaseAdmin
+      .from('organisations')
+      .select('id')
+      .eq('id', orgId)
+      .maybeSingle();
+    if (orgErr || !org) {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+    await setOrgFreePlan(orgId);
+    return res.status(200).json({ ok: true, plan: 'free' });
+  }
   const priceId = stripePriceByPlan[plan];
   if (!orgId || typeof orgId !== 'string') {
     return res.status(400).json({ error: 'orgId required' });
@@ -411,11 +446,13 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
+      payment_method_collection: 'if_required',
       allow_promotion_codes: true,
       success_url: `${appBaseUrl}/index.html?stripe=success`,
       cancel_url: `${appBaseUrl}/index.html?stripe=cancelled`,
       metadata: { orgId, plan, userId },
       subscription_data: {
+        trial_period_days: 14,
         metadata: { orgId, plan, userId },
       },
       client_reference_id: orgId,

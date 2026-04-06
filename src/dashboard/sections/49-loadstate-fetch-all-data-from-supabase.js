@@ -340,11 +340,10 @@ async function sendEmail(to,subject,body,kind,extra){
   var session=sr.data.session;
   if(!session){showToast('Sign in required','error');return false;}
   kind=kind||'tenant';
+  var templateId = String(extra.templateId || '').toLowerCase();
   var html=extra.html;
   if(!html){
-    if(kind==='report'){
-      html=buildManagerReportHtml(extra.reportType||'weekly',extra.stats||{},subject,body);
-    }else if(kind==='tenant'){
+    if(templateId && typeof buildTriggerEmailHtml === 'function'){
       var cx=getCompanyEmailContext();
       if(extra.tenant){
         if(extra.tenant.firstName)cx.firstName=extra.tenant.firstName;
@@ -352,7 +351,24 @@ async function sendEmail(to,subject,body,kind,extra){
         if(extra.tenant.companyPhone)cx.companyPhone=extra.tenant.companyPhone;
         if(extra.tenant.companyEmail)cx.companyEmail=extra.tenant.companyEmail;
       }
-      html=buildTenantOutboundHtml(subject,body,cx);
+      html=buildTriggerEmailHtml(templateId, subject, body, {
+        companyName: cx.companyName,
+        companyPhone: cx.companyPhone,
+        companyEmail: cx.companyEmail,
+        firstName: cx.firstName,
+        stats: extra.stats || {}
+      });
+    }else if(kind==='report'){
+      html=buildManagerReportHtml(extra.reportType||'weekly',extra.stats||{},subject,body);
+    }else if(kind==='tenant'){
+      var cx2=getCompanyEmailContext();
+      if(extra.tenant){
+        if(extra.tenant.firstName)cx2.firstName=extra.tenant.firstName;
+        if(extra.tenant.companyName)cx2.companyName=extra.tenant.companyName;
+        if(extra.tenant.companyPhone)cx2.companyPhone=extra.tenant.companyPhone;
+        if(extra.tenant.companyEmail)cx2.companyEmail=extra.tenant.companyEmail;
+      }
+      html=buildTenantOutboundHtml(subject,body,cx2);
     }
   }
   var payload={orgId:_currentOrgId,to:to,subject:subject,text:body,kind:kind};
@@ -386,6 +402,7 @@ async function sendTestEmail(){
   var body='Test from LandlordApp\n\n'+props.length+' properties · '+state.tenants.filter(function(t){return t.status==='active';}).length+' tenants\nSent: '+new Date().toLocaleString('en-GB');
   var shortDate=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   await sendEmail(to,'LandlordApp · connection test ('+shortDate+')',body,'report',{
+    templateId:'test',
     reportType:'test',
     stats:{
       propsLen:props.length,
@@ -418,7 +435,7 @@ async function runRentReminderEmails(dryRun){
       log.push({name:t.name,to:preview.to,subject:preview.subject});
       if(!dryRun){
         var firstN=(t.name||'there').trim().split(/\s+/)[0]||'there';
-        sendEmail(preview.to,preview.subject,preview.body,'tenant',{tenant:{firstName:firstN}});
+        sendEmail(preview.to,preview.subject,preview.body,'tenant',{templateId:tid,tenant:{firstName:firstN}});
       }
       sent++;
     });
@@ -444,6 +461,7 @@ async function sendScheduledReport(type){
     ?'Weekly portfolio snapshot\n'+now+'\n\n'+props.length+' properties · '+occPct+'% occupancy\nIncome: £'+income.toLocaleString()+'/mo · Costs: £'+costs.toLocaleString()+'/mo · Net: £'+(income-costs).toLocaleString()+'/mo\nOpen maintenance: '+state.maintenance.filter(function(m){return m.status!=='resolved';}).length
     :'Monthly P&L\n'+now+'\n\nGross Income: £'+income.toLocaleString()+'\nLandlord Costs: £'+costs.toLocaleString()+'\nNet Profit: £'+(income-costs).toLocaleString()+'\nMargin: '+(income?Math.round((income-costs)/income*100):0)+'%\nOccupancy: '+occPct+'%';
   await sendEmail(to,subject,body,'report',{
+    templateId:type==='monthly'?'monthly_report':'weekly_report',
     reportType:type,
     stats:{
       propsLen:props.length,
@@ -509,6 +527,19 @@ async function openStripeBillingPortal(){
   }
 }
 
+function maybeStartCheckoutFromQuery(){
+  try{
+    var params = new URLSearchParams(window.location.search || '');
+    var plan = String(params.get('startCheckout') || '').toLowerCase();
+    if(plan !== 'starter' && plan !== 'professional' && plan !== 'business') return;
+    // Prevent retrigger on refresh/back.
+    params.delete('startCheckout');
+    var next = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '') + (window.location.hash || '');
+    window.history.replaceState({}, '', next);
+    setTimeout(function(){ startStripeCheckout(plan); }, 300);
+  }catch(_e){}
+}
+
 function renderSettings() {
   var companies = state.companies || [];
   var cfg = state.config || {};
@@ -525,14 +556,15 @@ function renderSettings() {
 
   // ── Plan config ───────────────────────────────────────────────
   var PLANS = {
+    free:         { label:'Free',          price:0,   color:'#64748B', bg:'#F8FAFC', border:'#CBD5E1', props:3,  seats:2  },
     trial:        { label:'Free Trial',    price:0,   color:'#F5A623', bg:'#FFFBEB', border:'#FDE68A', props:5,  seats:3  },
     starter:      { label:'Starter',       price:49,  color:'#3B82F6', bg:'#EFF6FF', border:'#BFDBFE', props:15, seats:3  },
     professional: { label:'Professional',  price:89,  color:'#10B981', bg:'#ECFDF5', border:'#A7F3D0', props:25, seats:5  },
     business:     { label:'Business',      price:149, color:'#8B5CF6', bg:'#F5F3FF', border:'#DDD6FE', props:60, seats:15 },
   };
-  var plan     = org.plan || 'trial';
-  var status   = org.status || 'trial';
-  var planCfg  = PLANS[plan] || PLANS.trial;
+  var plan     = org.plan || 'free';
+  var status   = org.status || 'active';
+  var planCfg  = PLANS[plan] || PLANS.free;
   var trialEnd = org.trial_ends_at ? new Date(org.trial_ends_at) : null;
   var daysLeft = trialEnd ? Math.ceil((trialEnd - new Date()) / 86400000) : null;
   var isTrial  = status === 'trial';
@@ -552,7 +584,7 @@ function renderSettings() {
 
   // Plan limit check
   var _planLimits={'free':3,'trial':5,'starter':15,'professional':25,'business':60,'enterprise':9999};
-  var _curPlan=(org.plan||cfg.plan||'trial').toLowerCase();
+  var _curPlan=(org.plan||cfg.plan||'free').toLowerCase();
   var _planLimit=_planLimits[_curPlan]||5;
   var _propCount=(state.properties||[]).filter(function(p){return p.status!=='archived';}).length;
   var _limitWarn=_propCount>_planLimit
@@ -586,6 +618,9 @@ function renderSettings() {
   if(isTrial) {
     html += '<button onclick="startStripeCheckout(\'starter\')" '
       + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>';
+  } else if (plan === 'free') {
+    html += '<button onclick="startStripeCheckout(\'starter\')" '
+      + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Start 14-day paid trial</button>';
   } else {
     html += '<button onclick="openStripeBillingPortal()" '
       + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Manage plan</button>';
@@ -604,7 +639,7 @@ function renderSettings() {
   html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
   html += '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Active Tenants</div>';
   html += '<div style="font-size:18px;font-weight:800;font-family:monospace;color:var(--text)">'+tenantCount+'</div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(plan==='starter'?'Up to 75':plan==='trial'?'Up to 30':'Unlimited')+'</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(plan==='free'?'Up to 15':plan==='starter'?'Up to 75':plan==='trial'?'Up to 30':'Unlimited')+'</div>';
   html += '</div>';
   // Users / seats
   html += '<div style="background:var(--bg);border-radius:9px;padding:12px">';
@@ -615,7 +650,7 @@ function renderSettings() {
   html += '</div>';
 
   // Pricing & upgrade options (shown during trial or on lower plans)
-  if(isTrial || plan === 'starter') {
+  if(isTrial || plan === 'free' || plan === 'starter') {
     html += '<div style="border-top:1px solid var(--border);padding-top:14px">';
     html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Available Plans</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';

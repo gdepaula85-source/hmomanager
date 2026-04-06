@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Choose Your Plan — PropManager</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+<style>
+  :root { --bg:#0A0A0F; --card:#13131A; --line:rgba(255,255,255,.08); --text:#fff; --muted:#A1A1B3; --accent:#00D897; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:48px 18px}
+  h1{margin:0 0 8px;font-size:34px} .sub{color:var(--muted);margin:0 0 24px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .plan{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:16px;cursor:pointer}
+  .plan.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(0,216,151,.35) inset}
+  .name{font-size:13px;font-weight:700;color:#C3C8D4;text-transform:uppercase;letter-spacing:.08em}
+  .price{font-size:26px;font-weight:800;margin:6px 0}.desc{font-size:12px;color:var(--muted);min-height:34px}
+  .cta{margin-top:22px;display:flex;gap:10px;align-items:center}
+  .btn{border:none;border-radius:999px;padding:12px 22px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-main{background:var(--accent);color:#00190f}.btn-ghost{background:transparent;color:#fff;border:1px solid var(--line)}
+  .msg{margin-top:12px;font-size:13px;color:var(--muted);min-height:20px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Choose your plan</h1>
+    <p class="sub">Free plan has no card required. Paid plans start with a 14-day trial.</p>
+    <div class="grid" id="plans">
+      <div class="plan active" data-plan="free"><div class="name">Free</div><div class="price">Free</div><div class="desc">Up to 3 properties, up to 15 tenants.</div></div>
+      <div class="plan" data-plan="starter"><div class="name">Starter</div><div class="price">£49/mo</div><div class="desc">14-day trial, then paid monthly.</div></div>
+      <div class="plan" data-plan="professional"><div class="name">Professional</div><div class="price">£89/mo</div><div class="desc">14-day trial, then paid monthly.</div></div>
+      <div class="plan" data-plan="business"><div class="name">Business</div><div class="price">£149/mo</div><div class="desc">14-day trial, then paid monthly.</div></div>
+    </div>
+    <div class="cta">
+      <button class="btn btn-main" id="continue-btn">Continue</button>
+      <button class="btn btn-ghost" id="logout-btn">Log out</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+<script>
+  const supa = supabase.createClient(window.ENV.SUPA_URL, window.ENV.SUPA_KEY);
+  let selectedPlan = 'free';
+  const msg = document.getElementById('msg');
+
+  function setMessage(t){ msg.textContent = t || ''; }
+
+  (async function init(){
+    const s = await supa.auth.getSession();
+    if(!s || !s.data || !s.data.session){ window.location.href='login.html'; return; }
+  })();
+
+  document.getElementById('plans').addEventListener('click', function(e){
+    const card = e.target.closest('.plan');
+    if(!card) return;
+    selectedPlan = card.getAttribute('data-plan') || 'free';
+    document.querySelectorAll('.plan').forEach(function(p){ p.classList.remove('active'); });
+    card.classList.add('active');
+  });
+
+  document.getElementById('continue-btn').addEventListener('click', async function(){
+    try{
+      setMessage('Saving plan...');
+      const current = await supa.auth.getUser();
+      const existingData = (current && current.data && current.data.user && current.data.user.user_metadata) || {};
+      const newData = Object.assign({}, existingData, { selected_plan: selectedPlan });
+      const upd = await supa.auth.updateUser({ data: newData });
+      if(upd && upd.error){ setMessage('Could not save plan: ' + upd.error.message); return; }
+      if(selectedPlan === 'free'){
+        window.location.href = 'index.html';
+        return;
+      }
+      window.location.href = 'index.html?startCheckout=' + encodeURIComponent(selectedPlan);
+    }catch(err){
+      setMessage('Could not continue: ' + (err && err.message ? err.message : 'Unknown error'));
+    }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async function(){
+    try{ await supa.auth.signOut(); }catch(e){}
+    window.location.href='login.html';
+  });
+</script>
+</body>
+</html>
+

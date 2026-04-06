@@ -36,8 +36,33 @@ function showToast(msg, type) {
 async function _supaUpsert(table, rows, opts) {
   try {
     var r = await supa.from(table).upsert(rows, opts);
-    if(r.error) console.warn('Save warning ['+table+']:', r.error.message);
-  } catch(e) { console.warn('Save error ['+table+']:', e.message); }
+    if(r.error) {
+      console.warn('Save warning ['+table+']:', r.error.message);
+      return r.error;
+    }
+    return null;
+  } catch(e) {
+    console.warn('Save error ['+table+']:', e.message);
+    return { message: e.message || 'Save failed' };
+  }
+}
+
+function friendlyDbSaveError(err){
+  var msg = String((err && err.message) || '');
+  if (!msg) return 'Could not save changes. Please try again.';
+  if (/Plan limit reached:\s*max\s*\d+\s*properties/i.test(msg)) {
+    return 'Property limit reached for your current plan. Upgrade plan or archive an unused property.';
+  }
+  if (/Plan limit reached:\s*max\s*\d+\s*active tenants/i.test(msg)) {
+    return 'Active tenant limit reached for your current plan. Upgrade plan or set inactive tenants first.';
+  }
+  if (/Plan limit reached:\s*max\s*\d+\s*users/i.test(msg)) {
+    return 'User seat limit reached for your current plan. Upgrade plan before inviting more users.';
+  }
+  if (/Organisation is\s+(paused|cancelled)/i.test(msg)) {
+    return 'This organisation is not active, so changes are locked. Reactivate billing to continue.';
+  }
+  return msg.length > 180 ? 'Could not save changes. Please try again.' : msg;
 }
 
 async function _doSupaSave(){
@@ -58,7 +83,7 @@ async function _doSupaSave(){
     return r;
   }));
 
-  await Promise.all([
+  var errors = await Promise.all([
     _supaUpsert('landlords', landlordRows, {onConflict:'id'}),
     _supaUpsert('properties', propRows, {onConflict:'id'}),
     _supaUpsert('tenants', tenantRows, {onConflict:'id'}),
@@ -70,5 +95,10 @@ async function _doSupaSave(){
       withOrg(state.landlordPayments.filter(function(lp){return lp.propId&&lp.monthKey;}).map(landlordPaymentToRow)),
       {onConflict:'property_id,month_key',ignoreDuplicates:false})
   ]);
+  var firstErr = (errors||[]).find(function(e){ return !!e; });
+  if(firstErr){
+    if(typeof showToast === 'function') showToast(friendlyDbSaveError(firstErr), 'error');
+    return;
+  }
   if(typeof showToast === 'function') showToast('✓ Saved', 'success');
 }

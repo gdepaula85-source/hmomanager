@@ -171,17 +171,23 @@ async function resolveOrg(session) {
   var name      = (session.user.user_metadata && session.user.user_metadata.full_name) || email.split('@')[0];
   var companyName = (session.user.user_metadata && session.user.user_metadata.company_name) || name + "'s Properties";
   companyName = String(companyName).trim() || (name + "'s Properties");
-  var selectedPlan = (session.user.user_metadata && session.user.user_metadata.selected_plan) || 'trial';
+  var selectedPlan = session.user.user_metadata && session.user.user_metadata.selected_plan;
+  if (!selectedPlan) {
+    window.location.href = 'choose-plan.html';
+    return false;
+  }
+  selectedPlan = String(selectedPlan).toLowerCase();
+  var isPaidSignupPlan = selectedPlan === 'starter' || selectedPlan === 'professional' || selectedPlan === 'business';
   var slug      = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
-  var trialEnd  = new Date(Date.now() + 14 * 86400000).toISOString();
+  var trialEnd  = isPaidSignupPlan ? new Date(Date.now() + 14 * 86400000).toISOString() : null;
 
   // Create organisation (owner_email = account email; creator becomes admin in org_members)
   var { data: newOrg, error: orgErr } = await supa.from('organisations').insert([{
     name:            companyName,
     slug:            slug,
     owner_email:     email,
-    plan:            selectedPlan !== 'trial' ? selectedPlan : 'trial',
-    status:          'trial',
+    plan:            isPaidSignupPlan ? selectedPlan : 'free',
+    status:          isPaidSignupPlan ? 'trial' : 'active',
     trial_ends_at:   trialEnd,
   }]).select().single();
 
@@ -315,6 +321,7 @@ supa.auth.onAuthStateChange(function(event, session) {
       runAfterSupabaseLoad();
       if (!canSee(state.page)) state.page = 'dashboard';
       render();
+      try { maybeStartCheckoutFromQuery(); } catch(e3) {}
       try { saveState(); } catch(e2) {}
     });
     });
