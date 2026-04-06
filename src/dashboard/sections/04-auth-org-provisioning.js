@@ -22,6 +22,21 @@ function normalizeRole(role) {
   return state.roles && state.roles[r] ? r : 'viewer';
 }
 
+/** When `organisations.email_settings` exists, merge it into state._currentOrg (skips if column not migrated). */
+async function mergeOrgEmailSettingsIfAvailable() {
+  if (!_currentOrgId || !state._currentOrg) return;
+  var r = await supa.from('organisations').select('email_settings').eq('id', _currentOrgId).maybeSingle();
+  if (r.error) {
+    var c = String(r.error.code || '');
+    var msg = String(r.error.message || '');
+    if (c === '42703' || msg.indexOf('email_settings') !== -1) return;
+    return;
+  }
+  if (r.data && r.data.email_settings != null) {
+    state._currentOrg.email_settings = r.data.email_settings;
+  }
+}
+
 /** Bind Supabase session to state.users / state.currentUser (always use session.user.id). */
 function upsertSessionUser(session, roleHint) {
   if (!session || !session.user) return null;
@@ -111,7 +126,7 @@ async function resolveOrg(session) {
   setAppBootMessage('Preparing your workspace…');
   // 1. Look up org_members for this user (maybeSingle: no row is OK)
   var { data: membership, error: memberErr } = await supa.from('org_members')
-    .select('org_id, role, organisations(id,name,plan,status,trial_ends_at)')
+    .select('org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email)')
     .eq('user_id', session.user.id)
     .maybeSingle();
   if (memberErr && memberErr.code !== 'PGRST116') {
@@ -123,6 +138,7 @@ async function resolveOrg(session) {
     _currentMemberRole = normalizeRole(membership.role);
     var org = membership.organisations;
     state._currentOrg = org; // store for Settings page
+    await mergeOrgEmailSettingsIfAvailable();
 
     // Trial enforcement — check if expired
     if (org && org.status === 'trial' && org.trial_ends_at) {
@@ -161,12 +177,12 @@ async function resolveOrg(session) {
 
   // Create organisation (owner_email = account email; creator becomes admin in org_members)
   var { data: newOrg, error: orgErr } = await supa.from('organisations').insert([{
-    name:          companyName,
-    slug:          slug,
-    owner_email:   email,
-    plan:          selectedPlan !== 'trial' ? selectedPlan : 'trial',
-    status:        'trial',
-    trial_ends_at: trialEnd,
+    name:            companyName,
+    slug:            slug,
+    owner_email:     email,
+    plan:            selectedPlan !== 'trial' ? selectedPlan : 'trial',
+    status:          'trial',
+    trial_ends_at:   trialEnd,
   }]).select().single();
 
   if (orgErr || !newOrg) {
@@ -202,9 +218,9 @@ function showTrialExpired(orgName) {
         <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px">Trial Expired</div>
         <div style="font-size:14px;color:#7A8099;margin-bottom:24px;line-height:1.6">
           Your 14-day free trial for <strong style="color:#fff">${orgName}</strong> has ended.<br>
-          Upgrade to continue managing your properties.
+          Upgrade now to continue managing your properties.
         </div>
-        <a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Upgrade&body=Hi, my trial has expired and I'd like to upgrade." style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;text-decoration:none;margin-bottom:12px">Contact Us to Upgrade</a>
+        <button onclick="startStripeCheckout('starter')" style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;margin-bottom:12px">Upgrade Now</button>
         <br>
         <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
       </div>

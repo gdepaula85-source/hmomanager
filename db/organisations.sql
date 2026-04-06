@@ -12,6 +12,7 @@ create table public.organisations (
   stripe_customer_id text null,
   stripe_subscription_id text null,
   mrr numeric(10, 2) null default 0,
+  email_settings jsonb null default '{}'::jsonb,
   created_at timestamp with time zone null default now(),
   updated_at timestamp with time zone null default now(),
   constraint organisations_pkey primary key (id),

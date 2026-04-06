@@ -15,10 +15,15 @@ async function loadState(){
       supa.from('expenses').select('*').eq('org_id', _currentOrgId),
       supa.from('maintenance').select('*').eq('org_id', _currentOrgId),
       supa.from('landlord_payments').select('*').eq('org_id', _currentOrgId),
-      supa.from('contractors').select('*').eq('org_id', _currentOrgId)
+      supa.from('contractors').select('*').eq('org_id', _currentOrgId),
+      supa.from('organisations').select('billing_email,owner_email,name,plan,status,trial_ends_at').eq('id', _currentOrgId).maybeSingle()
     ]);
     var errors = results.filter(function(r){ return r.error; });
     if(errors.length){ console.warn('Supabase load errors:', errors); }
+    if (results[8] && results[8].data) {
+      state._currentOrg = Object.assign({}, state._currentOrg || {}, results[8].data);
+    }
+    await mergeOrgEmailSettingsIfAvailable();
     state.landlords        = (results[0].data||[]).map(rowToLandlord);
     state.properties       = (results[1].data||[]).map(rowToProp);
     state.tenants          = (results[2].data||[]).map(rowToTenant);
@@ -218,22 +223,53 @@ var EMAIL_TRIGGERS = {
   monthly_report:    {id:'monthly_report',    label:'Monthly P&L Summary',     type:'manager',active:false,schedule:'1st of month 09:00'},
 };
 
-function getEmailConfig(){try{return JSON.parse(localStorage.getItem('pm_email_config')||'{}');}catch(e){return {};}}
-function saveEmailConfig(cfg){localStorage.setItem('pm_email_config',JSON.stringify(cfg));}
+function getEmailConfig(){
+  var ls = {};
+  try {
+    ls = JSON.parse(localStorage.getItem('pm_email_config')||'{}');
+  } catch(e) {}
+  var o = state._currentOrg || {};
+  var db = o.email_settings && typeof o.email_settings === 'object' ? o.email_settings : {};
+  return {
+    triggers: Object.assign({}, ls.triggers || {}, db.triggers || {}),
+    managerEmail: db.managerEmail || ls.managerEmail || '',
+  };
+}
+
+async function persistEmailSettings(cfg){
+  if (!_currentOrgId) {
+    showToast && showToast('No organisation loaded', 'error');
+    return;
+  }
+  var clean = {
+    triggers: cfg.triggers || {},
+    managerEmail: cfg.managerEmail || '',
+  };
+  var { error } = await supa.from('organisations').update({ email_settings: clean }).eq('id', _currentOrgId);
+  if (error) {
+    var missingCol = String(error.code || '') === '42703' || String(error.message || '').indexOf('email_settings') !== -1;
+    var msg = (error.message || 'Could not save email settings') + (missingCol ? ' Apply db/organisations_email_settings.sql on Supabase, then retry.' : '');
+    showToast && showToast(msg, 'error');
+    return false;
+  }
+  if (!state._currentOrg) state._currentOrg = {};
+  state._currentOrg.email_settings = clean;
+  return true;
+}
 
 function renderEmailSettings(){
   var cfg=getEmailConfig();
+  var org = state._currentOrg || {};
+  var replyHint = (org.billing_email || org.owner_email || 'your organisation billing email in Supabase');
   var html='<div>';
-  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
-  html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Provider</div>';
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
-  html+='<div class="field"><label class="field-label">Provider</label><select class="inp" id="ecfg-provider" onchange="saveEmailField(\'provider\',this.value)">';
-  ['Resend','SendGrid','Mailgun','SMTP'].forEach(function(p){html+='<option '+(cfg.provider===p?'selected':'')+'>'+p+'</option>';});
-  html+='</select></div>';
-  html+='<div class="field"><label class="field-label">From Address</label><input class="inp" id="ecfg-from" placeholder="noreply@domain.com" value="'+(cfg.from||'')+'" onchange="saveEmailField(\'from\',this.value)"></div>';
+  html+='<div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+  html+='<div style="font-size:12px;color:var(--accent-dark);line-height:1.45;max-width:520px"><strong>LandlordApp.io email templates</strong> — HTML layouts for welcome, verification, password reset, trial reminders, billing, and reports. Open in a new tab to review or copy into Supabase Auth / Resend.</div>';
+  html+='<a href="/landlordapp_emails.html" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent-dark);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0">Open template gallery →</a>';
   html+='</div>';
-  html+='<div class="field"><label class="field-label">API Key</label><input class="inp" id="ecfg-apikey" type="password" placeholder="Enter API key" value="'+(cfg.apiKey?'••••••••':'')+'" onchange="saveEmailField(\'apiKey\',this.value)"></div>';
-  html+='<div class="field" style="margin-top:8px"><label class="field-label">Manager Email (for reports & alerts)</label><input class="inp" id="ecfg-mgr" placeholder="manager@domain.com" value="'+(cfg.managerEmail||'')+'" onchange="saveEmailField(\'managerEmail\',this.value)"></div>';
+  html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Sending (tenant &amp; manager emails)</div>';
+  html+='<p style="font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 12px">Rent reminders and reports are sent via your server using <strong>LandlordApp &lt;noreply@landlordapp.io&gt;</strong> (configure <code style="font-size:11px">RESEND_API_KEY</code> on the host). Tenant replies go to: <strong>'+String(replyHint).replace(/</g,'&lt;')+'</strong> (billing email, or owner email, or your account).</p>';
+  html+='<div class="field"><label class="field-label">Manager email (weekly / monthly reports)</label><input class="inp" id="ecfg-mgr" placeholder="manager@yourcompany.com" value="'+(cfg.managerEmail||'').replace(/"/g,'&quot;')+'" onchange="saveEmailField(\'managerEmail\',this.value)"></div>';
   html+='</div>';
   html+='<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
   html+='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:12px">Triggers</div>';
@@ -252,13 +288,32 @@ function renderEmailSettings(){
   html+='<button onclick="runRentReminderEmails(false)" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📨 Send Reminders</button>';
   html+='<button onclick="sendScheduledReport(\'weekly\')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📊 Weekly Report</button>';
   html+='<button onclick="sendScheduledReport(\'monthly\')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">📅 Monthly P&L</button>';
-  html+='</div><div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:9px;margin-top:10px;font-size:11px;color:var(--muted)">⚠ Email sending requires a Supabase Edge Function. Deploy function \'send-email\' to activate.</div>';
+  html+='</div><div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:9px;margin-top:10px;font-size:11px;color:var(--muted)">⚠ Requires <code style="font-size:11px">RESEND_API_KEY</code> and verified domain on the Node server (<code style="font-size:11px">POST /api/email/send</code>). Auth &amp; billing emails use Supabase / Stripe separately. Gmail may file messages under <strong>Updates</strong>; drag one message to <strong>Primary</strong> and choose “Yes” so future mail lands in the inbox.</div>';
   html+='</div></div>';
   return html;
 }
 
-function saveEmailField(key,value){var cfg=getEmailConfig();cfg[key]=value;saveEmailConfig(cfg);showToast('Saved','success');}
-function toggleEmailTrigger(id,enabled){var cfg=getEmailConfig();if(!cfg.triggers)cfg.triggers={};cfg.triggers[id]=enabled;saveEmailConfig(cfg);showToast((enabled?'Enabled: ':'Disabled: ')+(EMAIL_TRIGGERS[id]||{label:id}).label,enabled?'success':'info');}
+function saveEmailField(key,value){
+  var cfg=getEmailConfig();
+  cfg[key]=value;
+  persistEmailSettings(cfg).then(function(ok){
+    if(ok) showToast('Saved','success');
+  });
+}
+function toggleEmailTrigger(id,enabled){
+  var cfg=getEmailConfig();
+  if(!cfg.triggers)cfg.triggers={};
+  cfg.triggers[id]=enabled;
+  persistEmailSettings(cfg).then(function(ok){
+    if(ok){
+      showToast((enabled?'Enabled: ':'Disabled: ')+(EMAIL_TRIGGERS[id]||{label:id}).label,enabled?'success':'info');
+      if(typeof render==='function') render();
+    }else{
+      var inp=document.querySelector('input[data-trid="'+id+'"]');
+      if(inp) inp.checked=!enabled;
+    }
+  });
+}
 
 function previewEmailForTenant(triggerId,tenantId){
   var t=state.tenants.find(function(x){return x.id===tenantId;});if(!t)return null;
@@ -268,23 +323,80 @@ function previewEmailForTenant(triggerId,tenantId){
   return {to:t.email,subject:tr.label,body:body};
 }
 
-async function sendEmail(to,subject,body){
-  var cfg=getEmailConfig();
-  if(!cfg.apiKey||!cfg.from){showToast('Email not configured — add API key in Settings','error');return false;}
-  var supaUrl=window.ENV.SUPA_URL;
+function getCompanyEmailContext(){
+  var co=(state.companies&&state.companies[0])||{};
+  var org=state._currentOrg||{};
+  return {
+    companyName:co.name||'Your property manager',
+    companyPhone:co.phone||co.tel||'',
+    companyEmail:co.email||org.billing_email||org.owner_email||(state.currentUser&&state.currentUser.email)||''
+  };
+}
+
+async function sendEmail(to,subject,body,kind,extra){
+  extra=extra||{};
+  if(!_currentOrgId){showToast('No organisation','error');return false;}
+  var sr=await supa.auth.getSession();
+  var session=sr.data.session;
+  if(!session){showToast('Sign in required','error');return false;}
+  kind=kind||'tenant';
+  var html=extra.html;
+  if(!html){
+    if(kind==='report'){
+      html=buildManagerReportHtml(extra.reportType||'weekly',extra.stats||{},subject,body);
+    }else if(kind==='tenant'){
+      var cx=getCompanyEmailContext();
+      if(extra.tenant){
+        if(extra.tenant.firstName)cx.firstName=extra.tenant.firstName;
+        if(extra.tenant.companyName)cx.companyName=extra.tenant.companyName;
+        if(extra.tenant.companyPhone)cx.companyPhone=extra.tenant.companyPhone;
+        if(extra.tenant.companyEmail)cx.companyEmail=extra.tenant.companyEmail;
+      }
+      html=buildTenantOutboundHtml(subject,body,cx);
+    }
+  }
+  var payload={orgId:_currentOrgId,to:to,subject:subject,text:body,kind:kind};
+  if(html)payload.html=html;
   try{
-    var resp=await fetch(supaUrl+'/functions/v1/send-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.apiKey},body:JSON.stringify({provider:cfg.provider||'Resend',from:cfg.from,to:to,subject:subject,text:body})});
+    var resp=await fetch('/api/email/send',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+      body:JSON.stringify(payload)
+    });
+    var data=await resp.json().catch(function(){return {};});
     if(resp.ok){showToast('Email sent to '+to,'success');return true;}
-    else{var err=await resp.text();showToast('Email failed: '+err.slice(0,80),'error');return false;}
+    var msg=(data&&data.error)||(data&&data.message)||JSON.stringify(data).slice(0,120);
+    if(/suppression/i.test(String(msg))) {
+      msg += ' In Resend: Dashboard → Emails (or Email suppressions) → find '+String(to)+' → Remove from suppression list. Addresses are listed after a bounce or spam complaint.';
+    }
+    showToast('Email failed: '+msg,'error');
+    return false;
   }catch(e){showToast('Email error: '+e.message,'error');return false;}
 }
 
 async function sendTestEmail(){
-  var cfg=getEmailConfig();var to=cfg.managerEmail||cfg.from;
-  if(!to){showToast('Set a manager email first','error');return;}
+  var cfg=getEmailConfig();
+  var to=(cfg.managerEmail||'').trim()||(state.currentUser&&state.currentUser.email)||'';
+  if(!to){showToast('Set Manager email in Settings (below) or sign in with an account that has an email','error');return;}
   var props=state.properties.filter(function(p){return p.status!=='archived';});
-  var body='Test from PropManager\n\n'+props.length+' properties · '+state.tenants.filter(function(t){return t.status==='active';}).length+' tenants\nSent: '+new Date().toLocaleString('en-GB');
-  await sendEmail(to,'Test Email — PropManager',body);
+  var rooms=props.reduce(function(s,p){return s+p.rooms;},0);
+  var occ=props.reduce(function(s,p){return s+p.occupied;},0);
+  var income=props.reduce(function(s,p){return s+p.rent;},0);
+  var costs=props.reduce(function(s,p){return s+p.landlord;},0);
+  var body='Test from LandlordApp\n\n'+props.length+' properties · '+state.tenants.filter(function(t){return t.status==='active';}).length+' tenants\nSent: '+new Date().toLocaleString('en-GB');
+  var shortDate=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  await sendEmail(to,'LandlordApp · connection test ('+shortDate+')',body,'report',{
+    reportType:'test',
+    stats:{
+      propsLen:props.length,
+      income:income,
+      costs:costs,
+      net:income-costs,
+      occPct:rooms?Math.round(occ/rooms*100):0,
+      maintOpen:state.maintenance.filter(function(m){return m.status!=='resolved';}).length,
+      nowLabel:new Date().toLocaleString('en-GB')
+    }
+  });
 }
 
 async function runRentReminderEmails(dryRun){
@@ -304,7 +416,10 @@ async function runRentReminderEmails(dryRun){
       var preview=previewEmailForTenant(tid,t.id);
       if(!preview||!preview.to){skipped++;return;}
       log.push({name:t.name,to:preview.to,subject:preview.subject});
-      if(!dryRun) sendEmail(preview.to,preview.subject,preview.body);
+      if(!dryRun){
+        var firstN=(t.name||'there').trim().split(/\s+/)[0]||'there';
+        sendEmail(preview.to,preview.subject,preview.body,'tenant',{tenant:{firstName:firstN}});
+      }
       sent++;
     });
   });
@@ -320,11 +435,78 @@ async function sendScheduledReport(type){
   var income=props.reduce(function(s,p){return s+p.rent;},0);
   var costs=props.reduce(function(s,p){return s+p.landlord;},0);
   var now=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  var subject=type==='weekly'?'Weekly Report — '+now:'Monthly P&L — '+now;
+  var shortDate=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var subject=type==='weekly'
+    ?'LandlordApp · your portfolio summary ('+shortDate+')'
+    :'LandlordApp · your P&L summary ('+shortDate+')';
+  var occPct=rooms?Math.round(occ/rooms*100):0;
   var body=type==='weekly'
-    ?'Weekly Portfolio Report\n'+now+'\n\n'+props.length+' properties · '+Math.round(occ/rooms*100)+'% occupancy\nIncome: £'+income.toLocaleString()+'/mo · Costs: £'+costs.toLocaleString()+'/mo · Net: £'+(income-costs).toLocaleString()+'/mo\nOpen maintenance: '+state.maintenance.filter(function(m){return m.status!=='resolved';}).length
-    :'Monthly P&L\n'+now+'\n\nGross Income: £'+income.toLocaleString()+'\nLandlord Costs: £'+costs.toLocaleString()+'\nNet Profit: £'+(income-costs).toLocaleString()+'\nMargin: '+Math.round((income-costs)/income*100)+'%\nOccupancy: '+Math.round(occ/rooms*100)+'%';
-  await sendEmail(to,subject,body);
+    ?'Weekly portfolio snapshot\n'+now+'\n\n'+props.length+' properties · '+occPct+'% occupancy\nIncome: £'+income.toLocaleString()+'/mo · Costs: £'+costs.toLocaleString()+'/mo · Net: £'+(income-costs).toLocaleString()+'/mo\nOpen maintenance: '+state.maintenance.filter(function(m){return m.status!=='resolved';}).length
+    :'Monthly P&L\n'+now+'\n\nGross Income: £'+income.toLocaleString()+'\nLandlord Costs: £'+costs.toLocaleString()+'\nNet Profit: £'+(income-costs).toLocaleString()+'\nMargin: '+(income?Math.round((income-costs)/income*100):0)+'%\nOccupancy: '+occPct+'%';
+  await sendEmail(to,subject,body,'report',{
+    reportType:type,
+    stats:{
+      propsLen:props.length,
+      rooms:rooms,
+      occ:occ,
+      income:income,
+      costs:costs,
+      net:income-costs,
+      occPct:occPct,
+      maintOpen:state.maintenance.filter(function(m){return m.status!=='resolved';}).length,
+      nowLabel:now
+    }
+  });
+}
+
+async function startStripeCheckout(plan){
+  if(!_currentOrgId){ showToast && showToast('No organisation loaded', 'error'); return; }
+  var sr = await supa.auth.getSession();
+  var session = sr && sr.data ? sr.data.session : null;
+  if(!session){ showToast && showToast('Sign in required', 'error'); return; }
+  try{
+    var resp = await fetch('/api/stripe/create-checkout-session', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        Authorization:'Bearer '+session.access_token
+      },
+      body: JSON.stringify({ orgId:_currentOrgId, plan:String(plan||'starter').toLowerCase() })
+    });
+    var data = await resp.json().catch(function(){ return {}; });
+    if(!resp.ok || !data.url){
+      showToast && showToast('Checkout failed: '+((data&&data.error)||'Unknown error'), 'error');
+      return;
+    }
+    window.location.href = data.url;
+  }catch(e){
+    showToast && showToast('Checkout error: '+e.message, 'error');
+  }
+}
+
+async function openStripeBillingPortal(){
+  if(!_currentOrgId){ showToast && showToast('No organisation loaded', 'error'); return; }
+  var sr = await supa.auth.getSession();
+  var session = sr && sr.data ? sr.data.session : null;
+  if(!session){ showToast && showToast('Sign in required', 'error'); return; }
+  try{
+    var resp = await fetch('/api/stripe/create-portal-session', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        Authorization:'Bearer '+session.access_token
+      },
+      body: JSON.stringify({ orgId:_currentOrgId })
+    });
+    var data = await resp.json().catch(function(){ return {}; });
+    if(!resp.ok || !data.url){
+      showToast && showToast('Could not open billing portal: '+((data&&data.error)||'Unknown error'), 'error');
+      return;
+    }
+    window.location.href = data.url;
+  }catch(e){
+    showToast && showToast('Billing portal error: '+e.message, 'error');
+  }
 }
 
 function renderSettings() {
@@ -402,11 +584,11 @@ function renderSettings() {
   html += '</div></div>';
   // Upgrade / manage button
   if(isTrial) {
-    html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Upgrade&body=Hi, I would like to upgrade from my trial." '
-      + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;text-decoration:none">&#x2B06; Upgrade Plan</a>';
+    html += '<button onclick="startStripeCheckout(\'starter\')" '
+      + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>';
   } else {
-    html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Subscription" '
-      + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;text-decoration:none">Manage plan</a>';
+    html += '<button onclick="openStripeBillingPortal()" '
+      + 'style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Manage plan</button>';
   }
   html += '</div>';
 
@@ -446,7 +628,7 @@ function renderSettings() {
       html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">'+p[2]+'</div>';
       html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">'+p[3]+'</div>';
       if(!isCurrent) {
-        html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=Upgrade to '+p[1]+'&body=Hi, I would like to upgrade to the '+p[1]+' plan ('+p[2]+')." style="display:block;text-align:center;padding:6px;border-radius:7px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-decoration:none">Upgrade</a>';
+        html += '<button onclick="startStripeCheckout(\''+p[0]+'\')" style="display:block;width:100%;text-align:center;padding:6px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Upgrade</button>';
       } else {
         html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan</div>';
       }

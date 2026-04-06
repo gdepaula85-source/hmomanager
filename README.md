@@ -17,6 +17,25 @@ Express serves the static PropManager UI and a small **AI proxy** (`POST /api/ai
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_API_URL` | **Server only** — Anthropic calls are proxied; keys are not injected into `window.ENV`. |
 | `CORS_ORIGIN` | Optional — comma-separated allowed origins in production (omit for permissive dev CORS). |
 | `WORKER_URL` | Used by auth flows (e.g. email redirect). |
+| `RESEND_API_KEY` | **Server only** — `POST /api/email/send` sends via [Resend](https://resend.com) (tenant rent reminders, manager reports). Verify `landlordapp.io` in Resend and set `MAIL_FROM` if needed. |
+| `MAIL_FROM` | Optional — default `LandlordApp <noreply@landlordapp.io>`; must use a verified domain in Resend. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | **Server only** — Stripe API + webhook signing for subscriptions. |
+| `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS` | Stripe recurring price IDs mapped to in-app plans. |
+| `APP_BASE_URL` | Optional — base URL used by Stripe success/cancel and portal return URLs (defaults to `http://localhost:3000`). |
+
+## Email (two tiers)
+
+1. **Platform / auth** — Sign-up, password reset, and magic links are handled by **Supabase Auth** (configure [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp) in the Supabase dashboard if you want emails to go through Resend or your Hostinger mailbox). Subscription/receipt emails typically come from **Stripe** (or your billing provider) if you use it.
+
+2. **Org / tenant-facing** — Rent reminders, weekly/monthly reports, and other actions from **Settings → Email** use **`POST /api/email/send`** on this Node server. Messages are sent **From** `noreply@landlordapp.io` (or `MAIL_FROM`) with **Reply-To** set to the organisation’s `billing_email` or `owner_email` (see `organisations` table). No per-client API keys in the browser.
+
+**Database:** Run [`db/organisations_email_settings.sql`](db/organisations_email_settings.sql) on Supabase if `email_settings` is not already on `organisations` (stores trigger toggles and manager email per org).
+
+**DNS:** In the Resend dashboard, add and verify the `landlordapp.io` domain; use the DNS records they show (SPF/DKIM). This is independent of Hostinger mailbox creation for `admin@`.
+
+**Resend “senders”:** After the domain is verified, you do **not** need a separate “Add sender” action in Resend. You may send from any address on that domain, for example `noreply@landlordapp.io`, `billing@landlordapp.io`, or `support@landlordapp.io`, by setting `MAIL_FROM` (default is `LandlordApp <noreply@landlordapp.io>`). The app uses Resend’s REST API from [`server.js`](server.js) (`POST https://api.resend.com/emails`), which is equivalent to the official `resend` Node SDK.
+
+**Scheduled automation** (weekly/monthly without clicking the button) is not implemented yet; use an external cron or Supabase `pg_cron` later to call a secured endpoint or queue jobs.
 
 ## Dashboard scripts
 
@@ -37,7 +56,16 @@ To split an ad-hoc `public/js/dashboard-app.js` into sections without the rest o
 
 ## Tests
 
-`npm test` — HTTP checks for `/api/health` and the AI proxy (401/503 behaviour).
+`npm test` — HTTP checks for `/api/health`, the AI proxy (401/503), and `/api/email/send` (401/503).
+
+## Stripe subscriptions
+
+- Frontend uses:
+  - `POST /api/stripe/create-checkout-session` (starts Stripe Checkout for a plan)
+  - `POST /api/stripe/create-portal-session` (opens Stripe Billing Portal)
+- Stripe webhook endpoint: `POST /api/stripe/webhook`
+  - Handles `checkout.session.completed` and `customer.subscription.*`
+  - Syncs `organisations.plan`, `organisations.status`, `stripe_customer_id`, `stripe_subscription_id`, and `mrr`
 
 ## Supabase RLS checklist (audit)
 

@@ -275,6 +275,19 @@
     if (r === "owner") r = "admin";
     return state.roles && state.roles[r] ? r : "viewer";
   }
+  async function mergeOrgEmailSettingsIfAvailable() {
+    if (!_currentOrgId || !state._currentOrg) return;
+    var r = await supa.from("organisations").select("email_settings").eq("id", _currentOrgId).maybeSingle();
+    if (r.error) {
+      var c = String(r.error.code || "");
+      var msg = String(r.error.message || "");
+      if (c === "42703" || msg.indexOf("email_settings") !== -1) return;
+      return;
+    }
+    if (r.data && r.data.email_settings != null) {
+      state._currentOrg.email_settings = r.data.email_settings;
+    }
+  }
   function upsertSessionUser(session, roleHint) {
     if (!session || !session.user) return null;
     var authId = session.user.id;
@@ -366,7 +379,7 @@
   async function resolveOrg(session) {
     _currentMemberRole = "viewer";
     setAppBootMessage("Preparing your workspace\u2026");
-    var { data: membership, error: memberErr } = await supa.from("org_members").select("org_id, role, organisations(id,name,plan,status,trial_ends_at)").eq("user_id", session.user.id).maybeSingle();
+    var { data: membership, error: memberErr } = await supa.from("org_members").select("org_id, role, organisations(id,name,plan,status,trial_ends_at,billing_email,owner_email)").eq("user_id", session.user.id).maybeSingle();
     if (memberErr && memberErr.code !== "PGRST116") {
       console.warn("org_members lookup:", memberErr);
     }
@@ -375,6 +388,7 @@
       _currentMemberRole = normalizeRole(membership.role);
       var org = membership.organisations;
       state._currentOrg = org;
+      await mergeOrgEmailSettingsIfAvailable();
       if (org && org.status === "trial" && org.trial_ends_at) {
         var daysLeft = Math.ceil((new Date(org.trial_ends_at) - /* @__PURE__ */ new Date()) / 864e5);
         if (daysLeft < 0) {
@@ -438,9 +452,9 @@
         <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:8px">Trial Expired</div>
         <div style="font-size:14px;color:#7A8099;margin-bottom:24px;line-height:1.6">
           Your 14-day free trial for <strong style="color:#fff">${orgName}</strong> has ended.<br>
-          Upgrade to continue managing your properties.
+          Upgrade now to continue managing your properties.
         </div>
-        <a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Upgrade&body=Hi, my trial has expired and I'd like to upgrade." style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;text-decoration:none;margin-bottom:12px">Contact Us to Upgrade</a>
+        <button onclick="startStripeCheckout('starter')" style="display:inline-block;padding:13px 28px;background:#00D897;color:#000;font-weight:700;font-size:15px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;margin-bottom:12px">Upgrade Now</button>
         <br>
         <button onclick="doLogOut()" style="background:none;border:none;color:#7A8099;font-size:13px;cursor:pointer;margin-top:8px;font-family:inherit">Sign out</button>
       </div>
@@ -8923,6 +8937,87 @@
     URL.revokeObjectURL(url);
     showToast("CSV exported \u2713", "success");
   }
+  var buildManagerReportHtml = function(reportType, stats, subjectLine, textBody) {
+    var s = stats || {};
+    var firstName = "there";
+    if (typeof state !== "undefined" && state.currentUser && state.currentUser.name) {
+      firstName = String(state.currentUser.name).trim().split(/\s+/)[0] || "there";
+    }
+    var occPct = typeof s.occPct === "number" ? s.occPct : 0;
+    var income = s.income != null ? s.income : 0;
+    var costs = s.costs != null ? s.costs : 0;
+    var net2 = s.net != null ? s.net : income - costs;
+    var propsLen = s.propsLen != null ? s.propsLen : 0;
+    var maint = s.maintOpen != null ? s.maintOpen : 0;
+    var nowLabel = s.nowLabel || (/* @__PURE__ */ new Date()).toLocaleString("en-GB");
+    var title = reportType === "monthly" ? "Your monthly P&amp;L summary" : reportType === "test" ? "Connection test" : "Your weekly portfolio summary";
+    var monthPhrase = reportType === "monthly" ? (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : reportType === "weekly" ? "Week of " + (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    var grossStr = "\xA3" + Number(income).toLocaleString("en-GB");
+    var costsStr = "\xA3" + Number(costs).toLocaleString("en-GB");
+    var netStr = "\xA3" + Number(net2).toLocaleString("en-GB");
+    var styles = [
+      ".em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}",
+      ".em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:28px 36px}",
+      ".em-logo-name{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px}",
+      ".em-logo-name span{color:#00B894}",
+      ".em-body{background:#fff;padding:36px}",
+      ".em-greeting{font-size:22px;font-weight:700;color:#0F172A;margin:0 0 10px;line-height:1.3}",
+      ".em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 16px}",
+      ".em-p strong{color:#0F172A}",
+      ".em-btn{display:inline-block;background:#00B894;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:10px;margin:8px 0 20px}",
+      ".em-divider{border:none;border-top:1px solid #E8ECF0;margin:24px 0}",
+      ".em-small{font-size:12px;color:#94A3B8;line-height:1.6;margin:0}",
+      ".em-footer{background:#F8F9FB;padding:22px 36px;border-top:1px solid #E8ECF0}",
+      ".em-footer-links a{font-size:12px;color:#64748B;text-decoration:none;margin-right:18px}",
+      ".em-footer-copy{font-size:11px;color:#94A3B8;margin:0}",
+      ".em-kpi{display:flex;gap:0;background:#F8F9FB;border:1px solid #E8ECF0;border-radius:12px;overflow:hidden;margin:20px 0}",
+      ".em-kpi-cell{flex:1;padding:16px;text-align:center;border-right:1px solid #E8ECF0}",
+      ".em-kpi-cell:last-child{border-right:none}",
+      ".em-kpi-val{font-size:22px;font-weight:800;color:#0F172A;font-family:Courier New,monospace}",
+      ".em-kpi-lbl{font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}",
+      ".em-table{width:100%;border-collapse:collapse;margin:16px 0}",
+      ".em-table th{background:#0F172A;color:#fff;font-size:11px;font-weight:700;padding:10px 14px;text-align:left;text-transform:uppercase;letter-spacing:.06em}",
+      ".em-table td{font-size:13px;color:#475569;padding:10px 14px;border-bottom:1px solid #E8ECF0}",
+      ".em-table tr:last-child td{border-bottom:none}",
+      ".em-table td strong{color:#0F172A}",
+      ".em-table .highlight td{background:#E8F8F5}",
+      ".em-table .highlight td strong{color:#00B894}",
+      ".em-pre{font-size:13px;color:#475569;white-space:pre-wrap;line-height:1.6;margin:0}"
+    ].join("");
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + String(subjectLine).replace(/</g, "") + "</title><style>" + styles + '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><div class="em-logo-name">Landlord<span>App</span>.io</div></div><div class="em-body"><p class="em-greeting">Hi ' + escapeHtml(firstName) + " \u2014 " + title + '</p><p class="em-p">' + (reportType === "test" ? "This is a test message from your dashboard. If you can read this, outbound email is configured correctly." : "Here's a snapshot of your HMO portfolio. Figures match the plain-text summary below.") + '</p><div class="em-kpi"><div class="em-kpi-cell"><div class="em-kpi-val">' + occPct + '%</div><div class="em-kpi-lbl">Occupancy</div></div><div class="em-kpi-cell"><div class="em-kpi-val">' + grossStr + '</div><div class="em-kpi-lbl">Gross income (mo)</div></div><div class="em-kpi-cell"><div class="em-kpi-val">' + netStr + '</div><div class="em-kpi-lbl">Net (est.)</div></div></div><table class="em-table"><tr><th>Metric</th><th>This period</th><th>Notes</th></tr><tr><td>Properties</td><td><strong>' + propsLen + "</strong></td><td>\u2014</td></tr><tr><td>Gross income</td><td><strong>" + grossStr + "</strong></td><td>" + monthPhrase + "</td></tr><tr><td>Landlord costs</td><td><strong>" + costsStr + '</strong></td><td>\u2014</td></tr><tr class="highlight"><td><strong>Net</strong></td><td><strong>' + netStr + "</strong></td><td>Open maintenance: " + maint + '</td></tr></table><hr class="em-divider"><p class="em-small" style="margin-bottom:12px">Plain summary (same as above)</p><pre class="em-pre">' + escapeHtml(textBody) + '</pre><hr class="em-divider"><a href="https://landlordapp.io" class="em-btn">Open dashboard</a><p class="em-small">Sent ' + escapeHtml(nowLabel) + '. Reply to this email to reach your organisation contact.</p></div><div class="em-footer"><div class="em-footer-links"><a href="https://landlordapp.io">Dashboard</a><a href="mailto:admin@landlordapp.io">Support</a></div><p class="em-footer-copy">&copy; 2026 LandlordApp.io</p></div></div></body></html>';
+  };
+  var escapeHtml = function(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  };
+  var buildTenantOutboundHtml = function(subjectLine, textBody, tenantMeta) {
+    var m = tenantMeta || {};
+    var company = m.companyName || "Your property manager";
+    var phone = m.companyPhone || "";
+    var emailC = m.companyEmail || "";
+    var first = m.firstName || "there";
+    var lines = String(textBody || "").split(/\n/);
+    var paras = lines.filter(function(ln) {
+      return String(ln).trim().length;
+    }).map(function(ln) {
+      return '<p class="em-p">' + escapeHtml(ln) + "</p>";
+    }).join("");
+    var styles = [
+      ".em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}",
+      ".em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:24px 28px}",
+      ".em-body{background:#fff;padding:32px}",
+      ".em-greeting{font-size:20px;font-weight:700;color:#0F172A;margin:0 0 12px;line-height:1.35}",
+      ".em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 14px}",
+      ".em-footer{background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8}",
+      ".em-footer a{color:#00B894;text-decoration:none}"
+    ].join("");
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + escapeHtml(subjectLine) + "</title><style>" + styles + '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td><div style="font-size:20px;font-weight:800;color:#fff">' + escapeHtml(company) + '</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:4px">Property management</div></td><td align="right" style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">' + (function() {
+      var h = "";
+      if (phone) h += escapeHtml(phone);
+      if (phone && emailC) h += "<br>";
+      if (emailC) h += escapeHtml(emailC);
+      return h || "&nbsp;";
+    })() + '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' + escapeHtml(first) + "</p>" + paras + '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Questions? Reply to this email or contact us using the details above.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">LandlordApp.io</a> \xB7 ' + escapeHtml(company) + "</div></div></body></html>";
+  };
   var _saveTimer = null;
   function saveState() {
     clearTimeout(_saveTimer);
@@ -9026,7 +9121,8 @@
         supa.from("expenses").select("*").eq("org_id", _currentOrgId),
         supa.from("maintenance").select("*").eq("org_id", _currentOrgId),
         supa.from("landlord_payments").select("*").eq("org_id", _currentOrgId),
-        supa.from("contractors").select("*").eq("org_id", _currentOrgId)
+        supa.from("contractors").select("*").eq("org_id", _currentOrgId),
+        supa.from("organisations").select("billing_email,owner_email,name,plan,status,trial_ends_at").eq("id", _currentOrgId).maybeSingle()
       ]);
       var errors = results.filter(function(r) {
         return r.error;
@@ -9034,6 +9130,10 @@
       if (errors.length) {
         console.warn("Supabase load errors:", errors);
       }
+      if (results[8] && results[8].data) {
+        state._currentOrg = Object.assign({}, state._currentOrg || {}, results[8].data);
+      }
+      await mergeOrgEmailSettingsIfAvailable();
       state.landlords = (results[0].data || []).map(rowToLandlord);
       state.properties = (results[1].data || []).map(rowToProp);
       state.tenants = (results[2].data || []).map(rowToTenant);
@@ -9223,30 +9323,51 @@
     monthly_report: { id: "monthly_report", label: "Monthly P&L Summary", type: "manager", active: false, schedule: "1st of month 09:00" }
   };
   function getEmailConfig() {
+    var ls = {};
     try {
-      return JSON.parse(localStorage.getItem("pm_email_config") || "{}");
+      ls = JSON.parse(localStorage.getItem("pm_email_config") || "{}");
     } catch (e) {
-      return {};
     }
+    var o = state._currentOrg || {};
+    var db = o.email_settings && typeof o.email_settings === "object" ? o.email_settings : {};
+    return {
+      triggers: Object.assign({}, ls.triggers || {}, db.triggers || {}),
+      managerEmail: db.managerEmail || ls.managerEmail || ""
+    };
   }
-  function saveEmailConfig(cfg) {
-    localStorage.setItem("pm_email_config", JSON.stringify(cfg));
+  async function persistEmailSettings(cfg) {
+    if (!_currentOrgId) {
+      showToast && showToast("No organisation loaded", "error");
+      return;
+    }
+    var clean = {
+      triggers: cfg.triggers || {},
+      managerEmail: cfg.managerEmail || ""
+    };
+    var { error } = await supa.from("organisations").update({ email_settings: clean }).eq("id", _currentOrgId);
+    if (error) {
+      var missingCol = String(error.code || "") === "42703" || String(error.message || "").indexOf("email_settings") !== -1;
+      var msg = (error.message || "Could not save email settings") + (missingCol ? " Apply db/organisations_email_settings.sql on Supabase, then retry." : "");
+      showToast && showToast(msg, "error");
+      return false;
+    }
+    if (!state._currentOrg) state._currentOrg = {};
+    state._currentOrg.email_settings = clean;
+    return true;
   }
   function renderEmailSettings() {
     var cfg = getEmailConfig();
+    var org = state._currentOrg || {};
+    var replyHint = org.billing_email || org.owner_email || "your organisation billing email in Supabase";
     var html = "<div>";
-    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
-    html += '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Provider</div>';
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
-    html += `<div class="field"><label class="field-label">Provider</label><select class="inp" id="ecfg-provider" onchange="saveEmailField('provider',this.value)">`;
-    ["Resend", "SendGrid", "Mailgun", "SMTP"].forEach(function(p) {
-      html += "<option " + (cfg.provider === p ? "selected" : "") + ">" + p + "</option>";
-    });
-    html += "</select></div>";
-    html += '<div class="field"><label class="field-label">From Address</label><input class="inp" id="ecfg-from" placeholder="noreply@domain.com" value="' + (cfg.from || "") + `" onchange="saveEmailField('from',this.value)"></div>`;
+    html += '<div style="background:var(--accent-light);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+    html += '<div style="font-size:12px;color:var(--accent-dark);line-height:1.45;max-width:520px"><strong>LandlordApp.io email templates</strong> \u2014 HTML layouts for welcome, verification, password reset, trial reminders, billing, and reports. Open in a new tab to review or copy into Supabase Auth / Resend.</div>';
+    html += '<a href="/landlordapp_emails.html" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent-dark);font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0">Open template gallery \u2192</a>';
     html += "</div>";
-    html += '<div class="field"><label class="field-label">API Key</label><input class="inp" id="ecfg-apikey" type="password" placeholder="Enter API key" value="' + (cfg.apiKey ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "") + `" onchange="saveEmailField('apiKey',this.value)"></div>`;
-    html += '<div class="field" style="margin-top:8px"><label class="field-label">Manager Email (for reports & alerts)</label><input class="inp" id="ecfg-mgr" placeholder="manager@domain.com" value="' + (cfg.managerEmail || "") + `" onchange="saveEmailField('managerEmail',this.value)"></div>`;
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Sending (tenant &amp; manager emails)</div>';
+    html += '<p style="font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 12px">Rent reminders and reports are sent via your server using <strong>LandlordApp &lt;noreply@landlordapp.io&gt;</strong> (configure <code style="font-size:11px">RESEND_API_KEY</code> on the host). Tenant replies go to: <strong>' + String(replyHint).replace(/</g, "&lt;") + "</strong> (billing email, or owner email, or your account).</p>";
+    html += '<div class="field"><label class="field-label">Manager email (weekly / monthly reports)</label><input class="inp" id="ecfg-mgr" placeholder="manager@yourcompany.com" value="' + (cfg.managerEmail || "").replace(/"/g, "&quot;") + `" onchange="saveEmailField('managerEmail',this.value)"></div>`;
     html += "</div>";
     html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">';
     html += '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:12px">Triggers</div>';
@@ -9265,22 +9386,30 @@
     html += '<button onclick="runRentReminderEmails(false)" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">\u{1F4E8} Send Reminders</button>';
     html += `<button onclick="sendScheduledReport('weekly')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">\u{1F4CA} Weekly Report</button>`;
     html += `<button onclick="sendScheduledReport('monthly')" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">\u{1F4C5} Monthly P&L</button>`;
-    html += `</div><div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:9px;margin-top:10px;font-size:11px;color:var(--muted)">\u26A0 Email sending requires a Supabase Edge Function. Deploy function 'send-email' to activate.</div>`;
+    html += '</div><div style="background:var(--amber-light);border:1px solid #FDE68A;border-radius:9px;padding:9px;margin-top:10px;font-size:11px;color:var(--muted)">\u26A0 Requires <code style="font-size:11px">RESEND_API_KEY</code> and verified domain on the Node server (<code style="font-size:11px">POST /api/email/send</code>). Auth &amp; billing emails use Supabase / Stripe separately. Gmail may file messages under <strong>Updates</strong>; drag one message to <strong>Primary</strong> and choose \u201CYes\u201D so future mail lands in the inbox.</div>';
     html += "</div></div>";
     return html;
   }
   function saveEmailField(key, value) {
     var cfg = getEmailConfig();
     cfg[key] = value;
-    saveEmailConfig(cfg);
-    showToast("Saved", "success");
+    persistEmailSettings(cfg).then(function(ok) {
+      if (ok) showToast("Saved", "success");
+    });
   }
   function toggleEmailTrigger(id, enabled) {
     var cfg = getEmailConfig();
     if (!cfg.triggers) cfg.triggers = {};
     cfg.triggers[id] = enabled;
-    saveEmailConfig(cfg);
-    showToast((enabled ? "Enabled: " : "Disabled: ") + (EMAIL_TRIGGERS[id] || { label: id }).label, enabled ? "success" : "info");
+    persistEmailSettings(cfg).then(function(ok) {
+      if (ok) {
+        showToast((enabled ? "Enabled: " : "Disabled: ") + (EMAIL_TRIGGERS[id] || { label: id }).label, enabled ? "success" : "info");
+        if (typeof render === "function") render();
+      } else {
+        var inp = document.querySelector('input[data-trid="' + id + '"]');
+        if (inp) inp.checked = !enabled;
+      }
+    });
   }
   function previewEmailForTenant(triggerId, tenantId) {
     var t = state.tenants.find(function(x) {
@@ -9293,23 +9422,64 @@
     var body = tr.template.replace(/{name}/g, t.name).replace(/{property}/g, t.property || "").replace(/{amount}/g, "\xA3" + (t.rent || 0)).replace(/{company}/g, company).replace(/{date}/g, (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }));
     return { to: t.email, subject: tr.label, body };
   }
-  async function sendEmail(to, subject, body) {
-    var cfg = getEmailConfig();
-    if (!cfg.apiKey || !cfg.from) {
-      showToast("Email not configured \u2014 add API key in Settings", "error");
+  function getCompanyEmailContext() {
+    var co = state.companies && state.companies[0] || {};
+    var org = state._currentOrg || {};
+    return {
+      companyName: co.name || "Your property manager",
+      companyPhone: co.phone || co.tel || "",
+      companyEmail: co.email || org.billing_email || org.owner_email || state.currentUser && state.currentUser.email || ""
+    };
+  }
+  async function sendEmail(to, subject, body, kind, extra) {
+    extra = extra || {};
+    if (!_currentOrgId) {
+      showToast("No organisation", "error");
       return false;
     }
-    var supaUrl = window.ENV.SUPA_URL;
+    var sr = await supa.auth.getSession();
+    var session = sr.data.session;
+    if (!session) {
+      showToast("Sign in required", "error");
+      return false;
+    }
+    kind = kind || "tenant";
+    var html = extra.html;
+    if (!html) {
+      if (kind === "report") {
+        html = buildManagerReportHtml(extra.reportType || "weekly", extra.stats || {}, subject, body);
+      } else if (kind === "tenant") {
+        var cx = getCompanyEmailContext();
+        if (extra.tenant) {
+          if (extra.tenant.firstName) cx.firstName = extra.tenant.firstName;
+          if (extra.tenant.companyName) cx.companyName = extra.tenant.companyName;
+          if (extra.tenant.companyPhone) cx.companyPhone = extra.tenant.companyPhone;
+          if (extra.tenant.companyEmail) cx.companyEmail = extra.tenant.companyEmail;
+        }
+        html = buildTenantOutboundHtml(subject, body, cx);
+      }
+    }
+    var payload = { orgId: _currentOrgId, to, subject, text: body, kind };
+    if (html) payload.html = html;
     try {
-      var resp = await fetch(supaUrl + "/functions/v1/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.apiKey }, body: JSON.stringify({ provider: cfg.provider || "Resend", from: cfg.from, to, subject, text: body }) });
+      var resp = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+        body: JSON.stringify(payload)
+      });
+      var data = await resp.json().catch(function() {
+        return {};
+      });
       if (resp.ok) {
         showToast("Email sent to " + to, "success");
         return true;
-      } else {
-        var err = await resp.text();
-        showToast("Email failed: " + err.slice(0, 80), "error");
-        return false;
       }
+      var msg = data && data.error || data && data.message || JSON.stringify(data).slice(0, 120);
+      if (/suppression/i.test(String(msg))) {
+        msg += " In Resend: Dashboard \u2192 Emails (or Email suppressions) \u2192 find " + String(to) + " \u2192 Remove from suppression list. Addresses are listed after a bounce or spam complaint.";
+      }
+      showToast("Email failed: " + msg, "error");
+      return false;
     } catch (e) {
       showToast("Email error: " + e.message, "error");
       return false;
@@ -9317,18 +9487,44 @@
   }
   async function sendTestEmail() {
     var cfg = getEmailConfig();
-    var to = cfg.managerEmail || cfg.from;
+    var to = (cfg.managerEmail || "").trim() || state.currentUser && state.currentUser.email || "";
     if (!to) {
-      showToast("Set a manager email first", "error");
+      showToast("Set Manager email in Settings (below) or sign in with an account that has an email", "error");
       return;
     }
     var props = state.properties.filter(function(p) {
       return p.status !== "archived";
     });
-    var body = "Test from PropManager\n\n" + props.length + " properties \xB7 " + state.tenants.filter(function(t) {
+    var rooms = props.reduce(function(s, p) {
+      return s + p.rooms;
+    }, 0);
+    var occ = props.reduce(function(s, p) {
+      return s + p.occupied;
+    }, 0);
+    var income = props.reduce(function(s, p) {
+      return s + p.rent;
+    }, 0);
+    var costs = props.reduce(function(s, p) {
+      return s + p.landlord;
+    }, 0);
+    var body = "Test from LandlordApp\n\n" + props.length + " properties \xB7 " + state.tenants.filter(function(t) {
       return t.status === "active";
     }).length + " tenants\nSent: " + (/* @__PURE__ */ new Date()).toLocaleString("en-GB");
-    await sendEmail(to, "Test Email \u2014 PropManager", body);
+    var shortDate = (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    await sendEmail(to, "LandlordApp \xB7 connection test (" + shortDate + ")", body, "report", {
+      reportType: "test",
+      stats: {
+        propsLen: props.length,
+        income,
+        costs,
+        net: income - costs,
+        occPct: rooms ? Math.round(occ / rooms * 100) : 0,
+        maintOpen: state.maintenance.filter(function(m) {
+          return m.status !== "resolved";
+        }).length,
+        nowLabel: (/* @__PURE__ */ new Date()).toLocaleString("en-GB")
+      }
+    });
   }
   async function runRentReminderEmails(dryRun) {
     var cfg = getEmailConfig();
@@ -9360,7 +9556,10 @@
           return;
         }
         log.push({ name: t.name, to: preview.to, subject: preview.subject });
-        if (!dryRun) sendEmail(preview.to, preview.subject, preview.body);
+        if (!dryRun) {
+          var firstN = (t.name || "there").trim().split(/\s+/)[0] || "there";
+          sendEmail(preview.to, preview.subject, preview.body, "tenant", { tenant: { firstName: firstN } });
+        }
         sent++;
       });
     });
@@ -9389,11 +9588,92 @@
       return s + p.landlord;
     }, 0);
     var now = (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-    var subject = type === "weekly" ? "Weekly Report \u2014 " + now : "Monthly P&L \u2014 " + now;
-    var body = type === "weekly" ? "Weekly Portfolio Report\n" + now + "\n\n" + props.length + " properties \xB7 " + Math.round(occ / rooms * 100) + "% occupancy\nIncome: \xA3" + income.toLocaleString() + "/mo \xB7 Costs: \xA3" + costs.toLocaleString() + "/mo \xB7 Net: \xA3" + (income - costs).toLocaleString() + "/mo\nOpen maintenance: " + state.maintenance.filter(function(m) {
+    var shortDate = (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    var subject = type === "weekly" ? "LandlordApp \xB7 your portfolio summary (" + shortDate + ")" : "LandlordApp \xB7 your P&L summary (" + shortDate + ")";
+    var occPct = rooms ? Math.round(occ / rooms * 100) : 0;
+    var body = type === "weekly" ? "Weekly portfolio snapshot\n" + now + "\n\n" + props.length + " properties \xB7 " + occPct + "% occupancy\nIncome: \xA3" + income.toLocaleString() + "/mo \xB7 Costs: \xA3" + costs.toLocaleString() + "/mo \xB7 Net: \xA3" + (income - costs).toLocaleString() + "/mo\nOpen maintenance: " + state.maintenance.filter(function(m) {
       return m.status !== "resolved";
-    }).length : "Monthly P&L\n" + now + "\n\nGross Income: \xA3" + income.toLocaleString() + "\nLandlord Costs: \xA3" + costs.toLocaleString() + "\nNet Profit: \xA3" + (income - costs).toLocaleString() + "\nMargin: " + Math.round((income - costs) / income * 100) + "%\nOccupancy: " + Math.round(occ / rooms * 100) + "%";
-    await sendEmail(to, subject, body);
+    }).length : "Monthly P&L\n" + now + "\n\nGross Income: \xA3" + income.toLocaleString() + "\nLandlord Costs: \xA3" + costs.toLocaleString() + "\nNet Profit: \xA3" + (income - costs).toLocaleString() + "\nMargin: " + (income ? Math.round((income - costs) / income * 100) : 0) + "%\nOccupancy: " + occPct + "%";
+    await sendEmail(to, subject, body, "report", {
+      reportType: type,
+      stats: {
+        propsLen: props.length,
+        rooms,
+        occ,
+        income,
+        costs,
+        net: income - costs,
+        occPct,
+        maintOpen: state.maintenance.filter(function(m) {
+          return m.status !== "resolved";
+        }).length,
+        nowLabel: now
+      }
+    });
+  }
+  async function startStripeCheckout(plan) {
+    if (!_currentOrgId) {
+      showToast && showToast("No organisation loaded", "error");
+      return;
+    }
+    var sr = await supa.auth.getSession();
+    var session = sr && sr.data ? sr.data.session : null;
+    if (!session) {
+      showToast && showToast("Sign in required", "error");
+      return;
+    }
+    try {
+      var resp = await fetch("/api/stripe/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + session.access_token
+        },
+        body: JSON.stringify({ orgId: _currentOrgId, plan: String(plan || "starter").toLowerCase() })
+      });
+      var data = await resp.json().catch(function() {
+        return {};
+      });
+      if (!resp.ok || !data.url) {
+        showToast && showToast("Checkout failed: " + (data && data.error || "Unknown error"), "error");
+        return;
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      showToast && showToast("Checkout error: " + e.message, "error");
+    }
+  }
+  async function openStripeBillingPortal() {
+    if (!_currentOrgId) {
+      showToast && showToast("No organisation loaded", "error");
+      return;
+    }
+    var sr = await supa.auth.getSession();
+    var session = sr && sr.data ? sr.data.session : null;
+    if (!session) {
+      showToast && showToast("Sign in required", "error");
+      return;
+    }
+    try {
+      var resp = await fetch("/api/stripe/create-portal-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + session.access_token
+        },
+        body: JSON.stringify({ orgId: _currentOrgId })
+      });
+      var data = await resp.json().catch(function() {
+        return {};
+      });
+      if (!resp.ok || !data.url) {
+        showToast && showToast("Could not open billing portal: " + (data && data.error || "Unknown error"), "error");
+        return;
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      showToast && showToast("Billing portal error: " + e.message, "error");
+    }
   }
   function renderSettings() {
     var companies = state.companies || [];
@@ -9457,9 +9737,9 @@
     }
     html += "</div></div>";
     if (isTrial) {
-      html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Upgrade&body=Hi, I would like to upgrade from my trial." style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;text-decoration:none">&#x2B06; Upgrade Plan</a>';
+      html += `<button onclick="startStripeCheckout('starter')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">&#x2B06; Upgrade Plan</button>`;
     } else {
-      html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=PropManager Subscription" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;text-decoration:none">Manage plan</a>';
+      html += '<button onclick="openStripeBillingPortal()" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Manage plan</button>';
     }
     html += "</div>";
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">';
@@ -9494,7 +9774,7 @@
         html += '<div style="font-size:16px;font-weight:800;font-family:monospace;margin:4px 0">' + p[2] + "</div>";
         html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + p[3] + "</div>";
         if (!isCurrent) {
-          html += '<a href="mailto:gleydson@reservationsdirect.co.uk?subject=Upgrade to ' + p[1] + "&body=Hi, I would like to upgrade to the " + p[1] + " plan (" + p[2] + ')." style="display:block;text-align:center;padding:6px;border-radius:7px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-decoration:none">Upgrade</a>';
+          html += `<button onclick="startStripeCheckout('` + p[0] + `')" style="display:block;width:100%;text-align:center;padding:6px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Upgrade</button>`;
         } else {
           html += '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--accent-dark)">&#x2713; Current plan</div>';
         }
@@ -10566,11 +10846,11 @@
     window.saveState = saveState;
     window.showToast = showToast;
     window.getEmailConfig = getEmailConfig;
-    window.saveEmailConfig = saveEmailConfig;
     window.renderEmailSettings = renderEmailSettings;
     window.saveEmailField = saveEmailField;
     window.toggleEmailTrigger = toggleEmailTrigger;
     window.previewEmailForTenant = previewEmailForTenant;
+    window.getCompanyEmailContext = getCompanyEmailContext;
     window.renderSettings = renderSettings;
     window.uploadLogo = uploadLogo;
     window.removeLogo = removeLogo;
@@ -10602,6 +10882,7 @@
     window.uploadPropDocFromInput = uploadPropDocFromInput;
     window.removePropDoc = removePropDoc;
     window.fetchAiMessages = fetchAiMessages;
+    window.mergeOrgEmailSettingsIfAvailable = mergeOrgEmailSettingsIfAvailable;
     window.syncUsersFromOrgMembers = syncUsersFromOrgMembers;
     window.resolveOrg = resolveOrg;
     window.supaDelete = supaDelete;
@@ -10620,10 +10901,13 @@
     window.loadState = loadState;
     window.backfillPaymentDueDates = backfillPaymentDueDates;
     window.doLogOut = doLogOut;
+    window.persistEmailSettings = persistEmailSettings;
     window.sendEmail = sendEmail;
     window.sendTestEmail = sendTestEmail;
     window.runRentReminderEmails = runRentReminderEmails;
     window.sendScheduledReport = sendScheduledReport;
+    window.startStripeCheckout = startStripeCheckout;
+    window.openStripeBillingPortal = openStripeBillingPortal;
     window.sendInvite = sendInvite;
     window.deleteUserBtn = deleteUserBtn;
     window.renderPropDocsTab = renderPropDocsTab;
