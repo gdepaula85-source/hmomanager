@@ -89,6 +89,49 @@ async function resolveOrgIdForStripeSubscription(subscription) {
 }
 
 
+  // ── Meta Conversions API: server-side Purchase event ─────────────────────
+  // Fires from the Stripe webhook when a real payment lands. Server-side is
+  // more reliable than a browser pixel for Purchase because it runs from our
+  // backend (no ad blockers, no race with the Stripe redirect) and gets the
+  // authoritative invoice amount. Becomes a no-op until META_CAPI_TOKEN is
+  // set in env — pixel ID is the same one the browser uses (id 803171412588697).
+  // Get the token at https://www.facebook.com/business/help/3477189814090262
+  async function sendMetaPurchaseEvent({ email, valueGBP, eventId, orgId }) {
+    const META_PIXEL_ID = '803171412588697';
+    const token = process.env.META_CAPI_TOKEN || '';
+    if (!token) return; // feature off — no error
+    const crypto = require('crypto');
+    const hashedEmail = email
+      ? crypto.createHash('sha256').update(String(email).trim().toLowerCase()).digest('hex')
+      : null;
+    const body = {
+      data: [{
+        event_name: 'Purchase',
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: eventId || (orgId ? ('org-' + orgId + '-' + Date.now()) : crypto.randomUUID()),
+        action_source: 'website',
+        user_data: hashedEmail ? { em: [hashedEmail] } : {},
+        custom_data: { currency: 'GBP', value: Number(valueGBP || 0).toFixed(2) }
+      }]
+    };
+    try {
+      const resp = await fetch(
+        'https://graph.facebook.com/v18.0/' + META_PIXEL_ID + '/events?access_token=' + encodeURIComponent(token),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }
+      );
+      if (!resp.ok) {
+        const txt = await resp.text().catch(function(){return '';});
+        console.warn('[Meta CAPI] Purchase send failed', resp.status, txt.slice(0, 500));
+      }
+    } catch (e) {
+      console.warn('[Meta CAPI] Purchase threw:', e && e.message);
+    }
+  }
+
   function registerStripeWebhook() {
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     if (!stripeConfigured()) {
@@ -215,6 +258,15 @@ async function resolveOrgIdForStripeSubscription(subscription) {
                   payment_amount: amountPaid || '—',
                   payment_date: paidAt || '—',
                 });
+                // Meta Conversions API Purchase — fire-and-forget so a slow
+                // Meta endpoint never delays the 200 we owe Stripe. event_id
+                // uses the invoice id so re-deliveries dedupe in Meta.
+                sendMetaPurchaseEvent({
+                  email: orgRes.data.billing_email || orgRes.data.owner_email || null,
+                  valueGBP: amountMinor / 100,
+                  eventId: 'inv-' + (invoice && invoice.id ? invoice.id : Date.now()),
+                  orgId: orgRes.data.id
+                }).catch(function(){ /* logged inside */ });
               }
             } catch (emailErr) {
               console.warn('payment_successful lifecycle email failed:', emailErr && emailErr.message ? emailErr.message : emailErr);

@@ -2671,6 +2671,15 @@ function submitExitLead(e) {
         btn.textContent = 'Try again';
         return;
       }
+      // Meta Pixel: lead captured. Guarded so a missing/blocked pixel doesn't break the success flow.
+      if (typeof fbq === 'function') {
+        try {
+          fbq('track', 'Lead', {
+            content_name: 'HMO Compliance Checklist 2026',
+            content_category: 'exit_intent_compliance_pdf'
+          });
+        } catch(_) {}
+      }
       // Don't show this popup again from this browser, ever.
       try { localStorage.setItem('la_exit_popup_dismissed', '1'); } catch(_){}
       document.getElementById('exit-popup-form').style.display = 'none';

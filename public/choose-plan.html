@@ -132,6 +132,20 @@
         window.location.href = '/app';
         return;
       }
+      // Meta Pixel: paid-plan checkout initiated. Value matches the monthly
+      // price the user is about to commit to (post-trial). Server-side
+      // 'Purchase' fires from the Stripe webhook on first invoice.
+      try {
+        var _planValue = { starter: 49, professional: 89, business: 149, enterprise: 299 }[selectedPlan] || 0;
+        if (typeof fbq === 'function') {
+          fbq('track', 'InitiateCheckout', {
+            content_name: selectedPlan,
+            content_category: 'subscription',
+            value: _planValue,
+            currency: 'GBP'
+          });
+        }
+      } catch(_) {}
       window.location.href = '/app?startCheckout=' + encodeURIComponent(selectedPlan);
     }catch(err){
       setMessage('Could not continue: ' + (err && err.message ? err.message : 'Unknown error'));

@@ -145,6 +145,17 @@ async function handleSignup(e) {
   });
   if(error) { showMsg(friendlyError(error.message), 'error'); setLoading('signup', false); return; }
 
+  // Meta Pixel: signup succeeded (fires regardless of whether email confirmation
+  // is required — both branches below represent a real registration).
+  if (typeof fbq === 'function') {
+    try {
+      fbq('track', 'CompleteRegistration', {
+        content_name: 'Trial Signup',
+        status: !!(data.session)
+      });
+    } catch(_) {}
+  }
+
   if(data.user && !data.session) {
     // Email confirmation required — Supabase sends the confirmation email
     // itself; the branded welcome_signup mail fires on first login (server.js

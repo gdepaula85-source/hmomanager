@@ -8,10 +8,18 @@
  * requires it to live in HTML, not JS). If you rotate the pixel ID, also
  * update the URL in the <noscript> tag in each public/*.html.
  *
- * NOT included on: login.html, superadmin.html, onboard.html,
- * tenant-portal.html, sign.html, set-password.html, landlordapp_emails.html
- * — these collect/display tenant PII or are signed-in surfaces; we don't
- * want marketing pixels firing there.
+ * NOT included on: superadmin.html, onboard.html, tenant-portal.html,
+ * sign.html, set-password.html, landlordapp_emails.html — these collect/
+ * display tenant PII or are internal surfaces; marketing pixels shouldn't
+ * fire there.
+ *
+ * IS included on: login.html — needed so the CompleteRegistration conversion
+ * can fire from public/js/login.js after a successful signup. The login page
+ * is a marketing/conversion surface (the user being a landlord, not tenant).
+ *
+ * Server-side Purchase event lives in routes/billing.js (Meta Conversions API,
+ * fired from the Stripe invoice.payment_succeeded webhook). Requires
+ * META_CAPI_TOKEN env var; no-op without it.
  * ───────────────────────────────────────────────────────────────────────── */
 (function (f, b, e, v, n, t, s) {
   if (f.fbq) return;
