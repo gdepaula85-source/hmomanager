@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Choose Your Plan — landlordapp.io</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+<style>
+  :root { --bg:#0A0A0F; --card:#13131A; --line:rgba(255,255,255,.08); --text:#fff; --muted:#A1A1B3; --accent:#00D897; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:48px 18px}
+  h1{margin:0 0 8px;font-size:34px} .sub{color:var(--muted);margin:0 0 24px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .plan{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:16px;cursor:pointer}
+  .plan.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(0,216,151,.35) inset}
+  .name{font-size:13px;font-weight:700;color:#C3C8D4;text-transform:uppercase;letter-spacing:.08em}
+  .price{font-size:26px;font-weight:800;margin:6px 0}.desc{font-size:12px;color:var(--muted);min-height:34px}
+  .cta{margin-top:22px;display:flex;gap:10px;align-items:center}
+  .btn{border:none;border-radius:999px;padding:12px 22px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-main{background:var(--accent);color:#00190f}.btn-ghost{background:transparent;color:#fff;border:1px solid var(--line)}
+  .msg{margin-top:12px;font-size:13px;color:var(--muted);min-height:20px}
+  @media(max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:700px){.grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:22px;font-weight:700;margin-bottom:4px">landlord<span style="color:var(--accent)">app</span><span style="color:var(--muted);font-size:16px;font-weight:400">.io</span></div>
+    <h1>Choose your plan</h1>
+    <p class="sub">Free plan has no card required. Paid plans start with a 14-day trial.</p>
+    <div class="grid" id="plans">
+      <div class="plan active" data-plan="free"><div class="name">Free</div><div class="price">Free</div><div class="desc">3 properties · 15 tenants.</div></div>
+      <div class="plan" data-plan="starter"><div class="name">Starter</div><div class="price">£49/mo</div><div class="desc">15 properties · 75 tenants. 14-day trial.</div></div>
+      <div class="plan" data-plan="professional"><div class="name">Professional</div><div class="price">£89/mo</div><div class="desc">25 properties · unlimited tenants. Most popular.</div></div>
+      <div class="plan" data-plan="business"><div class="name">Business</div><div class="price">£149/mo</div><div class="desc">60 properties · unlimited tenants. Role-based access.</div></div>
+      <div class="plan" data-plan="enterprise"><div class="name">Enterprise</div><div class="price">£299/mo</div><div class="desc">Unlimited everything. API access.</div></div>
+    </div>
+    <div class="cta">
+      <button class="btn btn-main" id="continue-btn">Continue</button>
+      <button class="btn btn-ghost" id="logout-btn">Log out</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+<script>
+  const supa = supabase.createClient(window.ENV.SUPA_URL, window.ENV.SUPA_KEY);
+  let selectedPlan = 'free';
+  const msg = document.getElementById('msg');
+
+  function setMessage(t){ msg.textContent = t || ''; }
+  function selectPlan(plan){
+    selectedPlan = plan || 'free';
+    document.querySelectorAll('.plan').forEach(function(p){
+      p.classList.toggle('active', p.getAttribute('data-plan') === selectedPlan);
+    });
+  }
+
+  (async function init(){
+    const s = await supa.auth.getSession();
+    if(!s || !s.data || !s.data.session){ window.location.href='login.html'; return; }
+    // Staff invitees must never see the plan picker — they belong to an
+    // existing org and would otherwise trigger welcome_signup + a stale trial
+    // org. Bounce straight back to /app where resolveOrg attaches them.
+    const meta = (s.data.session.user && s.data.session.user.user_metadata) || {};
+    if (meta.invited_to_org) { window.location.href = '/app'; return; }
+    const params = new URLSearchParams(window.location.search || '');
+    const qPlan = String(params.get('plan') || '').toLowerCase();
+    const stripeResult = String(params.get('stripe') || '').toLowerCase();
+    const userPlan = String((s.data.session.user && s.data.session.user.user_metadata && s.data.session.user.user_metadata.selected_plan) || '').toLowerCase();
+    const preferredPlan = (qPlan === 'starter' || qPlan === 'professional' || qPlan === 'business' || qPlan === 'enterprise' || qPlan === 'free')
+      ? qPlan
+      : ((userPlan === 'starter' || userPlan === 'professional' || userPlan === 'business' || userPlan === 'enterprise' || userPlan === 'free') ? userPlan : 'free');
+    selectPlan(preferredPlan);
+    if (stripeResult === 'cancelled') {
+      setMessage('Checkout was cancelled. Please choose a plan to continue.');
+    }
+  })();
+
+  document.getElementById('plans').addEventListener('click', function(e){
+    const card = e.target.closest('.plan');
+    if(!card) return;
+    selectPlan(card.getAttribute('data-plan') || 'free');
+  });
+
+  document.getElementById('continue-btn').addEventListener('click', async function(){
+    try{
+      setMessage('Saving plan...');
+      const current = await supa.auth.getUser();
+      const existingData = (current && current.data && current.data.user && current.data.user.user_metadata) || {};
+      const userEmail = String((current && current.data && current.data.user && current.data.user.email) || '').trim();
+      const fullName = String((existingData && existingData.full_name) || '').trim();
+      const firstName = fullName ? (fullName.split(/\s+/)[0] || 'there') : (userEmail ? (userEmail.split('@')[0] || 'there') : 'there');
+      const newData = Object.assign({}, existingData, { selected_plan: selectedPlan });
+      const upd = await supa.auth.updateUser({ data: newData });
+      if(upd && upd.error){ setMessage('Could not save plan: ' + upd.error.message); return; }
+
+      // Send welcome only after user explicitly chooses a plan.
+      try {
+        if (userEmail) {
+          const isPaid = selectedPlan === 'starter' || selectedPlan === 'professional' || selectedPlan === 'business' || selectedPlan === 'enterprise';
+          const trialEnd = isPaid
+            ? new Date(Date.now() + 14 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+            : 'N/A';
+          const planLabel = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1);
+          await fetch('/api/email/auth-lifecycle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              templateId: 'welcome_signup',
+              to: userEmail,
+              vars: {
+                first_name: firstName,
+                email: userEmail,
+                plan_name: planLabel,
+                trial_end_date: trialEnd
+              }
+            })
+          });
+        }
+      } catch (_welcomeErr) {
+        // Do not block onboarding if welcome email provider is unavailable.
+      }
+
+      if(selectedPlan === 'free'){
+        window.location.href = '/app';
+        return;
+      }
+      window.location.href = '/app?startCheckout=' + encodeURIComponent(selectedPlan);
+    }catch(err){
+      setMessage('Could not continue: ' + (err && err.message ? err.message : 'Unknown error'));
+    }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async function(){
+    try{ await supa.auth.signOut(); }catch(e){}
+    window.location.href='login.html';
+  });
+</script>
+
+<div style="text-align:center;padding:28px 18px 20px;border-top:1px solid rgba(255,255,255,.07);margin-top:32px">
+  <div style="font-size:11px;color:#5A5A6E;margin-bottom:14px;letter-spacing:.04em">Follow us</div>
+  <div style="display:inline-flex;gap:12px">
+    <a href="https://www.facebook.com/landlordapp.io" target="_blank" rel="noopener" title="Facebook" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#5A5A6E;transition:color .2s">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+    </a>
+    <a href="https://www.linkedin.com/company/landlordappio/about/?viewAsMember=true" target="_blank" rel="noopener" title="LinkedIn" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#5A5A6E;transition:color .2s">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+    </a>
+    <a href="https://www.instagram.com/LandlordApp.io/" target="_blank" rel="noopener" title="Instagram" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#5A5A6E;transition:color .2s">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162S8.597 18.163 12 18.163s6.162-2.759 6.162-6.162S15.403 5.838 12 5.838zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+    </a>
+    <a href="https://x.com/LandlordAppIO" target="_blank" rel="noopener" title="X (Twitter)" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#5A5A6E;transition:color .2s">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+    </a>
+  </div>
+</div>
+</body>
+</html>
+

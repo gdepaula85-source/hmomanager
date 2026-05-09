@@ -1,0 +1,465 @@
+// ── HTML email bodies (keep visual parity with public/landlordapp_emails.html) ──
+// Manager reports → Template 9 (Monthly Portfolio Report) layout.
+// Tenant mail → Section B operator header + body (see Tenant Template 2 style).
+
+var buildManagerReportHtml = function (reportType, stats, subjectLine, textBody) {
+  var s = stats || {};
+  var firstName = 'there';
+  if (typeof state !== 'undefined' && state.currentUser && state.currentUser.name) {
+    firstName = String(state.currentUser.name).trim().split(/\s+/)[0] || 'there';
+  }
+  var occPct = typeof s.occPct === 'number' ? s.occPct : 0;
+  var income = s.income != null ? s.income : 0;
+  var costs = s.costs != null ? s.costs : 0;
+  var net = s.net != null ? s.net : income - costs;
+  var propsLen = s.propsLen != null ? s.propsLen : 0;
+  var maint = s.maintOpen != null ? s.maintOpen : 0;
+  var nowLabel = s.nowLabel || new Date().toLocaleString('en-GB');
+
+  var title =
+    reportType === 'monthly'
+      ? 'Your monthly P&amp;L summary'
+      : reportType === 'test'
+        ? 'Connection test'
+        : 'Your weekly portfolio summary';
+  var monthPhrase =
+    reportType === 'monthly'
+      ? new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+      : reportType === 'weekly'
+        ? 'Week of ' + new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        : new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+  var grossStr = '£' + Number(income).toLocaleString('en-GB');
+  var costsStr = '£' + Number(costs).toLocaleString('en-GB');
+  var netStr = '£' + Number(net).toLocaleString('en-GB');
+  var styles = [
+    '.em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}',
+    '.em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:28px 36px}',
+    '.em-logo{display:inline-flex;align-items:center;gap:10px;text-decoration:none}',
+    '.em-logo-icon{width:36px;height:36px;background:#0B0D12;border-radius:9px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}',
+    '.em-logo-name{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px}',
+    '.em-logo-name span{color:#00B894}',
+    '.em-body{background:#fff;padding:36px}',
+    '.em-greeting{font-size:22px;font-weight:700;color:#0F172A;margin:0 0 10px;line-height:1.3}',
+    '.em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 16px}',
+    '.em-p strong{color:#0F172A}',
+    '.em-btn{display:inline-block;background:#00B894;color:#fff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:10px;margin:8px 0 20px}',
+    '.em-divider{border:none;border-top:1px solid #E8ECF0;margin:24px 0}',
+    '.em-small{font-size:12px;color:#94A3B8;line-height:1.6;margin:0}',
+    '.em-footer{background:#F8F9FB;padding:22px 36px;border-top:1px solid #E8ECF0}',
+    '.em-footer-links a{font-size:12px;color:#64748B;text-decoration:none;margin-right:18px}',
+    '.em-footer-copy{font-size:11px;color:#94A3B8;margin:0}',
+    '.em-kpi{display:flex;flex-wrap:wrap;gap:0;width:100%;max-width:100%;box-sizing:border-box;background:#F8F9FB;border:1px solid #E8ECF0;border-radius:12px;overflow:hidden;margin:20px 0;min-width:0}',
+    '.em-kpi-cell{flex:1 1 0;min-width:0;max-width:100%;padding:14px 10px;text-align:center;border-right:1px solid #E8ECF0;box-sizing:border-box}',
+    '.em-kpi-cell:last-child{border-right:none}',
+    '.em-kpi-val{font-size:22px;font-weight:800;color:#0F172A;font-family:Courier New,monospace;word-break:break-word;overflow-wrap:break-word;line-height:1.2}',
+    '.em-kpi-lbl{font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}',
+    '@media only screen and (max-width:480px){.em-kpi{flex-direction:column}.em-kpi-cell{border-right:none;border-bottom:1px solid #E8ECF0}.em-kpi-cell:last-child{border-bottom:none}.em-kpi-val{font-size:18px}.em-body{padding:24px 18px!important}.em-header{padding:22px 20px!important}.em-table th,.em-table td{padding:9px 10px;font-size:12px}}',
+    '.em-table{width:100%;border-collapse:collapse;margin:16px 0}',
+    '.em-table th{background:#0F172A;color:#fff;font-size:11px;font-weight:700;padding:10px 14px;text-align:left;text-transform:uppercase;letter-spacing:.06em}',
+    '.em-table td{font-size:13px;color:#475569;padding:10px 14px;border-bottom:1px solid #E8ECF0}',
+    '.em-table tr:last-child td{border-bottom:none}',
+    '.em-table td strong{color:#0F172A}',
+    '.em-table .highlight td{background:#E8F8F5}',
+    '.em-table .highlight td strong{color:#00B894}',
+    '.em-pre{font-size:13px;color:#475569;white-space:pre-wrap;line-height:1.6;margin:0}',
+  ].join('');
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+    String(subjectLine).replace(/</g, '') +
+    '</title><style>' +
+    styles +
+    '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><div class="em-logo"><div class="em-logo-icon"><img src="https://landlordapp.io/favicon.svg" width="36" height="36" alt="landlordapp.io" style="display:block;width:36px;height:36px"></div><div class="em-logo-name">landlord<span>app</span>.io</div></div></div><div class="em-body"><p class="em-greeting">Hi ' +
+    escapeHtml(firstName) +
+    ' — ' +
+    title +
+    '</p><p class="em-p">' +
+    (reportType === 'test'
+      ? 'This is a test message from your dashboard. If you can read this, outbound email is configured correctly.'
+      : "Here's a snapshot of your HMO portfolio. Figures match the plain-text summary below.") +
+    '</p><div class="em-kpi"><div class="em-kpi-cell"><div class="em-kpi-val">' +
+    occPct +
+    '%</div><div class="em-kpi-lbl">Occupancy</div></div><div class="em-kpi-cell"><div class="em-kpi-val">' +
+    grossStr +
+    '</div><div class="em-kpi-lbl">Gross income (mo)</div></div><div class="em-kpi-cell"><div class="em-kpi-val">' +
+    netStr +
+    '</div><div class="em-kpi-lbl">Net (est.)</div></div></div><table class="em-table"><tr><th>Metric</th><th>This period</th><th>Notes</th></tr><tr><td>Properties</td><td><strong>' +
+    propsLen +
+    '</strong></td><td>—</td></tr><tr><td>Gross income</td><td><strong>' +
+    grossStr +
+    '</strong></td><td>' +
+    monthPhrase +
+    '</td></tr><tr><td>Landlord costs</td><td><strong>' +
+    costsStr +
+    '</strong></td><td>—</td></tr><tr class="highlight"><td><strong>Net</strong></td><td><strong>' +
+    netStr +
+    '</strong></td><td>Open maintenance: ' +
+    maint +
+    '</td></tr></table><hr class="em-divider"><p class="em-small" style="margin-bottom:12px">Plain summary (same as above)</p><pre class="em-pre">' +
+    escapeHtml(textBody) +
+    '</pre><hr class="em-divider"><a href="https://landlordapp.io" class="em-btn">Open dashboard</a><p class="em-small">Sent ' +
+    escapeHtml(nowLabel) +
+    '. Reply to this email to reach your organisation contact.</p></div><div class="em-footer"><div class="em-footer-links"><a href="https://landlordapp.io">Dashboard</a><a href="mailto:admin@landlordapp.io">Support</a></div><p class="em-footer-copy">&copy; 2026 landlordapp.io</p></div></div></body></html>'
+  );
+};
+
+var escapeHtml = function (s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+};
+
+var buildTenantOutboundHtml = function (subjectLine, textBody, tenantMeta) {
+  var m = tenantMeta || {};
+  var company = m.companyName || 'Your property manager';
+  var phone = m.companyPhone || '';
+  var emailC = m.companyEmail || '';
+  var first = m.firstName || 'there';
+  var lines = String(textBody || '').split(/\n/);
+  var paras = lines
+    .filter(function (ln) {
+      return String(ln).trim().length;
+    })
+    .map(function (ln) {
+      return '<p class="em-p">' + escapeHtml(ln) + '</p>';
+    })
+    .join('');
+
+  var styles = [
+    '.em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}',
+    '.em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:24px 28px}',
+    '.em-body{background:#fff;padding:32px}',
+    '.em-greeting{font-size:20px;font-weight:700;color:#0F172A;margin:0 0 12px;line-height:1.35}',
+    '.em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 14px}',
+    '.em-footer{background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8}',
+    '.em-footer a{color:#00B894;text-decoration:none}',
+  ].join('');
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+    escapeHtml(subjectLine) +
+    '</title><style>' +
+    styles +
+    '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td><div style="font-size:20px;font-weight:800;color:#fff">' +
+    escapeHtml(company) +
+    '</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:4px">Property management</div></td><td align="right" style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">' +
+    (function () {
+      var h = '';
+      if (phone) h += escapeHtml(phone);
+      if (phone && emailC) h += '<br>';
+      if (emailC) h += escapeHtml(emailC);
+      return h || '&nbsp;';
+    })() +
+    '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' +
+    escapeHtml(first) +
+    '</p>' +
+    paras +
+    '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Questions? Reply to this email or contact us using the details above.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">landlordapp.io</a> · ' +
+    escapeHtml(company) +
+    '</div></div></body></html>'
+  );
+};
+
+// Branded HTML email for the "Sign your tenancy agreement" link.
+// Big teal CTA button + company-branded header + expiry notice.
+var buildSignAgreementEmailHtml = function (meta, subjectLine) {
+  var m = meta || {};
+  var company = m.companyName || 'Your property manager';
+  var phone = m.companyPhone || '';
+  var emailC = m.companyEmail || '';
+  var first = m.firstName || 'there';
+  var url = m.signLinkUrl || '#';
+  var expiry = m.signLinkExpiry || '';
+  var safeSubject = escapeHtml(subjectLine || 'Please sign your tenancy agreement');
+  var safeUrl = escapeHtml(url);
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+    safeSubject +
+    '</title></head><body style="margin:0;background:#F8F9FB;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">' +
+    '<div style="max-width:600px;margin:0 auto;background:#F8F9FB">' +
+      // Header — branded by company name (Settings → Branding)
+      '<div style="background:linear-gradient(135deg,#14B8A6 0%,#0D9488 100%);padding:28px;color:#fff">' +
+        '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
+          '<td><div style="font-size:22px;font-weight:800;color:#fff">' + escapeHtml(company) + '</div>' +
+            '<div style="font-size:12px;color:rgba(255,255,255,.78);margin-top:4px">Tenancy agreement</div>' +
+          '</td>' +
+          '<td align="right" style="font-size:11px;color:rgba(255,255,255,.7);line-height:1.6">' +
+            (phone ? escapeHtml(phone) : '') + (phone && emailC ? '<br>' : '') + (emailC ? escapeHtml(emailC) : '') +
+          '</td>' +
+        '</tr></table>' +
+      '</div>' +
+      // Body
+      '<div style="background:#fff;padding:36px 28px">' +
+        '<p style="font-size:22px;font-weight:700;color:#0F172A;margin:0 0 14px;line-height:1.35">Hi ' + escapeHtml(first) + ',</p>' +
+        '<p style="font-size:15px;color:#475569;line-height:1.65;margin:0 0 16px">Your tenancy agreement is ready. Tap the button below to read the full agreement and sign on your phone — it takes about a minute.</p>' +
+        '<div style="text-align:center;margin:28px 0">' +
+          '<a href="' + safeUrl + '" style="display:inline-block;padding:15px 36px;background:#14B8A6;color:#fff;text-decoration:none;border-radius:12px;font-size:16px;font-weight:700;box-shadow:0 4px 12px rgba(20,184,166,.3)">📝 Open & sign agreement</a>' +
+        '</div>' +
+        '<p style="font-size:13px;color:#64748B;line-height:1.6;text-align:center;margin:0 0 14px">Or copy this link into your browser:<br><span style="font-family:\'SF Mono\',Consolas,monospace;font-size:11px;color:#475569;word-break:break-all">' + safeUrl + '</span></p>' +
+        (expiry ? '<div style="background:#FFFBEB;border-left:3px solid #F59E0B;padding:12px 16px;border-radius:8px;margin:18px 0"><p style="font-size:13px;color:#B45309;margin:0;line-height:1.55"><strong>Heads up:</strong> this link expires on ' + escapeHtml(expiry) + ' and can only be used once.</p></div>' : '') +
+        '<p style="font-size:13px;color:#64748B;line-height:1.65;margin:18px 0 0">Once signed, the completed agreement will be saved to your tenancy record. You\'ll receive a copy by email if requested.</p>' +
+        '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0">' +
+        '<p style="font-size:12px;color:#94A3B8;margin:0;line-height:1.55">If you didn\'t expect this email or have questions, just reply — it goes straight to ' + escapeHtml(company) + '.</p>' +
+      '</div>' +
+      // Footer
+      '<div style="background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8;text-align:center">' +
+        'Sent via <a href="https://landlordapp.io" style="color:#0D9488;text-decoration:none">landlordapp.io</a> on behalf of ' + escapeHtml(company) +
+      '</div>' +
+    '</div></body></html>'
+  );
+};
+
+var buildTriggerEmailHtml = function (templateId, subjectLine, textBody, meta) {
+  var id = String(templateId || '').toLowerCase();
+  var m = meta || {};
+  var safeSubject = escapeHtml(subjectLine || 'Notification');
+  var safeBody = String(textBody || '')
+    .split(/\n/)
+    .filter(function (ln) { return String(ln).trim().length; })
+    .map(function (ln) { return '<p class="em-p">' + escapeHtml(ln) + '</p>'; })
+    .join('');
+
+  if (id === 'weekly_report' || id === 'monthly_report' || id === 'test') {
+    return buildManagerReportHtml(id === 'test' ? 'test' : id === 'monthly_report' ? 'monthly' : 'weekly', m.stats || {}, subjectLine, textBody);
+  }
+
+  // Payment receipt — green themed
+  if (id === 'payment_receipt') {
+    return buildPaymentReceiptHtml(m);
+  }
+  // Landlord payment notice — blue themed
+  if (id === 'landlord_payment_notice') {
+    return buildLandlordPaymentNoticeHtml(m);
+  }
+  // Property document share — purple themed
+  if (id === 'property_doc_share') {
+    return buildPropertyDocShareHtml(m);
+  }
+  // Sign-agreement — teal CTA, prominent button, link with expiry
+  if (id === 'sign_agreement') {
+    return buildSignAgreementEmailHtml(m, subjectLine);
+  }
+
+  var alertClass = 'green';
+  var alertTitle = 'Update';
+  if (id === 'rent_reminder_3day') { alertClass = 'green'; alertTitle = 'Rent due in 3 days'; }
+  else if (id === 'rent_reminder_day') { alertClass = 'amber'; alertTitle = 'Rent due today'; }
+  else if (id === 'rent_overdue_3day') { alertClass = 'amber'; alertTitle = 'Rent overdue by 3 days'; }
+  else if (id === 'rent_overdue_week') { alertClass = 'red'; alertTitle = 'Rent overdue by 7 days'; }
+  else if (id === 'move_in_welcome') { alertClass = 'green'; alertTitle = 'Welcome to your new home'; }
+  else if (id === 'notice_confirm') { alertClass = 'amber'; alertTitle = 'Notice to vacate confirmed'; }
+  else if (id === 'compliance_expiry') { alertClass = 'red'; alertTitle = 'Compliance expiry alert'; }
+
+  var company = m.companyName || 'Your property manager';
+  var phone = m.companyPhone || '';
+  var emailC = m.companyEmail || '';
+  var first = m.firstName || 'there';
+
+  var styles = [
+    '.em{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#F8F9FB}',
+    '.em-header{background:linear-gradient(135deg,#0F172A 0%,#1a1a3e 100%);padding:24px 28px}',
+    '.em-body{background:#fff;padding:32px}',
+    '.em-greeting{font-size:20px;font-weight:700;color:#0F172A;margin:0 0 12px;line-height:1.35}',
+    '.em-p{font-size:15px;color:#475569;line-height:1.7;margin:0 0 14px}',
+    '.em-alert{border-radius:10px;padding:14px 18px;margin:0 0 16px}',
+    '.em-alert.red{background:#FEF0F3;border-left:3px solid #E8375A}',
+    '.em-alert.amber{background:#FFFBEB;border-left:3px solid #F59E0B}',
+    '.em-alert.green{background:#E8F8F5;border-left:3px solid #00B894}',
+    '.em-alert-title{font-size:13px;font-weight:700;color:#0F172A;margin:0 0 4px}',
+    '.em-alert-body{font-size:13px;color:#475569;margin:0}',
+    '.em-footer{background:#F8F9FB;padding:20px 28px;border-top:1px solid #E8ECF0;font-size:11px;color:#94A3B8}',
+    '.em-footer a{color:#00B894;text-decoration:none}',
+  ].join('');
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+    safeSubject +
+    '</title><style>' +
+    styles +
+    '</style></head><body style="margin:0;background:#F8F9FB"><div class="em"><div class="em-header"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td><div style="font-size:20px;font-weight:800;color:#fff">' +
+    escapeHtml(company) +
+    '</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:4px">Property management</div></td><td align="right" style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.6">' +
+    (function () {
+      var h = '';
+      if (phone) h += escapeHtml(phone);
+      if (phone && emailC) h += '<br>';
+      if (emailC) h += escapeHtml(emailC);
+      return h || '&nbsp;';
+    })() +
+    '</td></tr></table></div><div class="em-body"><p class="em-greeting">Hi ' +
+    escapeHtml(first) +
+    '</p><div class="em-alert ' +
+    alertClass +
+    '"><p class="em-alert-title">' +
+    escapeHtml(alertTitle) +
+    '</p><p class="em-alert-body">' +
+    safeSubject +
+    '</p></div>' +
+    safeBody +
+    '<hr style="border:none;border-top:1px solid #E8ECF0;margin:24px 0"><p class="em-p" style="font-size:13px;color:#64748B;margin:0">Reply to this email if you have any questions.</p></div><div class="em-footer">Sent via <a href="https://landlordapp.io">landlordapp.io</a> · ' +
+    escapeHtml(company) +
+    '</div></div></body></html>'
+  );
+};
+
+// ── Payment Receipt Email (tenant receives after payment confirmed) ──
+var buildPaymentReceiptHtml = function (meta) {
+  var m = meta || {};
+  var first = escapeHtml(m.firstName || 'there');
+  var amount = escapeHtml(m.amount || '£0');
+  var paidDate = escapeHtml(m.paidDate || new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}));
+  var property = escapeHtml(m.property || '');
+  var room = m.room ? escapeHtml(m.room) : '';
+  var company = escapeHtml(m.companyName || 'Your property manager');
+  var balance = m.balance != null ? escapeHtml('£' + Math.round(Number(m.balance)).toLocaleString('en-GB')) : null;
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+    + '<body style="margin:0;padding:0;background:#f8f9fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">'
+    + '<div style="max-width:560px;margin:0 auto;padding:24px 16px">'
+    + '<div style="background:#fff;border-radius:12px;border:1px solid #e8ecf0;overflow:hidden">'
+    + '<div style="height:4px;background:#10B981"></div>'
+    + '<div style="padding:28px 24px">'
+    + '<div style="display:inline-block;padding:4px 12px;border-radius:6px;background:#ECFDF5;color:#10B981;font-size:11px;font-weight:700;letter-spacing:.05em;margin-bottom:16px">PAYMENT RECEIVED</div>'
+    + '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Hi ' + first + ',</h2>'
+    + '<p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.5">Thank you for your rent payment. This email confirms we have received your payment.</p>'
+    + '<div style="background:#f8f9fb;border-radius:10px;padding:16px;margin-bottom:20px">'
+    + '<table style="width:100%;border-collapse:collapse">'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Amount Paid</td><td style="padding:6px 0;font-size:16px;font-weight:700;color:#10B981;text-align:right">' + amount + '</td></tr>'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Date</td><td style="padding:6px 0;font-size:14px;color:#0f172a;text-align:right">' + paidDate + '</td></tr>'
+    + (property ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Property</td><td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right">' + property + '</td></tr>' : '')
+    + (room ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Room</td><td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right">' + room + '</td></tr>' : '')
+    + (balance != null ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Balance</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0f172a;text-align:right">' + balance + '</td></tr>' : '')
+    + '</table></div>'
+    + '<p style="margin:0;font-size:13px;color:#64748b">Please keep this email for your records.</p>'
+    + '</div>'
+    + '<div style="padding:16px 24px;border-top:1px solid #e8ecf0;background:#f8f9fb">'
+    + '<p style="margin:0;font-size:11px;color:#94a3b8;text-align:center">' + company + ' &middot; Sent via landlordapp.io</p>'
+    + '</div></div></div></body></html>';
+};
+
+// ── Landlord Payment Notice (landlord receives when rent collected) ──
+var buildLandlordPaymentNoticeHtml = function (meta) {
+  var m = meta || {};
+  var landlordName = escapeHtml(m.landlordName || 'Landlord');
+  var tenantName = escapeHtml(m.tenantName || 'Tenant');
+  var amount = escapeHtml(m.amount || '£0');
+  var property = escapeHtml(m.property || '');
+  var room = m.room ? escapeHtml(m.room) : '';
+  var collectedDate = escapeHtml(m.collectedDate || new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}));
+  var company = escapeHtml(m.companyName || 'Your property manager');
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+    + '<body style="margin:0;padding:0;background:#f8f9fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">'
+    + '<div style="max-width:560px;margin:0 auto;padding:24px 16px">'
+    + '<div style="background:#fff;border-radius:12px;border:1px solid #e8ecf0;overflow:hidden">'
+    + '<div style="height:4px;background:#3B82F6"></div>'
+    + '<div style="padding:28px 24px">'
+    + '<div style="display:inline-block;padding:4px 12px;border-radius:6px;background:#EFF6FF;color:#3B82F6;font-size:11px;font-weight:700;letter-spacing:.05em;margin-bottom:16px">RENT COLLECTED</div>'
+    + '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Hi ' + landlordName + ',</h2>'
+    + '<p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.5">A rent payment has been collected for your property.</p>'
+    + '<div style="background:#f8f9fb;border-radius:10px;padding:16px;margin-bottom:20px">'
+    + '<table style="width:100%;border-collapse:collapse">'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Amount</td><td style="padding:6px 0;font-size:16px;font-weight:700;color:#3B82F6;text-align:right">' + amount + '</td></tr>'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Tenant</td><td style="padding:6px 0;font-size:14px;color:#0f172a;text-align:right">' + tenantName + '</td></tr>'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Collected</td><td style="padding:6px 0;font-size:14px;color:#0f172a;text-align:right">' + collectedDate + '</td></tr>'
+    + (property ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Property</td><td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right">' + property + '</td></tr>' : '')
+    + (room ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Room</td><td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right">' + room + '</td></tr>' : '')
+    + '</table></div>'
+    + '</div>'
+    + '<div style="padding:16px 24px;border-top:1px solid #e8ecf0;background:#f8f9fb">'
+    + '<p style="margin:0;font-size:11px;color:#94a3b8;text-align:center">' + company + ' &middot; Sent via landlordapp.io</p>'
+    + '</div></div></div></body></html>';
+};
+
+// ── Property Document Share (send doc to tenant) ──
+var buildPropertyDocShareHtml = function (meta) {
+  var m = meta || {};
+  var first = escapeHtml(m.firstName || 'there');
+  var docType = escapeHtml(m.docType || 'Document');
+  var property = escapeHtml(m.property || '');
+  var company = escapeHtml(m.companyName || 'Your property manager');
+  var downloadUrl = m.downloadUrl || '';
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+    + '<body style="margin:0;padding:0;background:#f8f9fb;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">'
+    + '<div style="max-width:560px;margin:0 auto;padding:24px 16px">'
+    + '<div style="background:#fff;border-radius:12px;border:1px solid #e8ecf0;overflow:hidden">'
+    + '<div style="height:4px;background:#8B5CF6"></div>'
+    + '<div style="padding:28px 24px">'
+    + '<div style="display:inline-block;padding:4px 12px;border-radius:6px;background:#F5F3FF;color:#8B5CF6;font-size:11px;font-weight:700;letter-spacing:.05em;margin-bottom:16px">PROPERTY DOCUMENT</div>'
+    + '<h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Hi ' + first + ',</h2>'
+    + '<p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.5">Your property manager has shared a document with you.</p>'
+    + '<div style="background:#f8f9fb;border-radius:10px;padding:16px;margin-bottom:20px">'
+    + '<table style="width:100%;border-collapse:collapse">'
+    + '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Document</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0f172a;text-align:right">' + docType + '</td></tr>'
+    + (property ? '<tr><td style="padding:6px 0;font-size:12px;color:#64748b">Property</td><td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right">' + property + '</td></tr>' : '')
+    + '</table></div>'
+    + (downloadUrl ? '<a href="' + escapeHtml(downloadUrl) + '" style="display:inline-block;padding:10px 20px;border-radius:8px;background:#8B5CF6;color:#fff;font-size:13px;font-weight:600;text-decoration:none;margin-bottom:16px">View Document</a>' : '')
+    + '<p style="margin:0;font-size:13px;color:#64748b">If you have any questions about this document, please contact your property manager.</p>'
+    + '</div>'
+    + '<div style="padding:16px 24px;border-top:1px solid #e8ecf0;background:#f8f9fb">'
+    + '<p style="margin:0;font-size:11px;color:#94a3b8;text-align:center">' + company + ' &middot; Sent via landlordapp.io</p>'
+    + '</div></div></div></body></html>';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTILINGUAL WHATSAPP & EMAIL MESSAGE TEMPLATES
+// Usage: WA_TEMPLATES('rent_reminder_3day', 'fr', { name:'Marcus', amount:'£800', date:'Lun 20 Jan', property:'15 Station Road', room:'4' })
+// Language falls back to 'en' if not found.
+// ─────────────────────────────────────────────────────────────────────────────
+var WA_TEMPLATES = (function () {
+
+  var T = {
+    rent_reminder_3day: {
+      en: function (v) { return 'Hi ' + v.name + ', just a reminder that your rent of ' + v.amount + ' is due on ' + v.date + ' (' + v.property + (v.room ? ', Room ' + v.room : '') + '). Please ensure payment is ready. Thank you \uD83D\uDE4F'; },
+      fr: function (v) { return 'Bonjour ' + v.name + ', rappel\u00a0: votre loyer de ' + v.amount + ' est d\u00fb le ' + v.date + ' (' + v.property + (v.room ? ', Chambre ' + v.room : '') + '). Merci de pr\u00e9parer votre paiement \uD83D\uDE4F'; },
+      es: function (v) { return 'Hola ' + v.name + ', recordatorio: tu alquiler de ' + v.amount + ' vence el ' + v.date + ' (' + v.property + (v.room ? ', Habitaci\u00f3n ' + v.room : '') + '). Por favor aseg\u00farate de tener el pago listo \uD83D\uDE4F'; },
+      pt: function (v) { return 'Ol\u00e1 ' + v.name + ', lembrete: o seu aluguel de ' + v.amount + ' vence em ' + v.date + ' (' + v.property + (v.room ? ', Quarto ' + v.room : '') + '). Por favor prepare o pagamento \uD83D\uDE4F'; },
+    },
+    rent_reminder_day: {
+      en: function (v) { return 'Hi ' + v.name + ', your rent of ' + v.amount + ' is due TODAY (' + v.property + (v.room ? ', Room ' + v.room : '') + '). Please pay as soon as possible to avoid late charges.'; },
+      fr: function (v) { return 'Bonjour ' + v.name + ', votre loyer de ' + v.amount + ' est d\u00fb AUJOURD\'HUI (' + v.property + (v.room ? ', Chambre ' + v.room : '') + '). Merci de r\u00e9gler d\u00e8s que possible.'; },
+      es: function (v) { return 'Hola ' + v.name + ', tu alquiler de ' + v.amount + ' vence HOY (' + v.property + (v.room ? ', Habitaci\u00f3n ' + v.room : '') + '). Por favor paga cuanto antes.'; },
+      pt: function (v) { return 'Ol\u00e1 ' + v.name + ', o seu aluguel de ' + v.amount + ' vence HOJE (' + v.property + (v.room ? ', Quarto ' + v.room : '') + '). Por favor pague o mais r\u00e1pido poss\u00edvel.'; },
+    },
+    rent_overdue_3day: {
+      en: function (v) { return '\u26A0\uFE0F Hi ' + v.name + ', your rent of ' + v.amount + ' (' + v.property + (v.room ? ', Room ' + v.room : '') + ') is now 3 days overdue. Please make payment today to avoid a late fee.'; },
+      fr: function (v) { return '\u26A0\uFE0F Bonjour ' + v.name + ', votre loyer de ' + v.amount + ' (' + v.property + (v.room ? ', Chambre ' + v.room : '') + ') est en retard de 3 jours. Veuillez r\u00e9gler aujourd\'hui.'; },
+      es: function (v) { return '\u26A0\uFE0F Hola ' + v.name + ', tu alquiler de ' + v.amount + ' (' + v.property + (v.room ? ', Habitaci\u00f3n ' + v.room : '') + ') lleva 3 d\u00edas de retraso. Por favor paga hoy.'; },
+      pt: function (v) { return '\u26A0\uFE0F Ol\u00e1 ' + v.name + ', o seu aluguel de ' + v.amount + ' (' + v.property + (v.room ? ', Quarto ' + v.room : '') + ') est\u00e1 3 dias em atraso. Por favor pague hoje.'; },
+    },
+    rent_overdue_week: {
+      en: function (v) { return '\uD83D\uDD34 URGENT \u2014 ' + v.name + ', your rent of ' + v.amount + ' (' + v.property + (v.room ? ', Room ' + v.room : '') + ') is now 7 days overdue. Immediate payment is required. Contact us urgently.'; },
+      fr: function (v) { return '\uD83D\uDD34 URGENT \u2014 ' + v.name + ', votre loyer de ' + v.amount + ' (' + v.property + (v.room ? ', Chambre ' + v.room : '') + ') est en retard de 7 jours. Paiement imm\u00e9diat requis.'; },
+      es: function (v) { return '\uD83D\uDD34 URGENTE \u2014 ' + v.name + ', tu alquiler de ' + v.amount + ' (' + v.property + (v.room ? ', Habitaci\u00f3n ' + v.room : '') + ') lleva 7 d\u00edas de retraso. Se requiere pago inmediato.'; },
+      pt: function (v) { return '\uD83D\uDD34 URGENTE \u2014 ' + v.name + ', o seu aluguel de ' + v.amount + ' (' + v.property + (v.room ? ', Quarto ' + v.room : '') + ') est\u00e1 7 dias em atraso. Pagamento imediato necess\u00e1rio.'; },
+    },
+    payment_received: {
+      en: function (v) { return '\u2705 Hi ' + v.name + ', we have received your rent payment of ' + v.amount + '. Thank you! ' + v.property + (v.room ? ', Room ' + v.room : '') + '.'; },
+      fr: function (v) { return '\u2705 Bonjour ' + v.name + ', nous avons bien re\u00e7u votre paiement de ' + v.amount + '. Merci\u00a0! ' + v.property + (v.room ? ', Chambre ' + v.room : '') + '.'; },
+      es: function (v) { return '\u2705 Hola ' + v.name + ', hemos recibido tu pago de ' + v.amount + '. \u00a1Gracias! ' + v.property + (v.room ? ', Habitaci\u00f3n ' + v.room : '') + '.'; },
+      pt: function (v) { return '\u2705 Ol\u00e1 ' + v.name + ', recebemos o seu pagamento de ' + v.amount + '. Obrigado! ' + v.property + (v.room ? ', Quarto ' + v.room : '') + '.'; },
+    },
+  };
+
+  /**
+   * Get a WhatsApp / email message in the given language.
+   * @param {string} templateId  e.g. 'rent_reminder_3day'
+   * @param {string} lang        e.g. 'en', 'fr', 'es', 'pt' — falls back to 'en'
+   * @param {Object} vars        { name, amount, date, property, room }
+   * @returns {string}
+   */
+  function getTemplate(templateId, lang, vars) {
+    var tmpl = T[templateId];
+    if (!tmpl) return '';
+    var fn = tmpl[lang] || tmpl['en'];
+    if (!fn) return '';
+    return fn(vars || {});
+  }
+
+  getTemplate._templates = T; // expose keys for iteration if needed
+  return getTemplate;
+})();

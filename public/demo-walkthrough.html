@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LandlordApp — Live Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&family=DM+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#08090E;--panel:#0F1118;--card:#151822;--line:rgba(255,255,255,.07);
+  --green:#00D897;--green-dark:#00B894;--blue:#4B9EFF;--amber:#F5A623;--red:#FF5252;
+  --white:#F8FAFC;--silver:#CBD5E1;--dim:#64748B;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif;background:#000;color:var(--white)}
+body{display:flex;align-items:center;justify-content:center}
+
+/* ── Laptop frame ── */
+.stage{width:min(1200px,96vw);position:relative}
+.laptop{background:linear-gradient(180deg,#14161C,#0A0B10);border:1px solid #1F222B;border-radius:14px 14px 4px 4px;padding:28px 18px 18px;box-shadow:0 40px 120px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.04);position:relative}
+.laptop::before{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:8px;height:8px;border-radius:50%;background:#222;box-shadow:inset 0 1px 2px rgba(0,0,0,.8)}
+.browser{background:var(--ink);border-radius:8px;overflow:hidden;height:72vh;min-height:560px;max-height:720px;display:flex;flex-direction:column;border:1px solid #1F222B}
+.browser-bar{background:#121418;padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #1F222B;flex-shrink:0}
+.dots{display:flex;gap:6px}
+.dots span{width:11px;height:11px;border-radius:50%}
+.dots span:nth-child(1){background:#FF5F57}.dots span:nth-child(2){background:#FEBC2E}.dots span:nth-child(3){background:#28C840}
+.url{flex:1;background:#1A1D25;border-radius:6px;padding:5px 14px;font-size:12px;color:var(--silver);font-family:'DM Mono',monospace;display:flex;align-items:center;gap:8px;margin:0 10px}
+.url::before{content:'🔒';font-size:10px}
+.browser-body{flex:1;overflow:hidden;position:relative;background:var(--ink)}
+
+/* ── App layout inside browser ── */
+.app{display:flex;height:100%}
+.sidebar{width:210px;background:linear-gradient(180deg,#0B0D13,#0F1219);padding:16px 10px;border-right:1px solid var(--line);flex-shrink:0;overflow-y:auto}
+.sb-logo{display:flex;align-items:center;gap:8px;padding:4px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.sb-logo-icon{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--green),var(--green-dark));display:flex;align-items:center;justify-content:center;font-size:13px}
+.sb-logo-txt{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;letter-spacing:-.01em}
+.sb-logo-txt span{color:var(--green)}
+.sb-sec{font-size:9px;font-weight:700;color:rgba(255,255,255,.22);text-transform:uppercase;letter-spacing:.1em;padding:10px 10px 4px}
+.sb-item{padding:7px 10px;border-radius:7px;font-size:12px;color:rgba(255,255,255,.5);display:flex;align-items:center;gap:9px;margin-bottom:1px;cursor:pointer;transition:all .2s;font-weight:500}
+.sb-item:hover{background:rgba(255,255,255,.02);color:var(--silver)}
+.sb-item.active{background:rgba(0,216,151,.09);color:var(--white);border-left:2.5px solid var(--green);padding-left:7.5px;font-weight:700}
+.sb-item-icon{font-size:13px;width:16px;text-align:center}
+
+.main{flex:1;padding:22px 28px;overflow-y:auto;background:var(--ink)}
+.page{display:none;animation:pageIn .5s cubic-bezier(.2,.9,.3,1)}
+.page.active{display:block}
+@keyframes pageIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;gap:16px;flex-wrap:wrap}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.page-sub{font-size:11px;color:var(--dim);margin-top:2px}
+.btn{padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:transform .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-g{background:var(--green);color:#000}
+.btn-o{background:transparent;color:var(--silver);border:1px solid var(--line)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 13px;position:relative;overflow:hidden}
+.kpi-lbl{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.kpi-val{font-size:20px;font-weight:800;font-family:'DM Mono',monospace;letter-spacing:-.02em}
+.kpi-sub{font-size:9px;color:var(--dim);margin-top:4px}
+.kpi-bar{height:3px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:7px;overflow:hidden}
+.kpi-bar i{display:block;height:100%;background:var(--green);border-radius:2px;width:0;animation:barGrow 1.2s .2s ease-out forwards}
+.kpi .kpi-val{color:var(--green)}
+.kpi.amber .kpi-val{color:var(--amber)}
+.kpi.red .kpi-val{color:var(--red)}
+.kpi.blue .kpi-val{color:var(--blue)}
+.kpi.neutral .kpi-val{color:var(--white)}
+@keyframes barGrow{to{width:var(--w,60%)}}
+
+/* card base */
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card-title{font-size:12px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* Table */
+.table{width:100%;border-collapse:collapse;font-size:11px}
+.table th{text-align:left;padding:8px 10px;color:var(--dim);font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:.06em;border-bottom:1px solid var(--line)}
+.table td{padding:9px 10px;border-bottom:1px solid var(--line);color:var(--silver)}
+.table tr:last-child td{border-bottom:none}
+.chip{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px}
+.chip.g{background:rgba(0,216,151,.12);color:var(--green)}
+.chip.a{background:rgba(245,166,35,.12);color:var(--amber)}
+.chip.r{background:rgba(255,82,82,.12);color:var(--red)}
+.chip.b{background:rgba(75,158,255,.12);color:var(--blue)}
+
+.grid-2{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:14px}
+.grid-2e{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+
+/* Cash flow chart */
+.cf-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;height:120px;padding:8px 0 20px;position:relative}
+.cf-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
+.cf-bars{display:flex;gap:2px;align-items:flex-end;height:100px}
+.cf-bar{width:9px;border-radius:2px 2px 0 0;transform-origin:bottom;animation:bar-rise 1s cubic-bezier(.2,.9,.3,1) forwards;transform:scaleY(0)}
+.cf-lbl{font-size:9px;color:var(--dim);font-weight:700}
+.cf-col.active .cf-lbl{color:var(--green)}
+@keyframes bar-rise{to{transform:scaleY(1)}}
+
+/* Donut */
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut{position:relative;width:110px;height:110px;flex-shrink:0}
+.donut svg{transform:rotate(-90deg)}
+.donut circle{fill:none;stroke-width:10}
+.donut .bg{stroke:rgba(255,255,255,.05)}
+.donut .fg{stroke:var(--green);stroke-linecap:round;stroke-dasharray:314;stroke-dashoffset:314;animation:donut 1.5s .3s cubic-bezier(.3,.7,.2,1) forwards}
+.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.donut-val{font-size:22px;font-weight:800;font-family:'DM Mono',monospace;color:var(--green)}
+.donut-lbl{font-size:9px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:-2px}
+@keyframes donut{to{stroke-dashoffset:var(--o,28)}}
+
+/* Tenant card */
+.t-card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;align-items:center;gap:10px}
+.t-avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+.t-info{flex:1;min-width:0}
+.t-name{font-size:12px;font-weight:700}
+.t-meta{font-size:10px;color:var(--dim);margin-top:1px}
+.t-val{text-align:right;flex-shrink:0}
+.t-val .v{font-size:13px;font-weight:800;font-family:'DM Mono',monospace}
+.t-val .s{font-size:9px;color:var(--dim);margin-top:1px}
+
+/* Property card */
+.prop-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;transition:transform .3s}
+.prop-card.loss{border-left:3px solid var(--red)}
+.prop-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px}
+.prop-name{font-size:13px;font-weight:700}
+.prop-addr{font-size:10px;color:var(--dim);margin-top:1px}
+.prop-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px}
+.prop-kpi{background:rgba(255,255,255,.02);border-radius:5px;padding:5px 6px}
+.prop-kpi-l{font-size:8px;color:var(--dim);text-transform:uppercase;font-weight:700}
+.prop-kpi-v{font-size:12px;font-weight:800;font-family:'DM Mono',monospace;margin-top:1px}
+.prop-occ{height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+.prop-occ i{display:block;height:100%;background:var(--green);animation:occ-grow 1s .2s ease-out forwards;width:0}
+@keyframes occ-grow{to{width:var(--w)}}
+
+/* AI agent */
+.ai-card{background:linear-gradient(135deg,#0A1525,#132342);border:1px solid rgba(56,189,248,.14);border-radius:12px;padding:18px}
+.ai-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:#38BDF8;box-shadow:0 0 10px rgba(56,189,248,.6);animation:ai-pulse 1.6s infinite}
+@keyframes ai-pulse{50%{opacity:.5;box-shadow:0 0 16px rgba(56,189,248,.9)}}
+.ai-score-row{display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:12px}
+.ai-score{width:56px;height:56px;border-radius:50%;border:3px solid #10B981;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#10B981;flex-shrink:0;font-family:'DM Mono',monospace}
+.ai-insight{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:8px;padding:11px 13px;margin-bottom:7px;opacity:0;transform:translateX(-10px);animation:ins-slide .5s forwards}
+.ai-insight:nth-child(1){animation-delay:.3s}.ai-insight:nth-child(2){animation-delay:.6s}.ai-insight:nth-child(3){animation-delay:.9s}.ai-insight:nth-child(4){animation-delay:1.2s}
+.ai-tag{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.ai-tag.blue{color:#60A5FA}.ai-tag.amber{color:var(--amber)}.ai-tag.green{color:var(--green)}
+.ai-text{font-size:12px;color:rgba(226,232,240,.75);line-height:1.5}
+.ai-text strong{color:var(--white)}
+@keyframes ins-slide{to{opacity:1;transform:translateX(0)}}
+
+/* Rent page filter chips */
+.chips{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.fchip{padding:5px 11px;border-radius:14px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--line);color:var(--dim)}
+.fchip.active{background:var(--green);color:#000;border-color:var(--green)}
+
+/* Bank/cash pills */
+.bc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.bc{padding:12px 14px;border-radius:10px;display:flex;align-items:center;gap:10px}
+.bc.bank{background:rgba(75,158,255,.06);border:1px solid rgba(75,158,255,.15)}
+.bc.cash{background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.15)}
+.bc-icon{font-size:22px}
+.bc-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.bc-v{font-size:17px;font-weight:800;font-family:'DM Mono',monospace;margin-top:1px}
+.bc.bank .bc-l,.bc.bank .bc-v{color:var(--blue)}
+.bc.cash .bc-l,.bc.cash .bc-v{color:var(--amber)}
+
+/* Arrears banner */
+.arrears-banner{background:rgba(255,82,82,.07);border:1px solid rgba(255,82,82,.2);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.arrears-banner .l{font-size:12px;font-weight:700;color:var(--red)}
+.arrears-banner .s{font-size:10px;color:var(--dim);margin-top:1px}
+.arrears-banner .v{font-size:20px;font-weight:800;font-family:'DM Mono',monospace;color:var(--red)}
+
+/* Pie / share */
+.share-grid{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
+.share-legend{display:flex;flex-direction:column;gap:6px;font-size:11px}
+.share-legend div{display:flex;align-items:center;gap:8px}
+.share-legend .d{width:8px;height:8px;border-radius:2px}
+
+/* Demo data rows for reports */
+.rep-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
+.rep-row:last-child{border-bottom:none;font-weight:700;padding-top:12px}
+
+/* ── Overlay controls ── */
+.overlay{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(10,12,18,.75);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:8px 14px;border-radius:30px;border:1px solid rgba(255,255,255,.08);z-index:100;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.overlay .label{font-size:11px;font-weight:700;color:var(--silver);display:flex;align-items:center;gap:8px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(0,216,151,.5);animation:live 1.6s infinite}
+@keyframes live{0%{box-shadow:0 0 0 0 rgba(0,216,151,.6)}70%{box-shadow:0 0 0 8px rgba(0,216,151,0)}100%{box-shadow:0 0 0 0 rgba(0,216,151,0)}}
+.dots-nav{display:flex;gap:6px}
+.dots-nav span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.2);cursor:pointer;transition:all .2s}
+.dots-nav span.active{background:var(--green);width:22px;border-radius:4px}
+.ctl-btn{background:transparent;border:none;color:var(--silver);cursor:pointer;font-size:14px;padding:4px 6px;font-family:inherit;display:flex;align-items:center;gap:4px;font-weight:700}
+.ctl-btn:hover{color:var(--white)}
+
+.progress{position:absolute;top:0;left:0;height:2px;background:var(--green);z-index:101;box-shadow:0 0 8px rgba(0,216,151,.6);width:0;transition:width .1s linear}
+
+/* Animated cursor */
+.cursor{position:absolute;width:22px;height:22px;top:50%;left:50%;pointer-events:none;z-index:90;transform:translate(-50%,-50%);transition:transform .9s cubic-bezier(.3,.7,.3,1);filter:drop-shadow(0 2px 8px rgba(0,0,0,.7))}
+.cursor svg{width:22px;height:22px;display:block}
+.cursor.click::after{content:'';position:absolute;inset:-6px;border:2px solid var(--green);border-radius:50%;animation:click-ring .5s ease-out}
+@keyframes click-ring{0%{transform:scale(.3);opacity:1}100%{transform:scale(1.8);opacity:0}}
+
+/* Speed control buttons */
+.speed-group{display:flex;gap:2px;background:rgba(255,255,255,.05);border-radius:20px;padding:2px}
+.speed-btn{background:transparent;border:none;color:var(--dim);font-size:10px;font-weight:700;padding:4px 9px;border-radius:14px;cursor:pointer;font-family:inherit;transition:all .2s}
+.speed-btn.active{background:var(--green);color:#000}
+.speed-btn:hover:not(.active){color:var(--silver)}
+
+/* AI typing effect */
+.ai-insight .ai-text.typing::after{content:'▋';color:var(--green);margin-left:2px;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* Maintenance rows */
+.m-row{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 12px;display:grid;grid-template-columns:1fr auto auto auto;gap:14px;align-items:center;margin-bottom:6px}
+.m-row .m-title{font-size:12px;font-weight:700}
+.m-row .m-sub{font-size:10px;color:var(--dim);margin-top:2px}
+.m-row .m-chip{font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px}
+
+/* Diary calendar */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
+.cal-dow{font-size:8px;font-weight:800;color:var(--dim);text-align:center;padding:4px 0;text-transform:uppercase}
+.cal-day{font-size:10px;aspect-ratio:1;border-radius:6px;padding:5px;position:relative;background:rgba(255,255,255,.02);color:var(--silver);font-weight:600}
+.cal-day.out{opacity:.28}
+.cal-day.today{background:rgba(0,216,151,.12);color:var(--green);border:1px solid rgba(0,216,151,.3)}
+.cal-day .ev{position:absolute;bottom:4px;left:5px;right:5px;display:flex;gap:2px}
+.cal-day .dot{width:5px;height:5px;border-radius:50%}
+.cal-day .dot.r{background:var(--red)}.cal-day .dot.a{background:var(--amber)}.cal-day .dot.g{background:var(--green)}.cal-day .dot.b{background:var(--blue)}
+
+/* Page title for overlay */
+.page-lbl{font-family:'Playfair Display',serif;font-size:13px;font-weight:700;color:var(--white);letter-spacing:-.01em}
+
+/* Small helpers */
+.row{display:flex;gap:10px;align-items:center}
+.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mb-8{margin-bottom:8px}.mb-12{margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<div class="stage">
+<div class="laptop">
+<div class="browser">
+<div class="browser-bar">
+  <div class="dots"><span></span><span></span><span></span></div>
+  <div class="url">app.landlordapp.io</div>
+  <div style="width:50px"></div>
+</div>
+<div class="progress" id="progress"></div>
+<div class="browser-body">
+
+<div class="app">
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">🏠</div>
+    <div class="sb-logo-txt">landlord<span>app</span></div>
+  </div>
+  <div class="sb-sec">Overview</div>
+  <div class="sb-item" data-page="0"><span class="sb-item-icon">📊</span>Dashboard</div>
+  <div class="sb-item" data-page="1"><span class="sb-item-icon">🏠</span>Properties</div>
+  <div class="sb-sec">Operations</div>
+  <div class="sb-item" data-page="2"><span class="sb-item-icon">👥</span>Tenants</div>
+  <div class="sb-item" data-page="3"><span class="sb-item-icon">💷</span>Rent</div>
+  <div class="sb-item" data-page="7"><span class="sb-item-icon">🔧</span>Maintenance</div>
+  <div class="sb-item" data-page="8"><span class="sb-item-icon">🏦</span>Landlords</div>
+  <div class="sb-item" data-page="9"><span class="sb-item-icon">🚪</span>Rooms</div>
+  <div class="sb-item" data-page="6"><span class="sb-item-icon">📅</span>Diary</div>
+  <div class="sb-sec">Business</div>
+  <div class="sb-item" data-page="10"><span class="sb-item-icon">💰</span>Expenses</div>
+  <div class="sb-item" data-page="4"><span class="sb-item-icon">📈</span>Reports</div>
+  <div class="sb-sec">AI</div>
+  <div class="sb-item" data-page="5"><span class="sb-item-icon">🤖</span>AI Agent</div>
+  <div class="sb-sec">System</div>
+  <div class="sb-item"><span class="sb-item-icon">👤</span>Users</div>
+  <div class="sb-item"><span class="sb-item-icon">⚙️</span>Settings</div>
+</aside>
+
+<main class="main" id="main">
+
+<!-- ══════════ PAGE 0: DASHBOARD ══════════ -->
+<section class="page" data-page="0" data-label="Dashboard">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Apr 2026 · All Companies</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🏢 All Companies ▾</button>
+      <button class="btn btn-g">+ Add Property</button>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Monthly Income</div><div class="kpi-val" data-count="133653" data-prefix="£">£0</div><div class="kpi-sub">161 tenants</div></div>
+    <div class="kpi"><div class="kpi-lbl">Net Profit / mo</div><div class="kpi-val" data-count="51452" data-prefix="£">£0</div><div class="kpi-sub">After all costs</div></div>
+    <div class="kpi"><div class="kpi-lbl">Collected (Apr)</div><div class="kpi-val" data-count="38974" data-prefix="£">£0</div><div class="kpi-sub">197 payments</div></div>
+    <div class="kpi neutral"><div class="kpi-lbl">Occupancy</div><div class="kpi-val" data-count="97" data-suffix="%">0%</div><div class="kpi-sub">160 / 165 rooms</div><div class="kpi-bar"><i style="--w:97%"></i></div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">📊 6-Month Cash Flow</div>
+      <div class="cf-chart" id="cf1">
+        <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:rgba(0,216,151,.3);height:52%;animation-delay:.1s"></div><div class="cf-bar" style="background:rgba(255,82,82,.3);height:38%;animation-delay:.15s"></div></div><div class="cf-lbl">Nov</div></div>
+        <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:rgba(0,216,151,.3);height:58%;animation-delay:.2s"></div><div class="cf-bar" style="background:rgba(255,82,82,.3);height:42%;animation-delay:.25s"></div></div><div class="cf-lbl">Dec</div></div>
+        <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:rgba(0,216,151,.3);height:64%;animation-delay:.3s"></div><div class="cf-bar" style="background:rgba(255,82,82,.3);height:46%;animation-delay:.35s"></div></div><div class="cf-lbl">Jan</div></div>
+        <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:rgba(0,216,151,.3);height:72%;animation-delay:.4s"></div><div class="cf-bar" style="background:rgba(255,82,82,.3);height:50%;animation-delay:.45s"></div></div><div class="cf-lbl">Feb</div></div>
+        <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:rgba(0,216,151,.3);height:82%;animation-delay:.5s"></div><div class="cf-bar" style="background:rgba(255,82,82,.3);height:54%;animation-delay:.55s"></div></div><div class="cf-lbl">Mar</div></div>
+        <div class="cf-col active"><div class="cf-bars"><div class="cf-bar" style="background:var(--green);height:52%;animation-delay:.6s;box-shadow:0 0 10px rgba(0,216,151,.5)"></div><div class="cf-bar" style="background:var(--red);height:96%;animation-delay:.65s"></div><div class="cf-bar" style="background:var(--green);height:38%;animation-delay:.7s"></div></div><div class="cf-lbl">Apr</div></div>
+      </div>
+      <div style="display:flex;gap:14px;justify-content:center;font-size:10px;color:var(--dim);font-weight:600"><span><span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:50%;margin-right:4px"></span>Income</span><span><span style="display:inline-block;width:8px;height:8px;background:var(--red);border-radius:50%;margin-right:4px"></span>Costs</span><span><span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:50%;margin-right:4px"></span>Profit</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💰 P&L — Apr 2026</div>
+      <div class="rep-row"><span>Total Income</span><span style="color:var(--green);font-family:'DM Mono',monospace;font-weight:700">£133,653</span></div>
+      <div class="rep-row"><span>Landlord Rent</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">− £73,500</span></div>
+      <div class="rep-row"><span>Staff & Labour</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">− £1,800</span></div>
+      <div class="rep-row"><span>Property Costs</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">− £6,901</span></div>
+      <div class="rep-row"><span>Net Profit</span><span style="color:var(--green);font-family:'DM Mono',monospace;font-weight:800;font-size:14px">£51,452</span></div>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><div class="card-title">🏠 Top Performer</div><div style="font-size:14px;font-weight:700">27 Vassall Road</div><div style="font-size:10px;color:var(--dim);margin-top:2px">London SW9 · 4/4 occupied</div><div style="margin-top:10px"><span class="chip g">+£1,350 profit</span></div></div>
+    <div class="card"><div class="card-title">⚠️ Needs Attention</div><div style="font-size:14px;font-weight:700">18 Balham High Rd</div><div style="font-size:10px;color:var(--dim);margin-top:2px">1 room vacant · 5/6</div><div style="margin-top:10px"><span class="chip a">83% occupancy</span></div></div>
+    <div class="card"><div class="card-title">📈 Growth</div><div style="font-size:14px;font-weight:700">+12% MoM</div><div style="font-size:10px;color:var(--dim);margin-top:2px">Income vs March 2026</div><div style="margin-top:10px"><span class="chip g">Best month YTD</span></div></div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 1: PROPERTIES ══════════ -->
+<section class="page" data-page="1" data-label="Properties">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Properties</div>
+      <div class="page-sub">39 of 39 active · All Companies</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">📊 Deal Analyzer</button>
+      <button class="btn btn-g">+ Add Property</button>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active">All</div>
+    <div class="fchip">🏠 Owned</div>
+    <div class="fchip">🤝 Managed</div>
+    <div class="fchip">Profitable</div>
+    <div class="fchip">Has Vacancies</div>
+    <div class="fchip">Archived</div>
+  </div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="kpi neutral"><div class="kpi-lbl">Total Portfolio</div><div style="display:flex;gap:18px;align-items:baseline"><div><div class="kpi-val">39</div><div class="kpi-sub">properties</div></div><div><div class="kpi-val" style="font-size:17px">165</div><div class="kpi-sub">rooms</div></div></div></div>
+    <div class="kpi"><div class="kpi-lbl">Occupancy</div><div style="display:flex;gap:18px;align-items:baseline"><div><div class="kpi-val">97%</div><div class="kpi-sub">160 occupied</div></div><div><div class="kpi-val" style="font-size:17px;color:var(--red)">5</div><div class="kpi-sub" style="color:var(--red)">vacant</div></div></div><div class="kpi-bar"><i style="--w:97%"></i></div></div>
+    <div class="kpi"><div class="kpi-lbl">Net Profit / mo</div><div class="kpi-val" data-count="61127" data-prefix="£">£0</div><div class="kpi-sub">£134,627 in − £73,500 out</div></div>
+  </div>
+
+  <div class="grid-3" id="props">
+    <div class="prop-card">
+      <div class="prop-head"><div><div class="prop-name">27 Vassall Road</div><div class="prop-addr">London SW9 6TA · HMO</div></div><span class="chip a">🤝 Managed</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£3,250</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£1,900</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£1,350</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 4/4</span><span>100%</span></div>
+      <div class="prop-occ"><i style="--w:100%"></i></div>
+    </div>
+    <div class="prop-card">
+      <div class="prop-head"><div><div class="prop-name">10 Thornton Heath</div><div class="prop-addr">Thornton Heath CR7 · HMO</div></div><span class="chip a">🤝 Managed</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£3,580</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£2,100</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£1,480</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 5/5</span><span>100%</span></div>
+      <div class="prop-occ"><i style="--w:100%"></i></div>
+    </div>
+    <div class="prop-card loss">
+      <div class="prop-head"><div><div class="prop-name">18 Balham High Rd</div><div class="prop-addr">Balham SW12 · HMO</div></div><span class="chip g">🏠 Owned</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£4,120</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£2,400</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£1,720</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 5/6</span><span style="color:var(--amber)">83%</span></div>
+      <div class="prop-occ"><i style="--w:83%;background:var(--amber)"></i></div>
+    </div>
+    <div class="prop-card">
+      <div class="prop-head"><div><div class="prop-name">22 Elm Grove</div><div class="prop-addr">Brixton SW2 · HMO</div></div><span class="chip g">🏠 Owned</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£5,200</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£2,400</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£2,800</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 6/6</span><span>100%</span></div>
+      <div class="prop-occ"><i style="--w:100%"></i></div>
+    </div>
+    <div class="prop-card">
+      <div class="prop-head"><div><div class="prop-name">45 Lavender Hill</div><div class="prop-addr">Battersea SW11 · HMO</div></div><span class="chip a">🤝 Managed</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£4,680</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£2,850</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£1,830</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 5/5</span><span>100%</span></div>
+      <div class="prop-occ"><i style="--w:100%"></i></div>
+    </div>
+    <div class="prop-card">
+      <div class="prop-head"><div><div class="prop-name">8 Denmark Hill</div><div class="prop-addr">Camberwell SE5 · HMO</div></div><span class="chip g">🏠 Owned</span></div>
+      <div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Income</div><div class="prop-kpi-v" style="color:var(--green)">£3,920</div></div><div class="prop-kpi"><div class="prop-kpi-l">Landlord</div><div class="prop-kpi-v" style="color:var(--red)">£2,050</div></div><div class="prop-kpi"><div class="prop-kpi-l">Profit</div><div class="prop-kpi-v" style="color:var(--green)">£1,870</div></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:4px"><span>Occupancy 4/4</span><span>100%</span></div>
+      <div class="prop-occ"><i style="--w:100%"></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 2: TENANTS ══════════ -->
+<section class="page" data-page="2" data-label="Tenants">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Tenants</div>
+      <div class="page-sub">161 active · 153 in arrears</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🔗 Onboard Link</button>
+      <button class="btn btn-g">+ Add Tenant</button>
+    </div>
+  </div>
+
+  <div class="grid-2e">
+    <div class="kpi"><div class="kpi-lbl">Active Tenants</div><div style="display:flex;justify-content:space-between;align-items:flex-end"><div class="kpi-val" data-count="161">0</div><div style="text-align:right"><div style="font-size:14px;font-weight:800">97%</div><div class="kpi-sub">occupancy</div></div></div><div class="kpi-bar"><i style="--w:97%"></i></div></div>
+    <div class="kpi" style="background:rgba(0,216,151,.04);border-color:rgba(0,216,151,.14)"><div class="kpi-lbl" style="color:var(--green)">Monthly Rent Roll</div><div class="kpi-val" data-count="134628" data-prefix="£">£0</div><div style="margin-top:4px"><span class="chip g">162 tenants</span></div></div>
+  </div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div style="background:rgba(0,216,151,.05);border:1px solid rgba(0,216,151,.12);border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:var(--green);font-family:'DM Mono',monospace">161</div><div style="font-size:9px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Active</div></div>
+    <div style="background:rgba(245,166,35,.05);border:1px solid rgba(245,166,35,.12);border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:var(--amber);font-family:'DM Mono',monospace">1</div><div style="font-size:9px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:.06em">On Notice</div></div>
+    <div style="background:rgba(255,82,82,.05);border:1px solid rgba(255,82,82,.12);border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace">153</div><div style="font-size:9px;color:var(--red);font-weight:700;text-transform:uppercase;letter-spacing:.06em">In Arrears</div></div>
+    <div style="background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:var(--dim);font-family:'DM Mono',monospace">4</div><div style="font-size:9px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Archived</div></div>
+  </div>
+
+  <div class="chips"><div class="fchip active">All</div><div class="fchip">Active</div><div class="fchip">Pending</div><div class="fchip">On Notice</div><div class="fchip">In Arrears</div><div class="fchip">Archived</div></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="t-card"><div class="t-avatar" style="background:rgba(0,216,151,.15);color:var(--green)">JK</div><div class="t-info"><div class="t-name">James Kelly</div><div class="t-meta">22 Elm Grove · Rm 5 · Active</div></div><div class="t-val"><div class="v" style="color:var(--green)">£200</div><div class="s">per week</div></div></div>
+    <div class="t-card"><div class="t-avatar" style="background:rgba(245,166,35,.15);color:var(--amber)">QM</div><div class="t-info"><div class="t-name">Quentin Marsh</div><div class="t-meta">10 Thornton Hth · Rm 3 · Due today</div></div><div class="t-val"><div class="v" style="color:var(--amber)">£165</div><div class="s">Due today</div></div></div>
+    <div class="t-card"><div class="t-avatar" style="background:rgba(255,82,82,.15);color:var(--red)">SM</div><div class="t-info"><div class="t-name">Sarah Mitchell</div><div class="t-meta">22 Elm Grove · Rm 2 · Arrears</div></div><div class="t-val"><div class="v" style="color:var(--red)">£370</div><div class="s">overdue</div></div></div>
+    <div class="t-card"><div class="t-avatar" style="background:rgba(75,158,255,.15);color:var(--blue)">SG</div><div class="t-info"><div class="t-name">Stanley Gibbs</div><div class="t-meta">10 Thornton Hth · Rm 5 · Due today</div></div><div class="t-val"><div class="v" style="color:var(--amber)">£170</div><div class="s">Due today</div></div></div>
+    <div class="t-card"><div class="t-avatar" style="background:rgba(0,216,151,.15);color:var(--green)">HD</div><div class="t-info"><div class="t-name">Harriet Dean</div><div class="t-meta">18 Balham High Rd · Rm 2 · Due today</div></div><div class="t-val"><div class="v" style="color:var(--amber)">£190</div><div class="s">Due today</div></div></div>
+    <div class="t-card"><div class="t-avatar" style="background:rgba(75,158,255,.15);color:var(--blue)">MR</div><div class="t-info"><div class="t-name">Marcus Reynolds</div><div class="t-meta">45 Lavender Hill · Rm 1 · Active</div></div><div class="t-val"><div class="v" style="color:var(--green)">£235</div><div class="s">per week</div></div></div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 3: RENT ══════════ -->
+<section class="page" data-page="3" data-label="Rent Collection">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Rent Collection</div>
+      <div class="page-sub">Apr 2026 · 197 payments recorded</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">📲 Send reminders (92)</button>
+      <button class="btn btn-g">+ Record Payment</button>
+    </div>
+  </div>
+
+  <div class="chips"><div class="fchip active">This Month</div><div class="fchip">This Week</div><div class="fchip">YTD</div><div class="fchip">All time</div></div>
+
+  <div class="grid-3">
+    <div class="kpi"><div class="kpi-lbl">Collected</div><div class="kpi-val" data-count="38974" data-prefix="£">£0</div><div class="kpi-sub">197 payments</div></div>
+    <div class="kpi red"><div class="kpi-lbl">Unpaid (period)</div><div class="kpi-val" data-count="32015" data-prefix="£">£0</div><div class="kpi-sub">164 scheduled · Overdue £211,690</div></div>
+    <div class="kpi neutral"><div class="kpi-lbl">Expected</div><div class="kpi-val" data-count="133653" data-prefix="£">£0</div><div class="kpi-sub">29% collection rate</div><div class="kpi-bar"><i style="--w:29%"></i></div></div>
+  </div>
+
+  <div class="bc-grid">
+    <div class="bc bank"><div class="bc-icon">🏦</div><div><div class="bc-l">Bank</div><div class="bc-v">£35,120</div><div style="font-size:9px;color:var(--dim);margin-top:2px">178 payments</div></div></div>
+    <div class="bc cash"><div class="bc-icon">💵</div><div><div class="bc-l">Cash</div><div class="bc-v">£3,854</div><div style="font-size:9px;color:var(--dim);margin-top:2px">19 payments</div></div></div>
+  </div>
+
+  <div class="arrears-banner">
+    <div><div class="l">⚠️ Total Rent Arrears</div><div class="s">153 tenants with outstanding balance</div></div>
+    <div class="v">£211,690</div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active" style="background:rgba(245,166,35,.1);border-color:rgba(245,166,35,.3);color:var(--amber)">92 Due Today</div>
+    <div class="fchip" style="background:rgba(75,158,255,.08);border-color:rgba(75,158,255,.2);color:var(--blue)">14 Tomorrow</div>
+    <div class="fchip" style="background:rgba(245,166,35,.08);border-color:rgba(245,166,35,.2);color:var(--amber)">16 💵 Cash</div>
+    <div class="fchip" style="background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.2);color:var(--red)">1087 Overdue</div>
+  </div>
+
+  <table class="table">
+    <thead><tr><th>Tenant</th><th>Property</th><th>Method</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><strong>Quentin Marsh</strong></td><td>10 Thornton Hth · Rm 3</td><td><span class="chip b">🏦 Bank</span></td><td style="color:var(--amber)">📅 Today</td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace">£165</td><td><span class="chip g">Confirm</span></td></tr>
+      <tr><td><strong>Stanley Gibbs</strong></td><td>10 Thornton Hth · Rm 5</td><td><span class="chip b">🏦 Bank</span></td><td style="color:var(--amber)">📅 Today</td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace">£170</td><td><span class="chip g">Confirm</span></td></tr>
+      <tr><td><strong>Harriet Dean</strong></td><td>18 Balham High Rd · Rm 2</td><td><span class="chip b">🏦 Bank</span></td><td style="color:var(--amber)">📅 Today</td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace">£190</td><td><span class="chip g">Confirm</span></td></tr>
+      <tr><td><strong>Marcus Reynolds</strong></td><td>45 Lavender Hill · Rm 1</td><td><span class="chip a">💵 Cash</span></td><td style="color:var(--dim)">🗓 Tomorrow</td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace">£235</td><td><span class="chip g">Confirm</span></td></tr>
+      <tr><td><strong>Sarah Mitchell</strong></td><td>22 Elm Grove · Rm 2</td><td><span class="chip b">🏦 Bank</span></td><td style="color:var(--red)">⚠ 14d overdue</td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£370</td><td><span class="chip r">Chase</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ PAGE 4: REPORTS ══════════ -->
+<section class="page" data-page="4" data-label="Reports">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Reports</div>
+      <div class="page-sub">Branded PDF exports · email-ready</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🗓 Apr 2026 ▾</button>
+      <button class="btn btn-g">⬇ Export all</button>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card" style="cursor:pointer;transition:transform .2s"><div style="font-size:28px;margin-bottom:8px">📊</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">P&L Statement</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">Monthly income, landlord costs, expenses and net profit by property</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+    <div class="card" style="cursor:pointer"><div style="font-size:28px;margin-bottom:8px">⚠️</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Arrears Report</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">All tenants in arrears, aged balances, outstanding total per property</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+    <div class="card" style="cursor:pointer"><div style="font-size:28px;margin-bottom:8px">💷</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Cash Flow</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">12-month income vs costs chart, monthly breakdown and forecast</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+    <div class="card" style="cursor:pointer"><div style="font-size:28px;margin-bottom:8px">🏦</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Landlord Statement</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">Per-landlord income, payments due and received, deductions</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+    <div class="card" style="cursor:pointer"><div style="font-size:28px;margin-bottom:8px">🔧</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Maintenance Log</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">Open and resolved jobs, cost per property, contractor breakdown</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+    <div class="card" style="cursor:pointer"><div style="font-size:28px;margin-bottom:8px">📅</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">Compliance</div><div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">Gas safety, EICR, EPC, HMO licences — expiry dates and documents</div><button class="btn btn-g" style="width:100%;justify-content:center">⬇ Download PDF</button></div>
+  </div>
+
+  <div class="card mt-12">
+    <div class="card-title">📈 Annual Overview — 2026 YTD</div>
+    <div class="grid-2">
+      <div>
+        <div class="cf-chart" style="height:130px">
+          <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:var(--green);height:52%;animation-delay:.1s;width:14px"></div><div class="cf-bar" style="background:rgba(255,82,82,.4);height:36%;animation-delay:.15s;width:14px"></div></div><div class="cf-lbl">Jan</div></div>
+          <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:var(--green);height:60%;animation-delay:.2s;width:14px"></div><div class="cf-bar" style="background:rgba(255,82,82,.4);height:38%;animation-delay:.25s;width:14px"></div></div><div class="cf-lbl">Feb</div></div>
+          <div class="cf-col"><div class="cf-bars"><div class="cf-bar" style="background:var(--green);height:78%;animation-delay:.3s;width:14px"></div><div class="cf-bar" style="background:rgba(255,82,82,.4);height:44%;animation-delay:.35s;width:14px"></div></div><div class="cf-lbl">Mar</div></div>
+          <div class="cf-col active"><div class="cf-bars"><div class="cf-bar" style="background:var(--green);height:96%;animation-delay:.4s;width:14px;box-shadow:0 0 10px rgba(0,216,151,.5)"></div><div class="cf-bar" style="background:var(--red);height:56%;animation-delay:.45s;width:14px"></div></div><div class="cf-lbl">Apr</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="rep-row"><span>Total Income YTD</span><span style="color:var(--green);font-weight:700">£494,823</span></div>
+        <div class="rep-row"><span>Landlord Costs</span><span style="color:var(--red);font-weight:700">− £294,000</span></div>
+        <div class="rep-row"><span>Operating Exp.</span><span style="color:var(--red);font-weight:700">− £26,580</span></div>
+        <div class="rep-row"><span>Net Profit YTD</span><span style="color:var(--green);font-weight:800;font-family:'DM Mono',monospace">£174,243</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 5: AI AGENT ══════════ -->
+<section class="page" data-page="5" data-label="AI Portfolio Agent">
+  <div class="page-head">
+    <div>
+      <div class="page-title">🤖 AI Portfolio Agent</div>
+      <div class="page-sub">Intelligent insights · runs on your data</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">💬 Ask agent</button>
+      <button class="btn btn-g">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <div class="ai-card">
+    <div class="ai-head">
+      <div class="ai-dot"></div>
+      <div style="font-size:14px;font-weight:700">Portfolio Intelligence</div>
+      <div style="margin-left:auto;font-size:10px;color:rgba(255,255,255,.4)">Updated just now</div>
+    </div>
+
+    <div class="ai-score-row">
+      <div class="ai-score">82</div>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#10B981">Portfolio Health: Strong</div>
+        <div style="font-size:11px;color:rgba(226,232,240,.6);margin-top:2px">39 properties · 97% occupied · £51.5k/mo net</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <div style="text-align:center"><div style="font-size:14px;font-weight:800;color:var(--green);font-family:'DM Mono',monospace">+12%</div><div style="font-size:9px;color:var(--dim)">MoM income</div></div>
+        <div style="text-align:center"><div style="font-size:14px;font-weight:800;color:var(--amber);font-family:'DM Mono',monospace">153</div><div style="font-size:9px;color:var(--dim)">arrears</div></div>
+      </div>
+    </div>
+
+    <div class="ai-insight"><div class="ai-tag blue">⚡ Insight</div><div class="ai-text"><strong>18 Balham High Road</strong> has one vacancy for 38 days. Based on your avg £687/mo per room, this void is costing you <strong>£871</strong>. Consider listing on the public /rooms page.</div></div>
+    <div class="ai-insight"><div class="ai-tag amber">⚠ Attention</div><div class="ai-text"><strong>153 tenants in arrears</strong> totalling <strong>£211,690</strong>. 92 are due today. Sending rent reminders could recover an estimated <strong>£28–34k</strong> in the next 7 days.</div></div>
+    <div class="ai-insight"><div class="ai-tag green">📈 Trend</div><div class="ai-text">Income grew <strong>+12% MoM</strong> (£119k → £133k). Largest gain: Lavender Hill portfolio. On track for <strong>£1.8M annual run-rate</strong> by Q4 2026.</div></div>
+    <div class="ai-insight"><div class="ai-tag blue">💡 Opportunity</div><div class="ai-text">Your Brixton properties show <strong>28% higher profit margin</strong> than the portfolio average. Consider focusing acquisition in SW2/SW9 postcodes.</div></div>
+
+    <div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">
+      <button class="btn btn-o" style="background:rgba(56,189,248,.1);color:#7DD3FC;border-color:rgba(56,189,248,.2)">📊 Full Report</button>
+      <button class="btn btn-o" style="background:rgba(0,216,151,.1);color:var(--green);border-color:rgba(0,216,151,.2)">📲 Send chase to 92</button>
+      <button class="btn btn-o">📅 Schedule weekly review</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 6: DIARY ══════════ -->
+<section class="page" data-page="6" data-label="Diary &amp; Compliance">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Diary & Calendar</div>
+      <div class="page-sub">April 2026 · 18 upcoming events</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">📅 Month</button>
+      <button class="btn btn-g">+ Add Event</button>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active">All</div>
+    <div class="fchip" style="background:rgba(255,82,82,.08);color:var(--red);border-color:rgba(255,82,82,.2)">⚠ Compliance (4)</div>
+    <div class="fchip" style="background:rgba(245,166,35,.08);color:var(--amber);border-color:rgba(245,166,35,.2)">🔧 Maintenance (7)</div>
+    <div class="fchip" style="background:rgba(0,216,151,.08);color:var(--green);border-color:rgba(0,216,151,.2)">🏦 Landlord (3)</div>
+    <div class="fchip" style="background:rgba(75,158,255,.08);color:var(--blue);border-color:rgba(75,158,255,.2)">👥 Tenant moves (4)</div>
+  </div>
+
+  <div class="grid-2" style="grid-template-columns:1.3fr 1fr">
+    <div>
+      <div class="cal-grid">
+        <div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div><div class="cal-dow">Sun</div>
+        <div class="cal-day out">30</div><div class="cal-day out">31</div>
+        <div class="cal-day">1</div><div class="cal-day">2<div class="ev"><div class="dot g"></div></div></div><div class="cal-day">3<div class="ev"><div class="dot a"></div></div></div><div class="cal-day out">4</div><div class="cal-day out">5</div>
+        <div class="cal-day">6</div><div class="cal-day">7<div class="ev"><div class="dot b"></div></div></div><div class="cal-day">8</div><div class="cal-day">9<div class="ev"><div class="dot a"></div><div class="dot r"></div></div></div><div class="cal-day">10<div class="ev"><div class="dot g"></div></div></div><div class="cal-day out">11</div><div class="cal-day out">12</div>
+        <div class="cal-day">13</div><div class="cal-day">14<div class="ev"><div class="dot r"></div></div></div><div class="cal-day">15<div class="ev"><div class="dot a"></div></div></div><div class="cal-day">16</div><div class="cal-day">17<div class="ev"><div class="dot b"></div></div></div><div class="cal-day out">18</div><div class="cal-day out">19</div>
+        <div class="cal-day today">20<div class="ev"><div class="dot r"></div><div class="dot a"></div><div class="dot g"></div></div></div><div class="cal-day">21<div class="ev"><div class="dot a"></div></div></div><div class="cal-day">22<div class="ev"><div class="dot b"></div></div></div><div class="cal-day">23</div><div class="cal-day">24<div class="ev"><div class="dot g"></div></div></div><div class="cal-day out">25</div><div class="cal-day out">26</div>
+        <div class="cal-day">27<div class="ev"><div class="dot r"></div></div></div><div class="cal-day">28<div class="ev"><div class="dot a"></div></div></div><div class="cal-day">29</div><div class="cal-day">30<div class="ev"><div class="dot g"></div></div></div><div class="cal-day out">1</div><div class="cal-day out">2</div><div class="cal-day out">3</div>
+      </div>
+    </div>
+    <div>
+      <div class="card-title" style="margin-bottom:10px">📋 Upcoming — this week</div>
+      <div class="m-row" style="grid-template-columns:1fr auto"><div><div class="m-title" style="color:var(--red)">⚠ Gas Safety — 27 Vassall Rd</div><div class="m-sub">Expires Apr 24 · 4 days</div></div><span class="chip r">Urgent</span></div>
+      <div class="m-row" style="grid-template-columns:1fr auto"><div><div class="m-title">EICR — 10 Thornton Heath</div><div class="m-sub">Due Apr 29 · in 9 days</div></div><span class="chip a">Compliance</span></div>
+      <div class="m-row" style="grid-template-columns:1fr auto"><div><div class="m-title">Boiler service — 22 Elm Grove</div><div class="m-sub">Booked Apr 22 · 14:00</div></div><span class="chip a">Maint.</span></div>
+      <div class="m-row" style="grid-template-columns:1fr auto"><div><div class="m-title">James Kelly moves in — Elm Grove Rm 5</div><div class="m-sub">Apr 24 · welcome pack ready</div></div><span class="chip b">Tenant</span></div>
+      <div class="m-row" style="grid-template-columns:1fr auto"><div><div class="m-title">Landlord payment — Vassall Rd</div><div class="m-sub">Scheduled Apr 28 · £1,900</div></div><span class="chip g">Landlord</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 7: MAINTENANCE ══════════ -->
+<section class="page" data-page="7" data-label="Maintenance">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Maintenance</div>
+      <div class="page-sub">7 open · 3 in progress · 42 resolved YTD</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🔍 Filter</button>
+      <button class="btn btn-g">+ Log Job</button>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="kpi red"><div class="kpi-lbl">Open Jobs</div><div class="kpi-val" data-count="7">0</div><div class="kpi-sub">3 urgent</div></div>
+    <div class="kpi amber"><div class="kpi-lbl">In Progress</div><div class="kpi-val" data-count="3">0</div><div class="kpi-sub">contractors assigned</div></div>
+    <div class="kpi"><div class="kpi-lbl">Spend MTD</div><div class="kpi-val" data-count="2840" data-prefix="£">£0</div><div class="kpi-sub">across 12 jobs</div></div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active">All</div>
+    <div class="fchip" style="background:rgba(255,82,82,.08);color:var(--red);border-color:rgba(255,82,82,.2)">🔴 Urgent</div>
+    <div class="fchip">🟡 Open</div>
+    <div class="fchip">🔵 In Progress</div>
+    <div class="fchip">✅ Resolved</div>
+  </div>
+
+  <div class="m-row"><div><div class="m-title">Leaking tap — kitchen</div><div class="m-sub">22 Elm Grove · Reported by Sarah M. · 2 days ago</div></div><span class="chip r">Urgent</span><span class="chip b">🔧 Dave P.</span><div style="font-size:13px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace">£180</div></div>
+  <div class="m-row"><div><div class="m-title">Broken radiator — Rm 4</div><div class="m-sub">27 Vassall Rd · Reported by contractor · 1 day ago</div></div><span class="chip r">Urgent</span><span class="chip b">🔧 London Heat</span><div style="font-size:13px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace">£420</div></div>
+  <div class="m-row"><div><div class="m-title">Fridge not cooling</div><div class="m-sub">10 Thornton Hth · Reported by James · 3 days ago</div></div><span class="chip a">In progress</span><span class="chip b">🔧 Quick Fix</span><div style="font-size:13px;font-weight:800;font-family:'DM Mono',monospace">£260</div></div>
+  <div class="m-row"><div><div class="m-title">Front door lock replacement</div><div class="m-sub">18 Balham High Rd · Scheduled</div></div><span class="chip a">Open</span><span class="chip b">🔧 SecureLocks</span><div style="font-size:13px;font-weight:800;font-family:'DM Mono',monospace">£145</div></div>
+  <div class="m-row"><div><div class="m-title">Annual gas safety cert — 8 Denmark Hill</div><div class="m-sub">Certificate uploaded · 4 days ago</div></div><span class="chip g">Resolved</span><span class="chip b">🔧 GasCheck</span><div style="font-size:13px;font-weight:800;color:var(--green);font-family:'DM Mono',monospace">£95</div></div>
+  <div class="m-row"><div><div class="m-title">Mould treatment — bathroom</div><div class="m-sub">45 Lavender Hill Rm 3 · Completed</div></div><span class="chip g">Resolved</span><span class="chip b">🔧 Dave P.</span><div style="font-size:13px;font-weight:800;color:var(--green);font-family:'DM Mono',monospace">£320</div></div>
+</section>
+
+<!-- ══════════ PAGE 8: LANDLORDS ══════════ -->
+<section class="page" data-page="8" data-label="Landlords">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Landlords</div>
+      <div class="page-sub">20 landlords · 222 payments pending · £73,500 / mo</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🗓 All Time ▾</button>
+      <button class="btn btn-g">+ Add Landlord</button>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="kpi red"><div class="kpi-lbl">Monthly Rent Out</div><div class="kpi-val" data-count="73500" data-prefix="£">£0</div><div class="kpi-sub">across 20 landlords</div></div>
+    <div class="kpi amber"><div class="kpi-lbl">Pending</div><div class="kpi-val" data-count="418550" data-prefix="£">£0</div><div class="kpi-sub">222 scheduled payments</div></div>
+    <div class="kpi"><div class="kpi-lbl">Paid (All Time)</div><div class="kpi-val" data-count="42250" data-prefix="£">£0</div><div class="kpi-sub">38 landlord transfers</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="width:36px;height:36px;border-radius:9px;background:rgba(0,216,151,.12);color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:800">RC</div><div style="flex:1"><div style="font-size:13px;font-weight:700">Robert Chen</div><div style="font-size:10px;color:var(--dim)">447911100003 · 2 properties</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace">£3,500</div><div style="font-size:9px;color:var(--dim)">per month</div></div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"><span class="chip b">33 Streatham High Rd</span><span class="chip b">7 Tulse Hill</span></div>
+      <div class="rep-row" style="font-size:11px"><span style="color:var(--red)">⚠ Jan 2026 — 7 Tulse Hill</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£2,100 Pay Now</span></div>
+      <div class="rep-row" style="font-size:11px"><span>Jan 2026 — 33 Streatham Hi</span><span style="color:var(--green);font-family:'DM Mono',monospace;font-weight:700">£1,400 ✓ paid</span></div>
+      <div class="rep-row" style="font-size:11px"><span style="color:var(--red)">⚠ Feb 2026 — 7 Tulse Hill</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£2,100 Pay Now</span></div>
+      <div class="rep-row" style="font-size:11px;border:0"><span style="color:var(--red)">⚠ Feb 2026 — 33 Streatham</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£1,400 Pay Now</span></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="width:36px;height:36px;border-radius:9px;background:rgba(75,158,255,.12);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800">MT</div><div style="flex:1"><div style="font-size:13px;font-weight:700">Michael Taylor</div><div style="font-size:10px;color:var(--dim)">447911100007 · 2 properties</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace">£4,600</div><div style="font-size:9px;color:var(--dim)">per month</div></div></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"><span class="chip b">48 Norwood Road</span><span class="chip b">11 Kennington Lane</span></div>
+      <div class="rep-row" style="font-size:11px"><span style="color:var(--red)">⚠ Jan 2026 — 48 Norwood Rd</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£1,600 Pay Now</span></div>
+      <div class="rep-row" style="font-size:11px"><span>Jan 2026 — 11 Kennington</span><span style="color:var(--green);font-family:'DM Mono',monospace;font-weight:700">£3,000 ✓ paid</span></div>
+      <div class="rep-row" style="font-size:11px"><span style="color:var(--red)">⚠ Feb 2026 — 48 Norwood Rd</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£1,600 Pay Now</span></div>
+      <div class="rep-row" style="font-size:11px;border:0"><span style="color:var(--red)">⚠ Feb 2026 — 11 Kennington</span><span style="color:var(--red);font-family:'DM Mono',monospace;font-weight:700">£3,000 Pay Now</span></div>
+    </div>
+  </div>
+
+  <div class="card mt-12">
+    <div class="card-title">📄 Per-landlord PDF Report</div>
+    <div style="font-size:12px;color:var(--silver);line-height:1.55;margin-bottom:10px">One-click branded statement for each landlord — monthly rent collected, YTD, unpaid balance, property-by-property breakdown.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <span class="btn btn-o" style="pointer-events:none">⬇ Statement — Robert Chen</span>
+      <span class="btn btn-o" style="pointer-events:none">⬇ Statement — Michael Taylor</span>
+      <span class="btn btn-o" style="pointer-events:none">⬇ Statement — Thomas White</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 9: ROOMS ══════════ -->
+<section class="page" data-page="9" data-label="Rooms">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Rooms</div>
+      <div class="page-sub">165 rooms · 160 occupied · 5 vacant</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🔍 Filter</button>
+      <button class="btn btn-g">+ Add Room</button>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active">All 165</div>
+    <div class="fchip" style="background:rgba(0,216,151,.08);color:var(--green);border-color:rgba(0,216,151,.2)">✓ Occupied 160</div>
+    <div class="fchip" style="background:rgba(255,82,82,.08);color:var(--red);border-color:rgba(255,82,82,.2)">◯ Vacant 5</div>
+    <div class="fchip">🛏 Single 157</div>
+    <div class="fchip">🛏🛏 Double 3</div>
+    <div class="fchip">✨ Suite 2</div>
+  </div>
+
+  <div class="grid-3">
+    <div class="prop-card"><div class="prop-head"><div><div class="prop-name">Room 3 — 22 Elm Grove</div><div class="prop-addr">Single · Brixton SW2</div></div><span class="chip g">Occupied</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Tenant</div><div class="prop-kpi-v" style="font-size:11px">James K.</div></div><div class="prop-kpi"><div class="prop-kpi-l">Rent</div><div class="prop-kpi-v" style="color:var(--green)">£200/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Since</div><div class="prop-kpi-v" style="font-size:11px">Aug 2025</div></div></div></div>
+    <div class="prop-card loss"><div class="prop-head"><div><div class="prop-name">Room 4 — 18 Balham High Rd</div><div class="prop-addr">Single · Balham SW12</div></div><span class="chip r">Vacant 38d</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Last rent</div><div class="prop-kpi-v" style="color:var(--dim)">£175/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Void cost</div><div class="prop-kpi-v" style="color:var(--red)">£950</div></div><div class="prop-kpi"><div class="prop-kpi-l">Listed</div><div class="prop-kpi-v" style="font-size:11px">Active</div></div></div></div>
+    <div class="prop-card"><div class="prop-head"><div><div class="prop-name">Suite 1 — 27 Vassall Rd</div><div class="prop-addr">Suite · London SW9</div></div><span class="chip g">Occupied</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Tenant</div><div class="prop-kpi-v" style="font-size:11px">Quentin M.</div></div><div class="prop-kpi"><div class="prop-kpi-l">Rent</div><div class="prop-kpi-v" style="color:var(--green)">£290/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Since</div><div class="prop-kpi-v" style="font-size:11px">Feb 2026</div></div></div></div>
+    <div class="prop-card"><div class="prop-head"><div><div class="prop-name">Room 2 — 10 Thornton Hth</div><div class="prop-addr">Single · Thornton Heath</div></div><span class="chip g">Occupied</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Tenant</div><div class="prop-kpi-v" style="font-size:11px">Stanley G.</div></div><div class="prop-kpi"><div class="prop-kpi-l">Rent</div><div class="prop-kpi-v" style="color:var(--green)">£170/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Since</div><div class="prop-kpi-v" style="font-size:11px">Jan 2025</div></div></div></div>
+    <div class="prop-card"><div class="prop-head"><div><div class="prop-name">Double 1 — 45 Lavender Hill</div><div class="prop-addr">Double · Battersea SW11</div></div><span class="chip g">Occupied</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Tenant</div><div class="prop-kpi-v" style="font-size:11px">Marcus R.</div></div><div class="prop-kpi"><div class="prop-kpi-l">Rent</div><div class="prop-kpi-v" style="color:var(--green)">£235/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Since</div><div class="prop-kpi-v" style="font-size:11px">Mar 2024</div></div></div></div>
+    <div class="prop-card loss"><div class="prop-head"><div><div class="prop-name">Room 5 — 18 Balham High Rd</div><div class="prop-addr">Single · Balham SW12</div></div><span class="chip a">Notice</span></div><div class="prop-kpis"><div class="prop-kpi"><div class="prop-kpi-l">Tenant</div><div class="prop-kpi-v" style="font-size:11px">Sarah M.</div></div><div class="prop-kpi"><div class="prop-kpi-l">Rent</div><div class="prop-kpi-v" style="color:var(--green)">£185/wk</div></div><div class="prop-kpi"><div class="prop-kpi-l">Leaves</div><div class="prop-kpi-v" style="color:var(--amber)">May 5</div></div></div></div>
+  </div>
+</section>
+
+<!-- ══════════ PAGE 10: EXPENSES ══════════ -->
+<section class="page" data-page="10" data-label="Expenses">
+  <div class="page-head">
+    <div>
+      <div class="page-title">Expenses</div>
+      <div class="page-sub">Apr 2026 · 34 entries · £8,701 this month</div>
+    </div>
+    <div class="row">
+      <button class="btn btn-o">🗓 Apr 2026 ▾</button>
+      <button class="btn btn-g">+ Add Expense</button>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi red"><div class="kpi-lbl">This Month</div><div class="kpi-val" data-count="8701" data-prefix="£">£0</div><div class="kpi-sub">34 entries</div></div>
+    <div class="kpi amber"><div class="kpi-lbl">Staff & Labour</div><div class="kpi-val" data-count="1800" data-prefix="£">£0</div><div class="kpi-sub">5 entries</div></div>
+    <div class="kpi"><div class="kpi-lbl">Property Costs</div><div class="kpi-val" data-count="6901" data-prefix="£">£0</div><div class="kpi-sub">29 entries</div></div>
+    <div class="kpi neutral"><div class="kpi-lbl">YTD</div><div class="kpi-val" data-count="26580" data-prefix="£">£0</div><div class="kpi-sub">Jan–Apr 2026</div></div>
+  </div>
+
+  <div class="chips">
+    <div class="fchip active">All</div>
+    <div class="fchip">🔧 Maintenance</div>
+    <div class="fchip">⚡ Utilities</div>
+    <div class="fchip">🛡 Insurance</div>
+    <div class="fchip">👥 Staff</div>
+    <div class="fchip">📋 Licences</div>
+    <div class="fchip">🧹 Cleaning</div>
+  </div>
+
+  <table class="table">
+    <thead><tr><th>Date</th><th>Description</th><th>Property</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>
+      <tr><td>Apr 18</td><td><strong>British Gas — 22 Elm Grove</strong></td><td>22 Elm Grove</td><td><span class="chip a">⚡ Utilities</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£340</td></tr>
+      <tr><td>Apr 15</td><td><strong>Boiler service — 27 Vassall Rd</strong></td><td>27 Vassall Rd</td><td><span class="chip a">🔧 Maintenance</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£180</td></tr>
+      <tr><td>Apr 12</td><td><strong>Council tax — Brixton portfolio</strong></td><td>Multiple</td><td><span class="chip b">🏛 Council</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£1,240</td></tr>
+      <tr><td>Apr 10</td><td><strong>Cleaning — 10 Thornton Heath</strong></td><td>10 Thornton Hth</td><td><span class="chip g">🧹 Cleaning</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£95</td></tr>
+      <tr><td>Apr 08</td><td><strong>HMO licence renewal — Balham</strong></td><td>18 Balham High Rd</td><td><span class="chip b">📋 Licences</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£980</td></tr>
+      <tr><td>Apr 05</td><td><strong>Landlord insurance — annual</strong></td><td>All properties</td><td><span class="chip">🛡 Insurance</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£2,450</td></tr>
+      <tr><td>Apr 02</td><td><strong>Property manager — Gleydson</strong></td><td>—</td><td><span class="chip">👥 Staff</span></td><td style="text-align:right;font-weight:700;font-family:'DM Mono',monospace;color:var(--red)">£1,800</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+
+<!-- ══ Animated cursor ══ -->
+<div class="cursor" id="cursor">
+<svg viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg"><path d="M4 3 L4 17 L8 13 L11 19 L13.5 18 L10.5 12 L16 12 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg>
+</div>
+
+<!-- ══ Overlay control bar ══ -->
+<div class="overlay">
+  <div class="label"><span class="live-dot"></span><span class="page-lbl" id="pageLbl">Dashboard</span></div>
+  <div class="dots-nav" id="dotsNav"></div>
+  <div class="speed-group" id="speedGroup">
+    <button class="speed-btn" data-speed="10000">SLOW</button>
+    <button class="speed-btn active" data-speed="6500">1×</button>
+    <button class="speed-btn" data-speed="4000">FAST</button>
+  </div>
+  <button class="ctl-btn" id="pauseBtn">⏸</button>
+</div>
+
+</div></div></div></div>
+
+<script>
+const PAGES = ['Dashboard','Properties','Tenants','Rent Collection','Reports','AI Portfolio Agent','Diary & Compliance','Maintenance','Landlords','Rooms','Expenses'];
+let DUR = 6500;
+let idx = 0;
+let paused = false;
+let timer = null;
+let progStart = Date.now();
+
+const pages = document.querySelectorAll('.page');
+const sbItems = document.querySelectorAll('.sb-item[data-page]');
+const dotsNav = document.getElementById('dotsNav');
+const pageLbl = document.getElementById('pageLbl');
+const pauseBtn = document.getElementById('pauseBtn');
+const prog = document.getElementById('progress');
+
+// Build dots
+PAGES.forEach((p,i)=>{
+  const d = document.createElement('span');
+  d.addEventListener('click',()=>goTo(i));
+  dotsNav.appendChild(d);
+});
+const dots = dotsNav.querySelectorAll('span');
+
+function countUp(el){
+  const target = parseInt(el.dataset.count,10);
+  const prefix = el.dataset.prefix || '';
+  const suffix = el.dataset.suffix || '';
+  const dur = 900;
+  const start = performance.now();
+  function tick(now){
+    const t = Math.min(1,(now-start)/dur);
+    const eased = 1 - Math.pow(1-t, 3);
+    const v = Math.round(target * eased);
+    el.textContent = prefix + v.toLocaleString() + suffix;
+    if(t<1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function restartAnims(page){
+  // Re-trigger CSS animations by clone-replace-not-needed: toggle class
+  page.querySelectorAll('.cf-bar').forEach(b=>{b.style.animation='none';b.offsetHeight;b.style.animation=''});
+  page.querySelectorAll('.kpi-bar i, .prop-occ i').forEach(b=>{b.style.animation='none';b.offsetHeight;b.style.animation=''});
+  page.querySelectorAll('.ai-insight').forEach(b=>{b.style.animation='none';b.offsetHeight;b.style.animation=''});
+  page.querySelectorAll('[data-count]').forEach(countUp);
+}
+
+function goTo(n){
+  idx = (n+PAGES.length)%PAGES.length;
+  pages.forEach((p,i)=>p.classList.toggle('active', i===idx));
+  sbItems.forEach(s=>s.classList.toggle('active', parseInt(s.dataset.page,10)===idx));
+  dots.forEach((d,i)=>d.classList.toggle('active', i===idx));
+  pageLbl.textContent = PAGES[idx];
+  restartAnims(pages[idx]);
+  progStart = Date.now();
+  prog.style.width = '0%';
+  document.getElementById('main').scrollTop = 0;
+  // Move cursor to sidebar item of new page (simulated click)
+  moveCursorToSidebar(idx);
+  // Typing effect for AI insights
+  if(idx===5) runTypingEffect(pages[idx]);
+}
+
+// ── Animated cursor ───────────────────────────────
+const cursor = document.getElementById('cursor');
+function moveCursorToSidebar(n){
+  const item = document.querySelector('.sb-item[data-page="'+n+'"]');
+  if(!item) return;
+  const r = item.getBoundingClientRect();
+  const host = document.body.getBoundingClientRect();
+  const x = r.left - host.left + r.width*0.65;
+  const y = r.top - host.top + r.height*0.5;
+  cursor.style.transform = `translate(${x}px, ${y}px)`;
+  setTimeout(()=>{cursor.classList.add('click');setTimeout(()=>cursor.classList.remove('click'),500)}, 850);
+}
+
+// ── AI typing effect ────────────────────────────
+function runTypingEffect(page){
+  const insights = page.querySelectorAll('.ai-insight .ai-text');
+  insights.forEach((el,i)=>{
+    if(el.dataset.orig) el.textContent=''; else el.dataset.orig=el.innerHTML;
+    el.innerHTML='';
+    const raw = el.dataset.orig;
+    setTimeout(()=>{typeInto(el, raw, 0)}, 400 + i*700);
+  });
+}
+function typeInto(el, html, i){
+  el.classList.add('typing');
+  if(i>=html.length){el.classList.remove('typing');return}
+  // fast typing: 3 chars per tick
+  const next = Math.min(i+3, html.length);
+  el.innerHTML = html.slice(0, next);
+  setTimeout(()=>typeInto(el, html, next), 22);
+}
+
+function tickProgress(){
+  if(paused) return;
+  const elapsed = Date.now() - progStart;
+  const pct = Math.min(100, (elapsed/DUR)*100);
+  prog.style.width = pct + '%';
+  if(elapsed >= DUR) goTo(idx+1);
+}
+
+function start(){
+  clearInterval(timer);
+  timer = setInterval(tickProgress, 50);
+}
+
+pauseBtn.addEventListener('click',()=>{
+  paused = !paused;
+  pauseBtn.textContent = paused ? '▶' : '⏸';
+  if(!paused) progStart = Date.now() - (parseFloat(prog.style.width)/100)*DUR;
+});
+
+sbItems.forEach(s=>s.addEventListener('click',()=>goTo(parseInt(s.dataset.page,10))));
+
+// Speed control
+document.querySelectorAll('.speed-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    DUR = parseInt(btn.dataset.speed,10);
+    document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    progStart = Date.now();
+    prog.style.width = '0%';
+  });
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight') goTo(idx+1);
+  else if(e.key==='ArrowLeft') goTo(idx-1);
+  else if(e.key===' '){e.preventDefault();pauseBtn.click()}
+});
+
+// Parent-frame deep linking via postMessage or ?page= / #page=
+window.addEventListener('message',e=>{
+  const d=e.data;
+  if(!d||typeof d!=='object')return;
+  if(typeof d.goToPage==='number') goTo(d.goToPage);
+  if(d.demo==='play' && paused) pauseBtn.click();
+  if(d.demo==='pause' && !paused) pauseBtn.click();
+});
+
+function readDeepLink(){
+  const h=(location.hash||'').replace('#','');
+  const q=new URLSearchParams(location.search);
+  const names={dashboard:0,properties:1,tenants:2,rent:3,reports:4,ai:5,agent:5,diary:6,maintenance:7,landlords:8,rooms:9,expenses:10};
+  let n=null;
+  if(q.has('page')){const v=q.get('page');n=isNaN(v)?names[v.toLowerCase()]:parseInt(v,10)}
+  else if(h.startsWith('page=')){const v=h.slice(5);n=isNaN(v)?names[v.toLowerCase()]:parseInt(v,10)}
+  else if(names[h.toLowerCase()]!=null) n=names[h.toLowerCase()];
+  return (typeof n==='number'&&!isNaN(n))?n:0;
+}
+
+goTo(readDeepLink());
+start();
+
+window.addEventListener('hashchange',()=>goTo(readDeepLink()));
+</script>
+
+</body>
+</html>

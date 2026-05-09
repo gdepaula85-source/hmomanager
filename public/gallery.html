@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Room Gallery</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/gallery.css">
+<script src="/config.js"></script>
+</head>
+<body>
+<div class="hdr">
+  <div class="logo">landlordapp.io</div>
+  <div class="pname" id="pname">Loading&hellip;</div>
+  <div class="paddr" id="paddr"></div>
+  <div id="rinfo"></div>
+  <div id="mlink"></div>
+</div>
+<div class="gallery" id="area"><div class="loader"><div class="spin"></div><div style="font-size:13px;color:rgba(255,255,255,.35)">Loading photos&hellip;</div></div></div>
+<div id="narea"></div>
+<div id="varea"></div>
+<div id="cta"></div>
+<div id="debug" class="debug-box"></div>
+<div class="footer">Powered by landlordapp.io</div>
+
+<!-- Lightbox -->
+<div class="lb" id="lb">
+  <button class="lb-x" onclick="closeLb()">&times;</button>
+  <div class="lb-img-wrap">
+    <button class="lb-p" onclick="lbNav(-1)">&#8249;</button>
+    <img id="lbimg" src="" alt="">
+    <button class="lb-n" onclick="lbNav(1)">&#8250;</button>
+  </div>
+  <div class="lb-c" id="lbc"></div>
+  <div class="lb-thumbs" id="lb-thumbs"></div>
+</div>
+
+<script src="/js/gallery.js"></script>
+</body>
+</html>

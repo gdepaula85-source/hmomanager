@@ -1,0 +1,35 @@
+-- superadmin_organisations is a VIEW in Supabase (not a table).
+-- public/js/superadmin.js uses supa.from('superadmin_organisations') — the client does not care; PostgREST exposes views like tables.
+--
+-- The app looks up a row where:
+--   - email matches the signed-in user (eq / ilike), or
+--   - user_id matches auth.users.id
+--
+-- You must expose at least one of those column names (or adjust superadmin.js to match your view’s column names).
+
+-- ── Grants (typical) ─────────────────────────────────────────
+-- grant usage on schema public to anon, authenticated;
+-- grant select on public.superadmin_organisations to authenticated;
+
+-- ── RLS + views (PostgreSQL / Supabase) ─────────────────────
+-- Policies attach to tables; views are often defined WITH (security_invoker = true)
+-- so checks run as the calling user and underlying table RLS applies.
+-- See: https://supabase.com/docs/guides/database/postgres/row-level-security
+--
+-- Example pattern (adjust sources/columns to your project):
+--
+-- create or replace view public.superadmin_organisations
+--   with (security_invoker = true) as
+-- select
+--   x.id,
+--   x.email,
+--   x.user_id
+-- from (
+--   -- your subquery or joins here
+--   select gen_random_uuid() as id, 'admin@example.com'::text as email, null::uuid as user_id
+-- ) x;
+--
+-- grant select on public.superadmin_organisations to authenticated;
+--
+-- Editing companies requires RLS to recognise you as superadmin: run db/superadmin_rls_policies.sql
+-- and add your email or auth user id to public.superadmin_allowlist (not only this view).

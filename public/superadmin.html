@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>landlordapp.io · Superadmin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="/css/superadmin.css">
+<script src="/config.js"></script>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-overlay">
+  <div class="spin" style="width:32px;height:32px;border-width:3px"></div>
+  <div style="font-size:13px;color:var(--muted)">Loading landlordapp.io Admin…</div>
+</div>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">P</div>
+      <div>
+        <div style="font-size:16px;font-weight:700">landlordapp.io</div>
+        <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Superadmin</div>
+      </div>
+    </div>
+    <div class="login-title">Admin Access</div>
+    <div class="login-sub" style="margin-bottom:24px">Sign in with your superadmin account</div>
+    <div class="field" style="margin-bottom:12px"><label>Email</label><input class="inp" id="sa-email" type="email" placeholder="admin@landlordapp.io" autocomplete="email"></div>
+    <div class="field" style="margin-bottom:20px"><label>Password</label><input class="inp" id="sa-password" type="password" autocomplete="current-password"></div>
+    <div id="login-err" style="display:none;margin-bottom:12px;font-size:12px;color:var(--red);background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:9px 12px"></div>
+    <button class="btn-primary" style="width:100%" onclick="doLogin()">Sign In</button>
+    <div style="margin-top:16px;text-align:center;font-size:12px;color:var(--dim)">Superadmin access only. Operators use the main app.</div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div class="shell" id="app" style="display:none">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo-icon">P</div>
+      <div>
+        <div class="sb-logo-text">landlordapp.io</div>
+        <div class="sb-logo-badge">Superadmin</div>
+      </div>
+    </div>
+
+    <div class="sb-section">Overview</div>
+    <button class="sb-item active" id="nav-dashboard" onclick="navigate('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </button>
+    <button class="sb-item" id="nav-activity" onclick="navigate('activity')">
+      <span class="icon">⚡</span> Activity
+    </button>
+
+    <div class="sb-section">Companies</div>
+    <button class="sb-item" id="nav-companies" onclick="navigate('companies')">
+      <span class="icon">🏢</span> All Companies
+      <span class="badge" id="badge-total" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border)">—</span>
+    </button>
+    <button class="sb-item" id="nav-trials" onclick="navigate('trials')">
+      <span class="icon">⏳</span> Trials &amp; free
+      <span class="badge" id="badge-trials" style="background:var(--amber-bg);color:var(--amber)">—</span>
+    </button>
+    <button class="sb-item" id="nav-cancelled" onclick="navigate('cancelled')">
+      <span class="icon">❌</span> Cancelled
+      <span class="badge" id="badge-cancelled" style="background:var(--red-bg);color:var(--red)">—</span>
+    </button>
+
+    <div class="sb-section">Revenue</div>
+    <button class="sb-item" id="nav-revenue" onclick="navigate('revenue')">
+      <span class="icon">💷</span> MRR & Plans
+    </button>
+
+    <div class="sb-section">Config</div>
+    <button class="sb-item" id="nav-settings" onclick="navigate('settings')">
+      <span class="icon">⚙️</span> Plans & Pricing
+    </button>
+
+    <div class="sb-section">Users</div>
+    <button class="sb-item" id="nav-users" onclick="navigate('users')">
+      <span class="icon">👥</span> All Users
+      <span class="badge" id="badge-users" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)">—</span>
+    </button>
+
+    <div class="sb-section">Content</div>
+    <button class="sb-item" id="nav-blog" onclick="navigate('blog')">
+      <span class="icon">📝</span> Blog
+    </button>
+
+    <div class="sb-section">System</div>
+    <button class="sb-item" id="nav-logs" onclick="navigate('logs')">
+      <span class="icon">📋</span> Audit Log
+    </button>
+
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-avatar" id="sb-avatar">–</div>
+        <div>
+          <div class="sb-user-name" id="sb-name">—</div>
+          <div class="sb-user-role">Superadmin</div>
+        </div>
+        <button class="sb-logout" onclick="doLogout()">Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="page-title">Dashboard</div>
+        <div class="page-sub" id="page-sub">landlordapp.io control plane</div>
+      </div>
+      <div class="topbar-right">
+        <div class="tb-badge live">● Live</div>
+        <a class="refresh-btn" href="/landlordapp_emails.html" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-flex;align-items:center">📧 Email templates</a>
+        <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+        <button class="btn-primary" style="font-size:12px;padding:7px 14px" onclick="openAddOrgModal()">+ Add Company</button>
+      </div>
+    </div>
+    <div class="content" id="content">
+      <div class="empty"><div class="spin"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal container -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-inner" onclick="event.stopPropagation()" style="max-width:580px"></div>
+</div>
+
+<script src="/js/superadmin.js?v=2026-05-01-v1"></script>
+</body>
+</html>

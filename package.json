@@ -1,0 +1,29 @@
+{
+  "name": "hmomanager",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "build": "npm run build:dashboard",
+    "build:dashboard": "node scripts/build-dashboard.js",
+    "start": "node server.js",
+    "test": "node --test test/server.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
+    "archiver": "^7.0.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "esbuild": "^0.25.12",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
+    "pdf-lib": "^1.17.1",
+    "stripe": "^18.4.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2"
+  }
+}

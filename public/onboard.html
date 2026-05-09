@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Tenant Registration</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#00B894;--accent-dark:#059669;--bg:#F7F8FA;--surface:#fff;--border:#E5E7EB;--text:#111827;--muted:#4B5563;--dim:#6B7280;--red:#EF4444}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
+.hero{background:linear-gradient(135deg,#0B1120,#162544);color:#fff;padding:40px 20px;text-align:center}
+.hero h1{font-size:clamp(22px,5vw,32px);font-weight:800;margin-bottom:8px}
+.hero p{font-size:14px;color:rgba(255,255,255,.6);max-width:400px;margin:0 auto}
+.form-wrap{max-width:480px;margin:-30px auto 40px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;box-shadow:0 8px 32px rgba(0,0,0,.08);position:relative}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;outline:none;transition:border .15s;background:var(--bg)}
+.field input:focus,.field textarea:focus{border-color:var(--accent);background:#fff}
+.field textarea{resize:vertical;min-height:60px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.upload-area{border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--bg)}
+.upload-area:hover{border-color:var(--accent);background:rgba(0,184,148,.04)}
+.upload-area input{display:none}
+.upload-area .icon{font-size:28px;margin-bottom:6px}
+.upload-area .label{font-size:12px;color:var(--muted);font-weight:600}
+.upload-area .hint{font-size:10px;color:var(--dim);margin-top:4px}
+.upload-preview{max-width:100%;max-height:150px;border-radius:8px;margin-top:10px;object-fit:cover}
+.btn-submit{width:100%;padding:14px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(0,184,148,.2);transition:all .15s}
+.btn-submit:hover{background:var(--accent-dark)}
+.btn-submit:disabled{opacity:.5;cursor:not-allowed}
+.error{display:none;background:#FEE2E2;border:1px solid #FECDD3;color:#B91C1C;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:16px}
+.success{display:none;text-align:center;padding:40px 20px}
+.success .icon{font-size:48px;margin-bottom:12px}
+.success h2{font-size:20px;font-weight:800;color:var(--accent-dark);margin-bottom:8px}
+.success p{font-size:14px;color:var(--muted)}
+.footer{text-align:center;padding:24px;font-size:11px;color:var(--dim)}
+.required{color:var(--red)}
+</style>
+<script src="/config.js"></script>
+</head>
+<body>
+
+<div class="hero">
+  <h1>🏠 Tenant Registration</h1>
+  <p>Complete this form to register as a new tenant. Your property manager will review your application.</p>
+</div>
+
+<div class="form-wrap">
+  <div id="form-section">
+    <div id="form-error" class="error"></div>
+
+    <div class="field">
+      <label>Full Name <span class="required">*</span></label>
+      <input id="ob-name" placeholder="e.g. John Smith" autocomplete="name" required>
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label>Date of Birth <span class="required">*</span></label>
+        <input id="ob-dob" type="date" required>
+      </div>
+      <div class="field">
+        <label>Gender</label>
+        <select id="ob-gender"><option value="">— Select —</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option></select>
+      </div>
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label>WhatsApp / Phone <span class="required">*</span></label>
+        <input id="ob-phone" type="tel" placeholder="e.g. +44 7700 900000" autocomplete="tel" required>
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">
+          Include your country code so WhatsApp messages reach you. UK: <strong>+44 7700…</strong> · Portugal: <strong>+351 91…</strong> · Brazil: <strong>+55 11…</strong>
+        </div>
+      </div>
+      <div class="field">
+        <label>Email <span class="required">*</span></label>
+        <input id="ob-email" type="email" placeholder="john@email.com" autocomplete="email" required>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Current Address</label>
+      <input id="ob-address" placeholder="Current residential address">
+    </div>
+
+    <div class="field">
+      <label>ID Document (Passport / Driving Licence) <span class="required">*</span></label>
+      <div class="upload-area" onclick="document.getElementById('ob-id-file').click()">
+        <input type="file" id="ob-id-file" accept="image/*,.pdf" onchange="previewFile(this,'ob-id-preview')">
+        <div class="icon">📄</div>
+        <div class="label">Tap to upload ID document</div>
+        <div class="hint">Photo of passport, driving licence, or national ID</div>
+      </div>
+      <img id="ob-id-preview" class="upload-preview" style="display:none">
+    </div>
+
+    <div class="field">
+      <label>Selfie Photo <span class="required">*</span></label>
+      <div class="upload-area" onclick="document.getElementById('ob-selfie-file').click()">
+        <input type="file" id="ob-selfie-file" accept="image/*" capture="user" onchange="previewFile(this,'ob-selfie-preview')">
+        <div class="icon">🤳</div>
+        <div class="label">Tap to take a selfie</div>
+        <div class="hint">Clear photo of your face for identity verification</div>
+      </div>
+      <img id="ob-selfie-preview" class="upload-preview" style="display:none">
+    </div>
+
+    <div class="field">
+      <label>About You (optional)</label>
+      <textarea id="ob-notes" placeholder="Employment status, move-in date preferences, any questions..."></textarea>
+    </div>
+
+    <button id="ob-submit" class="btn-submit" onclick="submitOnboarding()">Submit Application</button>
+  </div>
+
+  <div id="success-section" class="success">
+    <div class="icon">✅</div>
+    <h2>Application Submitted!</h2>
+    <p>Thank you for registering. Your property manager will review your application and be in touch soon.</p>
+  </div>
+</div>
+
+<div class="footer">Powered by <a href="https://landlordapp.io" style="color:var(--accent);text-decoration:none;font-weight:600">LandlordApp.io</a></div>
+
+<script>
+var SUPA_URL = window.ENV.SUPA_URL;
+var SUPA_KEY = window.ENV.SUPA_KEY;
+
+function previewFile(input, previewId) {
+  var file = input.files[0];
+  if (!file) return;
+  var prev = document.getElementById(previewId);
+  if (file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(e) { prev.src = e.target.result; prev.style.display = 'block'; };
+    reader.readAsDataURL(file);
+  } else {
+    prev.style.display = 'none';
+  }
+  // Update upload area text
+  input.parentElement.querySelector('.label').textContent = file.name;
+}
+
+async function submitOnboarding() {
+  var errEl = document.getElementById('form-error');
+  var btn = document.getElementById('ob-submit');
+  errEl.style.display = 'none';
+
+  var name = document.getElementById('ob-name').value.trim();
+  var dob = document.getElementById('ob-dob').value;
+  var gender = document.getElementById('ob-gender').value;
+  var phone = document.getElementById('ob-phone').value.trim();
+  var email = document.getElementById('ob-email').value.trim();
+  var address = document.getElementById('ob-address').value.trim();
+  var notes = document.getElementById('ob-notes').value.trim();
+  var idFile = document.getElementById('ob-id-file').files[0];
+  var selfieFile = document.getElementById('ob-selfie-file').files[0];
+
+  // Normalise the WhatsApp number — strip spaces, dashes, parens, leading +.
+  // The result must be 10–15 digits (E.164 max) and must NOT start with 0
+  // (a leading 0 means the user typed the local-format "07700…" instead of
+  // the international "447700…"). Without a country code WhatsApp messages
+  // won't deliver, so this is a hard requirement.
+  var phoneDigits = phone.replace(/[\s\-()+]/g, '');
+  var phoneOK = /^[1-9]\d{9,14}$/.test(phoneDigits);
+  // Validation
+  if (!name) { showErr('Please enter your full name.'); return; }
+  if (!dob) { showErr('Please enter your date of birth.'); return; }
+  if (!phone) { showErr('Please enter your phone number.'); return; }
+  if (!phoneOK) {
+    var hint = phoneDigits.length > 0 && phoneDigits[0] === '0'
+      ? 'Drop the leading 0 and add your country code instead. UK example: 07700 900000 → +44 7700 900000.'
+      : 'Include your country code (e.g. +44 for UK, +351 for Portugal, +55 for Brazil).';
+    showErr('Phone number needs a country code. ' + hint);
+    return;
+  }
+  // Persist the normalised, country-code-prefixed digits.
+  phone = phoneDigits;
+  if (!email || !email.includes('@')) { showErr('Please enter a valid email address.'); return; }
+  if (!idFile) { showErr('Please upload your ID document.'); return; }
+  if (!selfieFile) { showErr('Please take a selfie photo.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  // Get org ID from URL params
+  var params = new URLSearchParams(window.location.search);
+  var orgId = params.get('org');
+  if (!orgId) { showErr('Invalid registration link. Please contact your property manager.'); btn.disabled = false; btn.textContent = 'Submit Application'; return; }
+
+  try {
+    var resp = await fetch('/api/tenant-onboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId: orgId, name: name, dob: dob, gender: gender, phone: phone, email: email, address: address, notes: notes })
+    });
+    var data = await resp.json();
+    if (!resp.ok) { showErr(data.error || 'Submission failed. Please try again.'); btn.disabled = false; btn.textContent = 'Submit Application'; return; }
+
+    var tenantId = data.tenantId;
+
+    // Upload ID document
+    var idPath = 'tenants/' + tenantId + '/id-document' + getExt(idFile.name);
+    await uploadToStorage('tenant-docs', idPath, idFile);
+
+    // Upload selfie
+    var selfiePath = 'tenants/' + tenantId + '/selfie' + getExt(selfieFile.name);
+    await uploadToStorage('tenant-docs', selfiePath, selfieFile);
+
+    // Update tenant record with file URLs — use plain text markers (no emojis)
+    var idUrl = SUPA_URL + '/storage/v1/object/public/tenant-docs/' + idPath;
+    var selfieUrl = SUPA_URL + '/storage/v1/object/public/tenant-docs/' + selfiePath;
+    var metaNotes = (notes ? notes + '\n' : '')
+      + '[ID_PHOTO]: ' + idUrl + '\n'
+      + '[SELFIE]: ' + selfieUrl + '\n'
+      + 'Address: ' + address + '\n'
+      + 'Gender: ' + (gender || '-');
+    await fetch(SUPA_URL + '/rest/v1/tenants?id=eq.' + tenantId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ notes: metaNotes })
+    });
+
+    // Show success
+    document.getElementById('form-section').style.display = 'none';
+    document.getElementById('success-section').style.display = 'block';
+  } catch (e) {
+    showErr('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Submit Application';
+  }
+}
+
+function getExt(filename) { var parts = filename.split('.'); return parts.length > 1 ? '.' + parts.pop().toLowerCase() : '.jpg'; }
+
+async function uploadToStorage(bucket, path, file) {
+  var formData = new FormData();
+  formData.append('', file);
+  await fetch(SUPA_URL + '/storage/v1/object/' + bucket + '/' + path, {
+    method: 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY },
+    body: formData
+  });
+}
+
+function showErr(msg) {
+  var el = document.getElementById('form-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+</script>
+</body>
+</html>

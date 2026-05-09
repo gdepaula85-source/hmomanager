@@ -1,0 +1,28 @@
+# Node / install artifacts
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Environment / secrets — only the example template is tracked
+.env
+.env.*
+!.env.example
+
+# Local backups / one-off zips
+*.zip
+
+# Claude Code workspace state (machine-local, not for sharing)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/launch.json
+
+# Intermediate build output. The deployed bundle is public/js/dashboard.bundle.js
+# (rebuilt by `npm run build`); the build/ folder is just esbuild scratch space.
+build/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

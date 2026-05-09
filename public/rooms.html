@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n="page.title">Available rooms</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/rooms.css?v=2026-05-01-v1">
+<style>
+  /* Tiny floating language picker — top-right, doesn't intrude on the hero.
+     Uses SVG flags from flagcdn.com (works identically on Windows / macOS /
+     iOS / Android — Windows native browser doesn't render flag emoji as flags
+     so we ship images instead of unicode). */
+  .lang-picker{position:fixed;top:14px;right:14px;display:flex;gap:4px;background:rgba(255,255,255,.85);backdrop-filter:blur(6px);padding:4px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.08);z-index:50;border:1px solid rgba(0,0,0,.06)}
+  .lang-picker button{appearance:none;background:transparent;border:none;cursor:pointer;font-family:inherit;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#0F172A;line-height:1;transition:background .15s,opacity .15s,outline .15s;display:inline-flex;align-items:center;gap:6px}
+  .lang-picker button:hover{background:rgba(0,0,0,.05)}
+  .lang-picker img{width:18px;height:13px;border-radius:2px;display:block;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+  @media(max-width:600px){.lang-picker{top:8px;right:8px;padding:3px}.lang-picker button{padding:4px 8px;font-size:11px}.lang-picker img{width:16px;height:12px}}
+</style>
+<script src="/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/rooms-i18n.js?v=2026-05-01-v1"></script>
+</head>
+<body>
+<!-- Floating language picker — EN / PT / ES. Persisted in localStorage.
+     Brazil flag (br) for the Portuguese button — Brazilian Portuguese is the
+     primary target audience; copy reads naturally on European Portuguese too. -->
+<div class="lang-picker" role="group" aria-label="Language">
+  <button data-lang-btn="en" onclick="setRoomsLang('en')" title="English"><img src="https://flagcdn.com/w40/gb.png" alt="UK flag" loading="lazy">EN</button>
+  <button data-lang-btn="pt" onclick="setRoomsLang('pt')" title="Português"><img src="https://flagcdn.com/w40/br.png" alt="Brazil flag" loading="lazy">PT</button>
+  <button data-lang-btn="es" onclick="setRoomsLang('es')" title="Español"><img src="https://flagcdn.com/w40/es.png" alt="Spain flag" loading="lazy">ES</button>
+</div>
+<div class="hero">
+  <h1 class="hero-title" data-i18n="hero.title">Our available Properties</h1>
+  <p class="hero-sub" data-i18n="hero.sub">Quality properties — rooms, studios &amp; whole houses. No agency fees. Book a FREE viewing today.</p>
+  <div class="hero-badge" id="hero-badge" data-i18n="hero.loading">&#x1F3E0; Loading listings&hellip;</div>
+  <div class="hero-share" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+    <button class="btn-share-page" onclick="sharePage(this)" title="Share this page" data-i18n="hero.share">&#x1F517; Share page</button>
+    <a class="btn-share-wa" id="page-share-wa" href="#" onclick="sharePageWhatsApp(event)" title="Share via WhatsApp" data-i18n="hero.shareWa">&#x1F4AC; Share on WhatsApp</a>
+  </div>
+</div>
+<div class="stats" id="stats-bar"></div>
+<div class="filters">
+  <button class="filter-btn active" onclick="setType('all',this)" data-i18n="filter.all">All Types</button>
+  <button class="filter-btn" onclick="setType('Single',this)" data-i18n="filter.single">&#x1F6CF;&#xFE0F; Single</button>
+  <button class="filter-btn" onclick="setType('Double',this)" data-i18n="filter.double">&#x1F6CF;&#xFE0F;&#x1F6CF;&#xFE0F; Double</button>
+  <button class="filter-btn" onclick="setType('Suite',this)" data-i18n="filter.suite">&#x2728; Suite</button>
+  <button class="filter-btn" onclick="setType('Studio',this)" data-i18n="filter.studio">&#x1F3E0; Studio</button>
+  <select id="area-select" onchange="setArea(this.value)"><option value="" data-i18n="filter.allAreas">All Areas</option></select>
+</div>
+<div class="grid" id="grid">
+  <div style="grid-column:1/-1;text-align:center;padding:60px">
+    <div class="spinner"></div>
+    <div style="color:var(--muted);font-size:14px" data-i18n="grid.loading">Loading available listings&hellip;</div>
+  </div>
+</div>
+
+<!-- Booking Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 data-i18n="modal.title">&#x1F4C5; Book a Viewing</h3>
+      <p id="modal-lbl" data-i18n="modal.sub">Tell us when you'd like to visit</p>
+    </div>
+    <div id="form-wrap">
+      <div class="modal-body">
+        <div class="field"><label data-i18n="form.name">Your Full Name *</label><input id="f-name" data-i18n-placeholder="form.namePh" placeholder="e.g. Maria Santos" autocomplete="name"></div>
+        <div class="field"><label data-i18n="form.phone">WhatsApp / Phone *</label><input id="f-phone" type="tel" data-i18n-placeholder="form.phonePh" placeholder="e.g. +44 7700 900000" autocomplete="tel"></div>
+        <div class="field"><label data-i18n="form.email">Email</label><input id="f-email" type="email" data-i18n-placeholder="form.emailPh" placeholder="maria@email.com" autocomplete="email"></div>
+        <div class="field"><label data-i18n="form.date">Preferred Viewing Date *</label><input id="f-date" type="date"></div>
+        <div class="field"><label data-i18n="form.time">Preferred Time</label>
+          <select id="f-time">
+            <option value="" data-i18n="form.timeAny">Any time</option>
+            <option>9:00 &ndash; 11:00</option><option>11:00 &ndash; 13:00</option>
+            <option>13:00 &ndash; 15:00</option><option>15:00 &ndash; 17:00</option>
+            <option>17:00 &ndash; 19:00</option><option data-i18n="form.timeEvening">Evening (after 19:00)</option>
+          </select>
+        </div>
+        <div class="field"><label data-i18n="form.notes">About You (optional)</label><textarea id="f-notes" data-i18n-placeholder="form.notesPh" placeholder="Employment, move-in date, questions&hellip;"></textarea></div>
+        <div id="form-err" style="display:none;color:#DC2626;font-size:12px;padding:8px 12px;background:#FEE2E2;border-radius:8px"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="closeModal()" data-i18n="btn.cancel">Cancel</button>
+        <button class="btn-submit" id="submit-btn" onclick="submitBooking()" data-i18n="btn.submit">&#x1F4C5; Request Viewing</button>
+      </div>
+    </div>
+    <div class="success-box" id="success-box">
+      <div style="font-size:52px;margin-bottom:12px">&#x2705;</div>
+      <h3 style="font-size:18px;font-weight:800;margin-bottom:8px;color:var(--green)" data-i18n="success.title">Viewing Requested!</h3>
+      <p id="success-msg" style="font-size:13px;color:var(--muted);line-height:1.6"></p>
+      <button onclick="closeModal()" style="margin-top:20px;padding:10px 28px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit" data-i18n="btn.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer" id="footer-main"><div id="footer-brand-line" data-i18n="footer.brand">Property listings</div></div>
+
+<!-- Org admin: connect WhatsApp for public page (first visit) -->
+<div class="modal-overlay" id="wa-setup-overlay" onclick="if(event.target===this)closeWaSetupModal()" style="z-index:10050">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <h3>&#x1F4AC; Connect WhatsApp</h3>
+      <p id="wa-setup-sub">Visitors use this number to message your team from the public listings page.</p>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>WhatsApp number</label><input id="wa-setup-input" type="tel" placeholder="e.g. 447911123456 (country code, no +)" autocomplete="tel"></div>
+      <div id="wa-setup-err" style="display:none;color:#DC2626;font-size:12px;padding:8px 12px;background:#FEE2E2;border-radius:8px"></div>
+    </div>
+    <div class="modal-foot" style="flex-wrap:wrap">
+      <button type="button" class="btn-cancel" onclick="waSetupSkip()">Skip</button>
+      <button type="button" class="btn-submit" style="background:var(--accent)" onclick="waSetupSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="share-toast" id="share-toast"></div>
+
+<script src="/js/rooms.js"></script>
+</body>
+</html>

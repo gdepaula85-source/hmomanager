@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>landlordapp.io — Tenant Portal</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/tenant-portal.css">
+<script src="/config.js"></script>
+</head>
+<body>
+
+<!-- ── TOAST ───────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── LOGIN ──────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🏠</div>
+      <div class="login-title">Tenant Portal</div>
+      <div class="login-sub">Powered by landlordapp.io</div>
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <div class="field">
+      <label class="field-label">Username</label>
+      <input class="inp" id="login-email" type="text" placeholder="e.g. john.5" autocomplete="username" oninput="this.value=this.value.toLowerCase()">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Your username was provided by your property manager</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Password</label>
+      <input class="inp" id="login-pass" type="password" placeholder="Enter your password" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-divider">or</div>
+    <button class="btn-link" onclick="showSetPassword()">🔑 First time? Set up your password</button>
+    <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--dim)">
+      Your email must match the one your landlord registered.<br>Contact your property manager if you need help.
+    </div>
+  </div>
+</div>
+
+<!-- ── SET PASSWORD MODAL ─────────────────────────── -->
+<div id="setup-modal" style="display:none" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span class="modal-title">Set Your Password</span>
+      <button class="modal-close" onclick="document.getElementById('setup-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Enter your username (provided by your property manager), then choose a password.</p>
+      <div class="field">
+        <label class="field-label">Your Username</label>
+        <input class="inp" id="setup-email" type="text" placeholder="e.g. john.5" autocomplete="username" oninput="this.value=this.value.toLowerCase()">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Your username was provided by your property manager</div>
+      </div>
+      <div class="field">
+        <label class="field-label">New Password</label>
+        <input class="inp" id="setup-pass1" type="password" placeholder="Min 6 characters">
+      </div>
+      <div class="field">
+        <label class="field-label">Confirm Password</label>
+        <input class="inp" id="setup-pass2" type="password" placeholder="Repeat password">
+      </div>
+      <div id="setup-error" class="login-error"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="document.getElementById('setup-modal').style.display='none'">Cancel</button>
+      <button class="btn-primary" id="setup-btn" style="flex:1" onclick="doSetPassword()">Set Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP ────────────────────────────────────────── -->
+<div id="app">
+  <!-- Header -->
+  <div class="portal-header">
+    <div class="header-logo">Prop<span>Manager</span></div>
+    <div class="header-tenant">
+      <div id="hdr-avatar" class="header-avatar">T</div>
+      <div>
+        <div id="hdr-name" class="header-name">Tenant</div>
+        <div id="hdr-prop" class="header-prop">Property</div>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <!-- Pages -->
+  <!-- HOME -->
+  <div id="page-home" class="page active">
+    <div id="home-hero" class="hero-card">
+      <div id="home-name" class="hero-name">Hello!</div>
+      <div id="home-prop" class="hero-prop">Loading…</div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div id="stat-rent" class="hero-stat-val green">—</div>
+          <div class="hero-stat-lbl">Weekly Rent</div>
+        </div>
+        <div class="hero-stat">
+          <div id="stat-arrears" class="hero-stat-val amber">—</div>
+          <div class="hero-stat-lbl">Arrears</div>
+        </div>
+        <div class="hero-stat">
+          <div id="stat-next" class="hero-stat-val">—</div>
+          <div class="hero-stat-lbl">Next Due</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="home-alerts"></div>
+
+    <!-- Quick actions -->
+    <div class="section-heading">Quick Actions</div>
+    <div class="quick-actions">
+      <button class="quick-btn" onclick="goTab('payments')">
+        <div class="quick-btn-icon">💷</div>
+        <div><div class="quick-btn-label">My Payments</div><div class="quick-btn-sub">View history</div></div>
+      </button>
+      <button class="quick-btn" onclick="openMaintenanceForm()">
+        <div class="quick-btn-icon">🔧</div>
+        <div><div class="quick-btn-label">Report Issue</div><div class="quick-btn-sub">Maintenance request</div></div>
+      </button>
+      <button class="quick-btn" onclick="goTab('documents')">
+        <div class="quick-btn-icon">📁</div>
+        <div><div class="quick-btn-label">My Documents</div><div class="quick-btn-sub">Upload & view</div></div>
+      </button>
+      <button class="quick-btn" onclick="goTab('profile')">
+        <div class="quick-btn-icon">👤</div>
+        <div><div class="quick-btn-label">My Profile</div><div class="quick-btn-sub">Edit details</div></div>
+      </button>
+    </div>
+
+    <!-- Give Notice button - only shows for active tenants -->
+    <div id="give-notice-btn" style="display:none;margin-bottom:16px">
+      <button onclick="openNoticeModal()" style="width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:22px">📋</span>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:#C2410C">Give Notice to Vacate</div>
+          <div style="font-size:12px;color:#EA580C;margin-top:2px">Let your property manager know your move-out date</div>
+        </div>
+        <span style="color:#EA580C;font-size:18px">›</span>
+      </button>
+    </div>
+
+    <!-- Notice countdown -->
+    <div id="notice-section" style="display:none">
+      <div class="section-heading">📋 Notice Period</div>
+      <div id="notice-countdown-card" class="notice-countdown"></div>
+    </div>
+
+    <!-- Move-in checklist -->
+    <div class="section-heading">Move-in Checklist</div>
+    <div class="card" id="checklist-card"></div>
+
+    <!-- Contact landlord -->
+    <div class="section-heading">Contact Your Manager</div>
+    <div class="card" id="contact-card"></div>
+  </div>
+
+  <!-- PAYMENTS -->
+  <div id="page-payments" class="page">
+    <div class="section-heading">Payment Summary</div>
+    <div class="card" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:0;overflow:hidden" id="pay-summary"></div>
+
+    <div class="section-heading">Upcoming Payments</div>
+    <div class="card" id="upcoming-payments"></div>
+
+    <div class="section-heading">Payment History</div>
+    <div class="card" id="payment-history"></div>
+  </div>
+
+  <!-- MAINTENANCE -->
+  <div id="page-maintenance" class="page">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:18px;font-weight:800">Maintenance</div>
+        <div style="font-size:12px;color:var(--muted)" id="maint-count">Your requests</div>
+      </div>
+      <button class="btn-green" onclick="openMaintenanceForm()">+ New Request</button>
+    </div>
+    <div id="maint-list"></div>
+  </div>
+
+  <!-- DOCUMENTS -->
+  <div id="page-documents" class="page">
+    <div class="section-heading">Upload Documents</div>
+    <div class="card">
+      <div class="field">
+        <label class="field-label">Document Type</label>
+        <select class="inp" id="doc-type-sel">
+          <option>Right to Rent</option>
+          <option>Passport / ID</option>
+          <option>Proof of Address</option>
+          <option>Employment Reference</option>
+          <option>Landlord Reference</option>
+          <option>Bank Statement</option>
+          <option>NI Number</option>
+          <option>Tenancy Application</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <input type="file" id="doc-file-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple style="display:none" onchange="handleDocUpload(this)">
+      <button class="upload-zone" style="width:100%;font-family:inherit" onclick="document.getElementById('doc-file-input').click()">
+        <div class="upload-zone-icon">📎</div>
+        <div class="upload-zone-title">Tap to upload document</div>
+        <div class="upload-zone-sub">PDF, JPG, PNG · max 10MB each</div>
+      </button>
+    </div>
+
+    <div class="section-heading">My Documents</div>
+    <div id="doc-list"></div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="page-profile" class="page">
+    <div class="card" style="text-align:center;padding:28px 20px">
+      <div id="profile-avatar" class="profile-avatar">T</div>
+      <div id="profile-name" class="profile-name">Tenant</div>
+      <div id="profile-prop" class="profile-prop">Property · Room</div>
+      <div style="margin-top:12px" id="profile-status-badge"></div>
+    </div>
+
+    <div class="section-heading">Personal Details</div>
+    <div class="card">
+      <div class="field"><label class="field-label">Full Name</label><input class="inp" id="p-name" type="text"></div>
+      <div class="field"><label class="field-label">Email Address</label><input class="inp" id="p-email" type="email"></div>
+      <div class="field"><label class="field-label">WhatsApp Number</label><input class="inp" id="p-wa" type="tel" placeholder="447911000000 (include country code)"></div>
+      <button class="btn-primary" onclick="saveProfile()">Save Changes</button>
+    </div>
+
+    <div class="section-heading">Change Password</div>
+    <div class="card">
+      <div class="field"><label class="field-label">Current Password</label><input class="inp" id="p-old-pass" type="password"></div>
+      <div class="field"><label class="field-label">New Password</label><input class="inp" id="p-new-pass" type="password"></div>
+      <div class="field"><label class="field-label">Confirm New Password</label><input class="inp" id="p-confirm-pass" type="password"></div>
+      <button class="btn-primary" onclick="changePassword()">Update Password</button>
+    </div>
+
+    <div class="section-heading">Tenancy Details</div>
+    <div class="card" id="tenancy-details-card"></div>
+
+    <div class="section-heading" id="give-notice-heading">Notice to Vacate</div>
+    <div class="card" id="give-notice-card"></div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div class="bottom-nav">
+    <button class="nav-item active" onclick="goTab('home')" id="nav-home">
+      <div class="nav-icon">🏠</div>
+      <div class="nav-label">Home</div>
+    </button>
+    <button class="nav-item" onclick="goTab('payments')" id="nav-payments">
+      <div class="nav-icon">💷</div>
+      <div class="nav-label">Payments</div>
+      <div id="nav-pay-badge" class="nav-badge" style="display:none"></div>
+    </button>
+    <button class="nav-item" onclick="goTab('maintenance')" id="nav-maintenance">
+      <div class="nav-icon">🔧</div>
+      <div class="nav-label">Maintenance</div>
+      <div id="nav-maint-badge" class="nav-badge" style="display:none"></div>
+    </button>
+    <button class="nav-item" onclick="goTab('documents')" id="nav-documents">
+      <div class="nav-icon">📁</div>
+      <div class="nav-label">Documents</div>
+    </button>
+    <button class="nav-item" onclick="goTab('profile')" id="nav-profile">
+      <div class="nav-icon">👤</div>
+      <div class="nav-label">Profile</div>
+    </button>
+  </div>
+</div>
+
+<!-- MAINTENANCE MODAL -->
+<div id="maint-modal" style="display:none" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span class="modal-title">🔧 Report Maintenance Issue</span>
+      <button class="modal-close" onclick="document.getElementById('maint-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label">Issue Description *</label>
+        <textarea class="textarea" id="maint-issue" rows="3" placeholder="e.g. Boiler not working, no hot water since this morning"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label class="field-label">Category</label>
+          <select class="inp" id="maint-cat">
+            <option>Plumbing</option><option>Electrical</option>
+            <option>Heating / Boiler</option><option>Windows / Doors</option>
+            <option>Damp / Mould</option><option>Kitchen</option>
+            <option>Bathroom</option><option>General</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Priority</label>
+          <select class="inp" id="maint-pri">
+            <option value="urgent">🔴 Urgent (safety/no water/heat)</option>
+            <option value="high">🟠 High (significant issue)</option>
+            <option value="medium" selected>🟡 Medium (normal repair)</option>
+            <option value="low">🟢 Low (minor/cosmetic)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Additional Notes</label>
+        <textarea class="textarea" id="maint-notes" rows="2" placeholder="Any additional context, access details, best times to attend…"></textarea>
+      </div>
+      <div class="field">
+        <label class="field-label">Attach Photo (optional)</label>
+        <input type="file" id="maint-photo-input" accept="image/*" style="display:none" onchange="previewMaintPhoto(this)">
+        <button class="upload-zone" style="width:100%;font-family:inherit" onclick="document.getElementById('maint-photo-input').click()">
+          <div class="upload-zone-icon">📷</div>
+          <div class="upload-zone-title">Add a photo</div>
+          <div class="upload-zone-sub">Helps us understand the issue faster</div>
+        </button>
+        <div id="maint-photo-preview" style="margin-top:10px;display:none">
+          <img id="maint-preview-img" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="document.getElementById('maint-modal').style.display='none'">Cancel</button>
+      <button class="btn-primary" id="maint-submit-btn" style="flex:1" onclick="submitMaintenance()">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTICE MODAL -->
+<div id="notice-modal" style="display:none" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <span class="modal-title">📋 Give Notice to Vacate</span>
+      <button class="modal-close" onclick="document.getElementById('notice-modal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert-banner warning">
+        <div class="alert-icon">⚠️</div>
+        <div>
+          <div class="alert-title">Please read before continuing</div>
+          <div class="alert-msg">Your tenancy agreement requires 4 weeks written notice. Once submitted, your property manager will be notified immediately.</div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Intended Move-out Date *</label>
+        <input class="inp" id="notice-date" type="date">
+      </div>
+      <div class="field">
+        <label class="field-label">Reason for Leaving (optional)</label>
+        <select class="inp" id="notice-reason">
+          <option value="">Prefer not to say</option>
+          <option>Moving in with partner</option>
+          <option>Buying a property</option>
+          <option>Relocating for work</option>
+          <option>Family circumstances</option>
+          <option>Rent affordability</option>
+          <option>Property condition</option>
+          <option>Found alternative accommodation</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Additional Notes</label>
+        <textarea class="textarea" id="notice-notes" rows="2" placeholder="Anything you'd like your property manager to know…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="document.getElementById('notice-modal').style.display='none'">Cancel</button>
+      <button class="btn-red" style="flex:1" onclick="submitNotice()">Submit Notice</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/js/tenant-portal.js"></script>
+</body>
+</html>

@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HMO Software Compared: LandlordApp vs Coho, Arthur, Hammock + 4 more</title>
+<meta name="description" content="Side-by-side comparison of UK property management software for HMO and R2R operators. Pricing, features, room-level rent tracking, landlord payments. See where LandlordApp.io saves you 50%+ over Arthur Online or Coho at scale.">
+<link rel="canonical" href="https://landlordapp.io/operators/vs-competitors.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HMO Software Compared — LandlordApp.io vs the rest">
+<meta property="og:description" content="Pricing &amp; features for Arthur Online, Coho, Landlord Vision, Hammock, PaTMa, GoTenant — and how LandlordApp.io compares.">
+<meta property="og:url" content="https://landlordapp.io/operators/vs-competitors.html">
+<meta property="og:image" content="https://landlordapp.io/og-image.svg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="HMO Software Compared — LandlordApp.io vs the rest">
+<meta name="twitter:description" content="Pricing and features for the major UK property management SaaS — Arthur, Coho, Hammock, Vision and more.">
+<meta name="twitter:image" content="https://landlordapp.io/og-image.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/operators/_operator-base.css">
+<style>
+/* Page-specific styles — built on top of _operator-base.css tokens */
+:root{
+  --table-shadow:0 6px 24px rgba(15,23,42,.08);
+  --row-stripe:rgba(15,23,42,.025);
+}
+
+/* ── Animation primitives ───────────────────────────────────────────── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+@keyframes pulseGlow{0%,100%{opacity:.4}50%{opacity:.7}}
+@keyframes shimmer{0%{background-position:-300px 0}100%{background-position:300px 0}}
+.fade-up{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.fade-up.in{opacity:1;transform:none}
+.fade-up.delay-1{transition-delay:.08s}
+.fade-up.delay-2{transition-delay:.16s}
+.fade-up.delay-3{transition-delay:.24s}
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.cmp-hero{padding:88px 0 96px;position:relative;overflow:hidden}
+.cmp-hero::before{content:"";position:absolute;top:-180px;left:50%;transform:translateX(-50%);width:900px;height:480px;background:radial-gradient(ellipse,var(--green-glow) 0%,transparent 65%);pointer-events:none;animation:pulseGlow 6s ease-in-out infinite}
+.cmp-hero .eyebrow{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--green);background:rgba(0,184,148,.12);padding:6px 14px;border-radius:999px;margin-bottom:18px}
+.cmp-hero h1{font-size:clamp(2.2rem,5vw,3.6rem);font-weight:800;line-height:1.1;margin-bottom:18px;letter-spacing:-.02em}
+.cmp-hero h1 em{font-style:italic;font-family:'Instrument Serif',serif;color:var(--green);font-weight:400}
+.cmp-hero .lede{font-size:1.1rem;color:rgba(255,255,255,.72);max-width:680px;line-height:1.6;margin-bottom:32px}
+.cmp-hero .actions{display:flex;gap:12px;flex-wrap:wrap}
+.cmp-hero .btn-ghost{background:transparent;color:#fff;padding:13px 24px;border:1px solid rgba(255,255,255,.18);border-radius:999px;font-weight:600;font-size:.92rem;display:inline-flex;align-items:center;gap:8px}
+.cmp-hero .btn-ghost:hover{background:rgba(255,255,255,.06);color:#fff}
+.cmp-hero .meta{margin-top:36px;display:flex;gap:32px;flex-wrap:wrap;font-size:.78rem;color:rgba(255,255,255,.55)}
+.cmp-hero .meta strong{color:#fff;font-weight:700}
+
+/* ── Savings strip ─────────────────────────────────────────────────── */
+.savings-strip{background:var(--cream);padding:64px 0}
+.savings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:32px}
+.savings-card{background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px 24px;box-shadow:var(--shadow-sm);transition:transform .25s ease,box-shadow .25s ease}
+.savings-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
+.savings-card .size{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px}
+.savings-card .save{font-size:2.6rem;font-weight:800;color:var(--green-dark);font-family:'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;line-height:1}
+.savings-card .save sup{font-size:1.2rem;color:var(--text-mid);font-weight:600}
+.savings-card .vs{margin-top:10px;font-size:.84rem;color:var(--text-mid)}
+.savings-card .vs span{color:var(--text);font-weight:700}
+@media(max-width:760px){.savings-grid{grid-template-columns:1fr}}
+
+/* ── Pricing table (dark) ──────────────────────────────────────────── */
+.pricing-section{background:var(--navy);color:#fff;padding:88px 0;position:relative}
+.pricing-section::after{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(0,184,148,.4) 50%,transparent 100%)}
+.pricing-section h2{color:#fff}
+.pricing-section h2 em{color:var(--green)}
+.pricing-section .lede{color:rgba(255,255,255,.6);margin-bottom:36px;max-width:640px}
+.tbl-wrap{overflow-x:auto;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:0;-webkit-overflow-scrolling:touch}
+.cmp-tbl{width:100%;border-collapse:collapse;font-size:.88rem;min-width:760px}
+.cmp-tbl th{text-align:left;padding:16px 14px;font-weight:700;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.6);border-bottom:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);position:sticky;top:0;z-index:2}
+.cmp-tbl td{padding:18px 14px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle;color:rgba(255,255,255,.85)}
+.cmp-tbl tr:last-child td{border-bottom:none}
+.cmp-tbl tr.us{background:linear-gradient(90deg,rgba(0,184,148,.18) 0%,rgba(0,184,148,.04) 100%);position:relative}
+.cmp-tbl tr.us::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green)}
+.cmp-tbl tr.us td:first-child{font-weight:800}
+.cmp-tbl tr.us td{color:#fff}
+.cmp-tbl tr:hover:not(.us){background:rgba(255,255,255,.03)}
+.cmp-tbl .name{font-weight:700;color:#fff;display:flex;align-items:center;gap:10px}
+.cmp-tbl .name .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);flex-shrink:0}
+.cmp-tbl tr.us .name .dot{background:var(--green);box-shadow:0 0 0 4px rgba(0,184,148,.2)}
+.cmp-tbl .price{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;color:#fff;white-space:nowrap}
+.cmp-tbl .price-from{font-size:.7rem;font-weight:500;color:rgba(255,255,255,.5);display:block;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.cmp-tbl .yes{color:#10B981;font-weight:700}
+.cmp-tbl .partial{color:#F59E0B;font-weight:700}
+.cmp-tbl .no{color:#EF4444;font-weight:600;opacity:.7}
+.cmp-tbl .cmp-sub{font-size:.74rem;color:rgba(255,255,255,.55);display:block;margin-top:3px}
+.tbl-caption{font-size:.78rem;color:rgba(255,255,255,.5);margin-top:14px;display:flex;align-items:center;gap:8px}
+.tbl-caption .key{display:inline-flex;gap:6px;align-items:center;margin-right:14px}
+.tbl-caption .key b{color:#fff;font-weight:700}
+
+/* ── Feature checklist (light cream) ───────────────────────────────── */
+.features-section{background:var(--cream);padding:88px 0}
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:36px}
+.feat-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px 22px;transition:transform .2s ease,box-shadow .2s ease}
+.feat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.feat-card .icon{width:40px;height:40px;border-radius:10px;background:var(--green-soft);display:grid;place-items:center;font-size:1.2rem;margin-bottom:14px}
+.feat-card h3{font-size:1.05rem;font-weight:700;margin-bottom:8px;color:var(--text)}
+.feat-card p{font-size:.88rem;color:var(--text-mid);line-height:1.55;margin-bottom:14px}
+.feat-card .who{display:flex;flex-wrap:wrap;gap:6px;font-size:.7rem;font-weight:600;color:var(--green-dark)}
+.feat-card .who span{background:var(--green-soft);padding:3px 9px;border-radius:999px}
+.feat-card .who span.us{background:var(--green);color:#fff}
+
+/* ── Competitor breakdown (alternating bands) ──────────────────────── */
+.players{background:#fff;padding:88px 0}
+.player-row{display:grid;grid-template-columns:200px 1fr;gap:32px;padding:28px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.player-row:last-child{border-bottom:none}
+.player-row .left{display:flex;flex-direction:column}
+.player-row .name{font-size:1.4rem;font-weight:800;color:var(--text);letter-spacing:-.01em}
+.player-row .price-tag{font-size:.78rem;color:var(--text-mid);font-weight:600;margin-top:6px}
+.player-row .url{font-size:.74rem;color:var(--green-dark);margin-top:10px;font-weight:600}
+.player-row .pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.player-row .pros-cons .col{background:var(--cream);border-radius:10px;padding:14px 16px}
+.player-row .pros-cons .col h4{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.player-row .pros-cons .col.pros h4{color:var(--green-dark)}
+.player-row .pros-cons .col.cons h4{color:#B45309}
+.player-row .pros-cons ul{list-style:none}
+.player-row .pros-cons li{font-size:.84rem;color:var(--text-mid);padding-left:18px;position:relative;line-height:1.55;margin-bottom:5px}
+.player-row .pros-cons .pros li::before{content:"+";position:absolute;left:0;color:var(--green);font-weight:800}
+.player-row .pros-cons .cons li::before{content:"−";position:absolute;left:0;color:#B45309;font-weight:800}
+@media(max-width:760px){.player-row{grid-template-columns:1fr;gap:18px}.player-row .pros-cons{grid-template-columns:1fr}}
+
+/* ── Honest section (dark) ─────────────────────────────────────────── */
+.honest{background:var(--navy-soft);color:#fff;padding:88px 0}
+.honest .lede{color:rgba(255,255,255,.6);max-width:640px;margin-bottom:36px}
+.honest-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.honest-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px}
+.honest-card h3{font-size:1.05rem;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.honest-card .pill{font-size:.62rem;font-weight:700;background:rgba(245,158,11,.15);color:#FCD34D;padding:3px 9px;border-radius:999px;letter-spacing:.06em;text-transform:uppercase}
+.honest-card p{font-size:.86rem;color:rgba(255,255,255,.7);line-height:1.6}
+.honest-card .answer{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);font-size:.84rem;color:#A7F3D0}
+.honest-card .answer strong{color:#fff;font-weight:700}
+
+/* ── Final CTA (cream → green gradient) ────────────────────────────── */
+.cta-final{background:linear-gradient(135deg,var(--green-soft) 0%,var(--cream) 100%);padding:88px 0;text-align:center}
+.cta-final h2{font-size:clamp(1.8rem,4vw,2.6rem);margin-bottom:14px}
+.cta-final p{color:var(--text-mid);font-size:1.05rem;max-width:560px;margin:0 auto 28px}
+.cta-final .btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.cta-final .btn-secondary{background:#fff;color:var(--text);padding:13px 24px;border:1px solid var(--border);border-radius:999px;font-weight:700;font-size:.92rem}
+.cta-final .btn-secondary:hover{border-color:var(--green);color:var(--green-dark)}
+
+/* ── Footer note ─────────────────────────────────────────────────── */
+.disclaimer{padding:32px 0;background:#fff;text-align:center;font-size:.75rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.disclaimer a{color:var(--green-dark);font-weight:600}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container nav-inner">
+    <a class="nav-brand" href="/"><span class="dot">🏠</span><span>LandlordApp<span style="color:var(--green)">.io</span></span></a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#pricing">Pricing</a>
+      <a href="/blog/">Blog</a>
+      <a class="cta" href="/login.html?tab=signup">Start free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero ──────────────────────────────────────────────────────── -->
+<section class="hero cmp-hero">
+  <div class="container">
+    <span class="eyebrow fade-up">Software comparison · Updated April 2026</span>
+    <h1 class="fade-up delay-1">How LandlordApp stacks up against<br><em>the rest of the UK market</em></h1>
+    <p class="lede fade-up delay-2">An honest side-by-side: Arthur Online, Coho, Hammock, Landlord Vision, PaTMa, GoTenant. Where each one shines, where it struggles, and where you save by switching to a tool built specifically for HMO and rent-to-rent operators.</p>
+    <div class="actions fade-up delay-3">
+      <a class="btn-primary" href="#pricing-table">See the pricing table →</a>
+      <a class="btn-ghost" href="/login.html?tab=signup">Start free for 3 properties</a>
+    </div>
+    <div class="meta fade-up delay-3">
+      <div>📅 <strong>Last updated</strong> · April 2026</div>
+      <div>🔍 <strong>Sources</strong> · public pricing pages</div>
+      <div>🇬🇧 <strong>UK market</strong> · 8 vendors compared</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Savings strip ─────────────────────────────────────────────── -->
+<section class="savings-strip">
+  <div class="container">
+    <h2 class="sec-title fade-up">What you <em>save</em></h2>
+    <p style="color:var(--text-mid);max-width:580px;margin-top:6px" class="fade-up delay-1">Realistic monthly savings if you switch from the most-popular alternatives, based on a representative HMO/R2R portfolio.</p>
+    <div class="savings-grid">
+      <div class="savings-card fade-up">
+        <div class="size">3 properties · 15 tenants</div>
+        <div class="save" data-counter="14">£0<sup>/mo</sup></div>
+        <div class="vs">On Free tier <span>saves ~£14/mo vs Vision basic</span></div>
+      </div>
+      <div class="savings-card fade-up delay-1">
+        <div class="size">15 properties · 75 tenants</div>
+        <div class="save" data-counter="60">£0<sup>/mo</sup></div>
+        <div class="vs">On £49/mo Starter <span>saves ~£60/mo vs Coho at HMO scale</span></div>
+      </div>
+      <div class="savings-card fade-up delay-2">
+        <div class="size">60 properties · 15 users</div>
+        <div class="save" data-counter="150">£0<sup>/mo</sup></div>
+        <div class="vs">On £149/mo Business <span>saves £100–150/mo vs Arthur</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing comparison table ─────────────────────────────────── -->
+<section class="pricing-section" id="pricing-table">
+  <div class="container">
+    <h2 class="sec-title fade-up">Pricing & features <em>side-by-side</em></h2>
+    <p class="lede fade-up delay-1">All prices in GBP, sourced from each vendor's public pricing page. "From" is the cheapest entry-level tier; the most-popular tier is what real HMO operators typically pay.</p>
+
+    <div class="tbl-wrap fade-up delay-2">
+      <table class="cmp-tbl" aria-label="UK property management software comparison">
+        <thead>
+          <tr>
+            <th>Software</th>
+            <th>Starting price</th>
+            <th>Most-popular tier</th>
+            <th>HMO room-level</th>
+            <th>Landlord payments (R2R)</th>
+            <th>Free trial</th>
+            <th>UK-focused</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="us">
+            <td><div class="name"><span class="dot"></span>LandlordApp.io</div><span class="cmp-sub">Built for HMO + R2R operators</span></td>
+            <td><span class="price">Free</span><span class="price-from">3 properties</span></td>
+            <td><span class="price">£89/mo</span><span class="price-from">25 properties · unlimited tenants</span></td>
+            <td><span class="yes">✓ Native</span></td>
+            <td><span class="yes">✓ Built-in</span></td>
+            <td><span class="yes">14 days · no card</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>Coho</div><span class="cmp-sub">HMO-only, per-room model</span></td>
+            <td><span class="price">~£8–10/room/mo</span><span class="price-from">scales with room count</span></td>
+            <td><span class="price">~£60+/mo</span><span class="price-from">10-room property</span></td>
+            <td><span class="yes">✓ Native</span></td>
+            <td><span class="partial">~ Partial</span></td>
+            <td><span class="yes">14 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>Arthur Online</div><span class="cmp-sub">Generic property mgmt</span></td>
+            <td><span class="price">£65/mo</span><span class="price-from">1–10 units</span></td>
+            <td><span class="price">£150–250/mo</span><span class="price-from">11–50 units</span></td>
+            <td><span class="partial">~ HMO add-on</span></td>
+            <td><span class="no">✗ Manual</span></td>
+            <td><span class="yes">30 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>Landlord Vision</div><span class="cmp-sub">Popular DIY landlord tool</span></td>
+            <td><span class="price">£14/mo</span><span class="price-from">Lite tier</span></td>
+            <td><span class="price">£30–66/mo</span><span class="price-from">Pro / Premium</span></td>
+            <td><span class="partial">~ Limited</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">30 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>Hammock</div><span class="cmp-sub">Banking-first; Open Banking feeds</span></td>
+            <td><span class="price">£14/mo</span><span class="price-from">Per-portfolio</span></td>
+            <td><span class="price">£30/mo</span><span class="price-from">Pro tier</span></td>
+            <td><span class="no">✗ Whole-property</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">30 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>PaTMa Property Manager</div><span class="cmp-sub">UK-focused, established</span></td>
+            <td><span class="price">£19/mo</span><span class="price-from">Starter</span></td>
+            <td><span class="price">£39/mo</span><span class="price-from">Standard</span></td>
+            <td><span class="partial">~ Some support</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">14 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>GoTenant</div><span class="cmp-sub">Letting-agent angle</span></td>
+            <td><span class="price">£10/mo</span><span class="price-from">Solo</span></td>
+            <td><span class="price">£25/mo</span><span class="price-from">Agent tier</span></td>
+            <td><span class="partial">~ Letting-agent</span></td>
+            <td><span class="partial">~ Agent-style</span></td>
+            <td><span class="yes">14 days</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><div class="name"><span class="dot"></span>Rentila</div><span class="cmp-sub">Lightweight, EU-built</span></td>
+            <td><span class="price">Free</span><span class="price-from">1 property</span></td>
+            <td><span class="price">£6/mo</span><span class="price-from">Premium</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">Forever-free tier</span></td>
+            <td><span class="partial">~ EU/UK</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tbl-caption fade-up">
+      <span class="key"><b style="color:#10B981">✓</b> Native / built-in</span>
+      <span class="key"><b style="color:#F59E0B">~</b> Partial / via add-on</span>
+      <span class="key"><b style="color:#EF4444">✗</b> Not available</span>
+      <span style="margin-left:auto;font-style:italic">Scroll horizontally on mobile →</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Feature differentiators ────────────────────────────────── -->
+<section class="features-section">
+  <div class="container">
+    <h2 class="sec-title fade-up">What makes LandlordApp <em>different</em></h2>
+    <p style="color:var(--text-mid);max-width:600px;margin-top:6px" class="fade-up delay-1">Most of the UK market is built for whole-property landlords. We're built for the people who run rooms — and the people who run properties they don't own.</p>
+    <div class="feat-grid">
+      <div class="feat-card fade-up">
+        <div class="icon">🛏️</div>
+        <h3>Per-room rent tracking</h3>
+        <p>Track 6 different tenants in 6 different rooms with 6 different rent dates and 6 different deposit schemes. Every other tool treats this as an edge case; we treat it as the default.</p>
+        <div class="who"><span class="us">LandlordApp</span><span>Coho</span></div>
+      </div>
+      <div class="feat-card fade-up delay-1">
+        <div class="icon">🏦</div>
+        <h3>Landlord payments (R2R)</h3>
+        <p>Built-in workflow for paying the property owner separately from collecting tenant rent. Track margin per property, generate landlord statements, automate monthly payouts.</p>
+        <div class="who"><span class="us">LandlordApp</span></div>
+      </div>
+      <div class="feat-card fade-up delay-2">
+        <div class="icon">📋</div>
+        <h3>UK contract library</h3>
+        <p>Generate AST, Excluded Licence, Lodger Agreement, Company Let, HMO Room Letting and Renewal — pre-signed with your saved Authorised Signatory. Email or WhatsApp the PDF directly.</p>
+        <div class="who"><span class="us">LandlordApp</span></div>
+      </div>
+      <div class="feat-card fade-up">
+        <div class="icon">📊</div>
+        <h3>Deal Analyser</h3>
+        <p>Built-in HMO &amp; BTL deal modelling — gross yield, ROI, void buffer, break-even rooms. Save scenarios, generate PDF reports for investors.</p>
+        <div class="who"><span class="us">LandlordApp</span></div>
+      </div>
+      <div class="feat-card fade-up delay-1">
+        <div class="icon">🌐</div>
+        <h3>Public listings page</h3>
+        <p>Auto-generated /rooms page showing every vacancy across your portfolio — with photos, descriptions, and a WhatsApp enquiry button. Brand it with your portfolio name and logo.</p>
+        <div class="who"><span class="us">LandlordApp</span></div>
+      </div>
+      <div class="feat-card fade-up delay-2">
+        <div class="icon">📱</div>
+        <h3>WhatsApp-first comms</h3>
+        <p>Chase rent, share new rooms, send agreements — all via WhatsApp links pre-filled with the right context. Tenants prefer it; you skip the email-to-spam-folder dance.</p>
+        <div class="who"><span class="us">LandlordApp</span><span>Some agents</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Per-competitor breakdown ────────────────────────────────── -->
+<section class="players">
+  <div class="container">
+    <h2 class="sec-title fade-up">A closer look at <em>each one</em></h2>
+    <p style="color:var(--text-mid);max-width:600px;margin-top:6px" class="fade-up delay-1">Honest takes — what each tool does well, and where it falls short for HMO / R2R operators specifically.</p>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">Coho</div>
+        <div class="price-tag">From ~£8–10/room/mo</div>
+        <div class="url">coho.life</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Most HMO-native UI of any UK competitor</li>
+            <li>Deep room-level licence + fire safety tracking</li>
+            <li>Strong tenant onboarding flow</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>Per-room pricing punishes scale — 6-room HMO is ~£60/mo before any other features</li>
+            <li>R2R landlord-payment workflow weaker than ours</li>
+            <li>No deal analyser, no public listings page</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">Arthur Online</div>
+        <div class="price-tag">From £65/mo</div>
+        <div class="url">arthuronline.co.uk</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Deep ecosystem — Xero/QuickBooks/Sage already wired</li>
+            <li>Mature mobile apps for tenants &amp; contractors</li>
+            <li>Established, well-documented platform</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>Generic property-mgmt — HMO room-level is an add-on, not native</li>
+            <li>£150–250/mo for typical HMO portfolio sizes</li>
+            <li>R2R landlord payments are manual journals</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">Landlord Vision</div>
+        <div class="price-tag">From £14/mo</div>
+        <div class="url">landlordvision.co.uk</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Strong tax / self-assessment workflows</li>
+            <li>Cheapest serious entry point on the market</li>
+            <li>Good for whole-property single-let landlords</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>HMO room-level is awkward — splits arrive as workarounds</li>
+            <li>No R2R landlord-payment workflow</li>
+            <li>UI showing its age in 2026</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">Hammock</div>
+        <div class="price-tag">From £14/mo</div>
+        <div class="url">usehammock.com</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Best-in-class Open Banking feed + auto-reconciliation</li>
+            <li>Beautiful modern UI, fast onboarding</li>
+            <li>Strong financial reporting for accountants</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>Whole-property only — no HMO room granularity</li>
+            <li>No tenant management workflow (rent chasing, agreements)</li>
+            <li>Built for landlords with banks, not operators with portfolios</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">PaTMa</div>
+        <div class="price-tag">From £19/mo</div>
+        <div class="url">patma.co.uk</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Strong UK regulatory updates (Section 21, EICR, Right-to-Rent)</li>
+            <li>Property-deal sourcing tool (separate product) is well-regarded</li>
+            <li>Useful if you already use their sourcing tool — same login</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>Property-mgmt UI feels secondary to their sourcing tool</li>
+            <li>HMO support is thin compared to Coho or LandlordApp</li>
+            <li>No native R2R landlord-payment workflow</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-row fade-up">
+      <div class="left">
+        <div class="name">GoTenant</div>
+        <div class="price-tag">From £10/mo</div>
+        <div class="url">gotenant.com</div>
+      </div>
+      <div class="pros-cons">
+        <div class="col pros">
+          <h4>Where it wins</h4>
+          <ul>
+            <li>Built for letting agents managing landlord portfolios</li>
+            <li>Tenant referencing + AML built in</li>
+            <li>Strong fit if you charge landlords for management services</li>
+          </ul>
+        </div>
+        <div class="col cons">
+          <h4>Where it loses</h4>
+          <ul>
+            <li>If you're an operator (not an agent), the UX adds friction</li>
+            <li>HMO + R2R workflows not the focus</li>
+            <li>No public listings / vacancy page for marketing rooms</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Honest section ─────────────────────────────────────────── -->
+<section class="honest">
+  <div class="container">
+    <h2 class="sec-title fade-up">Where competitors <em>genuinely win</em> — and how we close the gap</h2>
+    <p class="lede fade-up delay-1">No tool is best at everything. Here's the honest truth about what we don't yet do as well as the alternatives, and what we're doing about it.</p>
+    <div class="honest-grid">
+      <div class="honest-card fade-up">
+        <h3>🏦 Hammock <span class="pill">Banking</span></h3>
+        <p>Hammock's Open Banking integration auto-matches rent payments to tenants — no manual reconciliation. We currently use bank-statement CSV import.</p>
+        <div class="answer"><strong>What we're doing:</strong> Open Banking integration is on the roadmap for the next major release. Until then, the CSV import handles £100k+/month portfolios cleanly.</div>
+      </div>
+      <div class="honest-card fade-up delay-1">
+        <h3>🔌 Arthur <span class="pill">Integrations</span></h3>
+        <p>Arthur has direct Xero / QuickBooks / Sage sync. We have CSV exports formatted for each, but no live two-way sync yet.</p>
+        <div class="answer"><strong>What we're doing:</strong> Accountancy export covers Xero, QuickBooks, Sage and FreeAgent today via the Reports → Accounting Export menu. Native sync is on the roadmap behind Open Banking.</div>
+      </div>
+      <div class="honest-card fade-up delay-2">
+        <h3>📑 Vision <span class="pill">Tax</span></h3>
+        <p>Landlord Vision's self-assessment workflows are more mature than ours — purpose-built for the January HMRC deadline.</p>
+        <div class="answer"><strong>What we're doing:</strong> Our P&amp;L and expense reports map cleanly to SA105. Most users send the export to their accountant rather than file directly.</div>
+      </div>
+      <div class="honest-card fade-up">
+        <h3>🛡️ Coho <span class="pill">HMO depth</span></h3>
+        <p>Coho's room-level licence + fire-safety drill scheduling is more granular than ours.</p>
+        <div class="answer"><strong>What we're doing:</strong> Compliance docs + expiry alerts are built in. Fire-drill scheduling is on the roadmap; current users handle it via the recurring-maintenance feature.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Final CTA ─────────────────────────────────────────────── -->
+<section class="cta-final">
+  <div class="container">
+    <h2 class="sec-title fade-up">Ready to <em>switch</em>?</h2>
+    <p class="fade-up delay-1">Free for 3 properties. No credit card. Import your data via CSV in 2 minutes. Cancel any time.</p>
+    <div class="btns fade-up delay-2">
+      <a class="btn-primary" href="/login.html?tab=signup">Start free →</a>
+      <a class="btn-secondary" href="/login.html">Try the demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Disclaimer ────────────────────────────────────────────── -->
+<div class="disclaimer">
+  <div class="container">
+    Pricing accurate as of April 2026, sourced from each vendor's public pricing page.
+    Vendor pricing changes regularly — verify directly before final purchase decisions.
+    LandlordApp.io is not affiliated with any of the products listed.
+    <br>
+    <a href="/operators/hmo-landlords.html">For HMO Landlords</a> ·
+    <a href="/operators/r2r-operators.html">For R2R Operators</a> ·
+    <a href="/operators/letting-agents.html">For Letting Agents</a> ·
+    <a href="/operators/portfolio-managers.html">For Portfolio Managers</a> ·
+    <a href="/operators/service-accommodation.html">For Service Accommodation</a>
+  </div>
+</div>
+
+<script>
+// ── Fade-up on scroll ──
+(function(){
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.fade-up').forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, {threshold: 0.12, rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.fade-up').forEach(function(el){ io.observe(el); });
+})();
+
+// ── Animated savings counters ──
+(function(){
+  if (!('IntersectionObserver' in window)) return;
+  function animateCounter(el, target){
+    var start = performance.now();
+    var dur = 1100;
+    var startVal = 0;
+    function step(now){
+      var t = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      var v = Math.round(startVal + (target - startVal) * eased);
+      el.innerHTML = '£' + v + '<sup>/mo</sup>';
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) {
+        var target = +e.target.getAttribute('data-counter') || 0;
+        animateCounter(e.target, target);
+        io.unobserve(e.target);
+      }
+    });
+  }, {threshold: 0.5});
+  document.querySelectorAll('[data-counter]').forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>

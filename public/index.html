@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>LandlordApp.io</title>
+<meta name="application-name" content="LandlordApp.io">
+<meta name="apple-mobile-web-app-title" content="LandlordApp.io">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0B0D12">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-512.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/dashboard.css?v=2026-05-01-v1">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
+</head>
+<body>
+<div id="app-boot-overlay" aria-busy="true" aria-live="polite">
+  <div class="app-boot-inner">
+    <div class="app-boot-spinner" role="status"></div>
+    <div class="app-boot-text" id="app-boot-overlay-msg">Loading your workspace…</div>
+  </div>
+</div>
+<div id="app">
+  <div id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-brand">
+        <div class="sb-icon"><img src="/favicon.svg" alt="" style="width:26px;height:26px;display:block" onerror="this.parentElement.textContent='🏠'"></div>
+        <div><div class="sb-name">landlordapp<span style="color:var(--accent);font-weight:400">.io</span></div><div class="sb-sub" id="sb-sub-txt">Property Management</div></div>
+      </div>
+    </div>
+    <div class="sb-nav" id="sb-nav"></div>
+    <div class="sb-footer">
+      <div class="sb-footer-wrap">
+        <div class="sb-footer-label">Portfolio Occupancy</div>
+        <div class="bar-track"><div class="bar-fill" id="occ-bar" style="width:0"></div></div>
+        <div class="sb-occ" id="occ-label"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="topbar">
+      <div class="tb-desktop-only" style="font-size:12px;color:var(--muted);font-weight:500;flex-shrink:0" id="topbar-date">📅</div>
+      <script>document.getElementById('topbar-date').textContent='📅 '+new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'})</script>
+      <!-- Global Search -->
+      <div style="flex:1;min-width:0;position:relative" id="gs-wrap">
+        <div style="position:relative">
+          <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--muted);pointer-events:none">🔍</span>
+          <input id="gs-input" type="text" placeholder="Search..."
+            oninput="gsSearch(this.value)"
+            onfocus="if(this.value)gsSearch(this.value)"
+            onblur="setTimeout(function(){document.getElementById('gs-results').style.display='none'},180)"
+            onkeydown="gsKey(event)"
+            style="width:100%;padding:7px 10px 7px 32px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);font-family:inherit;font-size:13px;color:var(--text)">
+        </div>
+        <div id="gs-results" style="display:none;position:absolute;top:calc(100%+4px);left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:9000;max-height:380px;overflow-y:auto"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0" id="alerts-bar"></div>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<div id="mobile-nav"></div>
+<div id="modal-container"></div>
+
+<script src="/js/dashboard.bundle.js?v=2026-05-01-v1"></script>
+</body>
+</html>

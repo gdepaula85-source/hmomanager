@@ -1,0 +1,32 @@
+# https://landlordapp.io
+# Allow indexing of marketing pages, block the app + auth-walled / protected paths.
+
+User-agent: *
+Allow: /
+Allow: /landing
+Allow: /blog/
+Allow: /operators/
+
+# App + auth-walled pages — no SEO value, can leak forms / private dashboards.
+Disallow: /app
+Disallow: /app/
+Disallow: /index.html
+Disallow: /login.html
+Disallow: /choose-plan.html
+Disallow: /onboard.html
+Disallow: /superadmin.html
+Disallow: /tenant-portal.html
+Disallow: /demo-walkthrough.html
+Disallow: /mobile-demo-walkthrough.html
+Disallow: /mockup-dashboard.html
+Disallow: /mockup-v2.html
+Disallow: /landlordapp_emails.html
+
+# API + Supabase callbacks — never useful in search.
+Disallow: /api/
+
+# Public listings pages are per-organisation and gated by a query param —
+# block to avoid duplicate-content penalties from many empty variants.
+Disallow: /rooms.html
+
+Sitemap: https://landlordapp.io/sitemap.xml

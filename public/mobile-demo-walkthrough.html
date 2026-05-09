@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LandlordApp — Mobile Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0A0C12;--green:#00D897;--blue:#4B9EFF;--amber:#F5A623;--red:#FF5252;--white:#F8FAFC;--silver:#CBD5E1;--dim:#64748B;--line:rgba(255,255,255,.07);--card:#141722}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif;background:radial-gradient(circle at 50% 30%,#0F1A2E,#000);color:var(--white);display:flex;align-items:center;justify-content:center}
+body::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 30%,rgba(0,216,151,.08),transparent 55%);pointer-events:none}
+
+/* ── Phone frame ── */
+.phone-stage{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px}
+.phone-frame{background:#181818;border-radius:44px;padding:13px 11px 22px;box-shadow:0 0 0 1.5px #2a2a2a,0 0 0 3px #111,0 32px 64px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.08);position:relative;width:270px;flex-shrink:0}
+.phone-frame::before{content:'';position:absolute;left:-3px;top:76px;width:3px;height:26px;background:#282828;border-radius:2px 0 0 2px;box-shadow:0 38px 0 #282828}
+.phone-frame::after{content:'';position:absolute;right:-3px;top:96px;width:3px;height:40px;background:#282828;border-radius:0 2px 2px 0}
+.phone-island{position:absolute;top:17px;left:50%;transform:translateX(-50%);width:72px;height:20px;background:#000;border-radius:12px;z-index:10}
+.phone-island::after{content:'';position:absolute;right:14px;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:#1a1a1a;border:1.5px solid #222}
+.phone-screen{background:#FFFFFF;border-radius:34px;overflow:hidden;height:540px;position:relative;display:flex;flex-direction:column;color:#0F172A;--ink:#FFFFFF;--card:#F8FAFC;--white:#0F172A;--silver:#475569;--dim:#64748B;--line:rgba(15,23,42,.08)}
+.phone-screen .statusbar{color:#0F172A}
+.phone-screen .home-bar{background:rgba(15,23,42,.25)}
+/* Light-mode overrides for white-on-dark colours used in page content */
+.phone-screen .mk-bar{background:rgba(15,23,42,.08)}
+.phone-screen .pc-kpi{background:rgba(15,23,42,.04)}
+.phone-screen .bn-it{color:rgba(15,23,42,.36)}
+.phone-screen .mk{background:var(--card);border:1px solid var(--line);color:#0F172A}
+.phone-screen .m-sub, .phone-screen .mk-sub, .phone-screen .row-meta, .phone-screen .pc-ad, .phone-screen .pc-kpi-l, .phone-screen .sp-l{color:#64748B}
+.phone-screen .row{border-bottom:1px solid var(--line)}
+.phone-screen .bnav{border-top:1px solid var(--line)}
+.phone-screen .sp, .phone-screen .pc, .phone-screen .bc{background:#F8FAFC;border:1px solid var(--line)}
+.phone-screen .bc.bank{background:rgba(75,158,255,.08);border-color:rgba(75,158,255,.2)}
+.phone-screen .bc.cash{background:rgba(245,166,35,.08);border-color:rgba(245,166,35,.2)}
+.phone-screen .banner{background:rgba(255,82,82,.06)}
+.phone-screen .mchip{border-color:rgba(15,23,42,.1);color:#64748B}
+.phone-screen .mchip.active{color:#0F172A}
+/* AI card stays dark on purpose — sci-fi look reads well on white too */
+.phone-screen .aic{color:#E2E8F0}
+.phone-screen .aic .aic-txt{color:rgba(226,232,240,.75)}
+.phone-screen .aic .aic-ins{background:rgba(255,255,255,.06)}
+.phone-screen .section-lbl{color:#94A3B8}
+.phone-screen .cfm{background:var(--card);border:1px solid var(--line)}
+.phone-screen .cfm-lbl{color:#64748B}
+.phone-screen .m-progress{background:rgba(0,216,151,.1)}
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:10px 18px 6px;font-size:11px;font-weight:700;z-index:5;flex-shrink:0}
+.statusbar-icons{display:flex;gap:4px;align-items:center}
+.home-bar{width:100px;height:4px;background:rgba(255,255,255,.28);border-radius:3px;margin:auto auto 8px;position:relative;z-index:5}
+
+/* Pages */
+.mscreen{flex:1;overflow:hidden;position:relative}
+.mpage{display:none;flex-direction:column;height:100%;animation:fadeIn .5s}
+.mpage.active{display:flex}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+.m-header{padding:8px 16px 10px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.m-title{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.m-sub{font-size:10px;color:var(--dim);margin-top:1px}
+.m-avatar{width:30px;height:30px;border-radius:9px;background:rgba(0,216,151,.15);color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px}
+.m-body{flex:1;overflow-y:auto;padding:0 16px 8px}
+.m-body::-webkit-scrollbar{display:none}
+.m-body{scrollbar-width:none}
+
+/* KPI cards */
+.mk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.mk{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 11px}
+.mk-lbl{font-size:8px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.mk-val{font-size:17px;font-weight:800;font-family:'DM Mono',monospace;line-height:1.1}
+.mk-sub{font-size:8px;color:var(--dim);margin-top:2px}
+.mk.green .mk-val{color:var(--green)}.mk.red .mk-val{color:var(--red)}.mk.amber .mk-val{color:var(--amber)}.mk.blue .mk-val{color:var(--blue)}
+.mk-bar{height:3px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:6px;overflow:hidden}
+.mk-bar i{display:block;height:100%;background:var(--green);border-radius:2px;width:0;animation:bg 1s .2s forwards}
+@keyframes bg{to{width:var(--w,60%)}}
+
+/* Cash flow bars */
+.cfm{display:flex;align-items:flex-end;gap:4px;height:80px;padding:6px 0 14px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 10px}
+.cfm-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+.cfm-bars{display:flex;gap:1px;align-items:flex-end;height:54px}
+.cfm-bar{width:5px;border-radius:2px 2px 0 0;transform-origin:bottom;animation:barU 1s cubic-bezier(.2,.9,.3,1) forwards;transform:scaleY(0)}
+.cfm-lbl{font-size:7px;color:var(--dim);font-weight:700}
+.cfm-col.active .cfm-lbl{color:var(--green)}
+@keyframes barU{to{transform:scaleY(1)}}
+
+/* Rows */
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row-av{width:32px;height:32px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px}
+.row-info{flex:1;min-width:0}
+.row-nm{font-size:12px;font-weight:700}
+.row-meta{font-size:10px;color:var(--dim);margin-top:1px}
+.row-val{text-align:right;flex-shrink:0}
+.row-val .v{font-size:13px;font-weight:800;font-family:'DM Mono',monospace}
+.row-val .s{font-size:9px;color:var(--dim)}
+
+.section-lbl{font-size:9px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;padding:10px 0 4px}
+
+/* Chips */
+.mchips{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap}
+.mchip{padding:4px 10px;border-radius:12px;font-size:9px;font-weight:700;border:1px solid var(--line);color:var(--dim);flex-shrink:0}
+.mchip.active{background:var(--green);color:#000;border-color:var(--green)}
+
+/* Banner */
+.banner{background:rgba(255,82,82,.07);border:1px solid rgba(255,82,82,.2);border-radius:10px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.banner-l{font-size:11px;font-weight:800;color:var(--red)}
+.banner-s{font-size:9px;color:var(--dim);margin-top:1px}
+.banner-v{font-size:15px;font-weight:800;color:var(--red);font-family:'DM Mono',monospace}
+
+/* Bank/cash */
+.bc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:flex;gap:8px;align-items:center}
+.bc.bank{background:rgba(75,158,255,.05);border-color:rgba(75,158,255,.15)}
+.bc.cash{background:rgba(245,166,35,.05);border-color:rgba(245,166,35,.15)}
+.bc-i{font-size:18px}
+.bc-lbl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.bc-val{font-size:14px;font-weight:800;font-family:'DM Mono',monospace}
+.bc.bank .bc-lbl,.bc.bank .bc-val{color:var(--blue)}
+.bc.cash .bc-lbl,.bc.cash .bc-val{color:var(--amber)}
+
+/* Stat pills */
+.sp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:10px}
+.sp{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 4px;text-align:center}
+.sp-v{font-size:14px;font-weight:800;font-family:'DM Mono',monospace}
+.sp-l{font-size:7px;font-weight:700;text-transform:uppercase;color:var(--dim);margin-top:1px}
+
+/* Property card mobile */
+.pc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:6px}
+.pc-h{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.pc-nm{font-size:12px;font-weight:700}
+.pc-ad{font-size:9px;color:var(--dim);margin-top:1px}
+.pc-chip{font-size:8px;font-weight:800;padding:2px 6px;border-radius:8px;background:rgba(0,216,151,.1);color:var(--green)}
+.pc-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.pc-kpi{background:rgba(255,255,255,.02);border-radius:5px;padding:4px}
+.pc-kpi-l{font-size:7px;color:var(--dim);font-weight:700;text-transform:uppercase}
+.pc-kpi-v{font-size:11px;font-weight:800;font-family:'DM Mono',monospace;margin-top:1px}
+
+/* Bottom nav */
+.bnav{display:flex;justify-content:space-around;padding:8px 0 0;border-top:1px solid var(--line);flex-shrink:0}
+.bn-it{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8px;font-weight:700;color:rgba(255,255,255,.28)}
+.bn-it.active{color:var(--green)}
+.bn-it .ic{font-size:15px}
+
+/* Action button */
+.m-btn{padding:6px 11px;border-radius:8px;font-size:10px;font-weight:800;border:none;font-family:inherit;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.m-btn-g{background:var(--green);color:#000}
+
+/* Toast */
+.mtoast{position:absolute;top:46px;left:12px;right:12px;z-index:30;background:rgba(255,255,255,.98);border:1px solid rgba(0,216,151,.3);color:#0F172A;border-radius:12px;padding:8px 10px;backdrop-filter:blur(10px);display:flex;align-items:center;gap:8px;animation:tst 8s ease-in-out 1s infinite;opacity:0;transform:translateY(-60px);pointer-events:none;box-shadow:0 8px 24px rgba(15,23,42,.15)}
+@keyframes tst{0%,5%{transform:translateY(-60px);opacity:0}12%,35%{transform:translateY(0);opacity:1}42%,100%{transform:translateY(-60px);opacity:0}}
+
+/* ── Progress & dots (outside phone) ── */
+.m-progress{position:absolute;top:0;left:0;right:0;height:3px;background:rgba(0,216,151,.12);border-radius:3px;overflow:hidden;z-index:50}
+.m-progress i{display:block;height:100%;background:var(--green);width:0;box-shadow:0 0 8px rgba(0,216,151,.5);transition:width .1s linear}
+.m-dots{display:flex;gap:6px}
+.m-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.2);cursor:pointer;transition:all .2s}
+.m-dots span.active{background:var(--green);width:22px;border-radius:4px}
+.m-label{font-size:11px;font-weight:800;color:#CBD5E1;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.m-label .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(0,216,151,.5);animation:live 1.6s infinite}
+@keyframes live{0%{box-shadow:0 0 0 0 rgba(0,216,151,.6)}70%{box-shadow:0 0 0 7px rgba(0,216,151,0)}100%{box-shadow:0 0 0 0 rgba(0,216,151,0)}}
+
+/* Mobile demo control bar */
+.m-controls{display:flex;align-items:center;gap:10px;background:rgba(10,12,18,.75);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 28px rgba(0,0,0,.5);padding:6px 10px;border-radius:30px;z-index:5}
+.m-ctl-btn{background:transparent;border:none;color:#CBD5E1;cursor:pointer;font-size:14px;padding:4px 6px;font-family:inherit;font-weight:700;display:flex;align-items:center;gap:4px}
+.m-ctl-btn:hover{color:#FFFFFF}
+.m-speed{display:flex;gap:2px;background:rgba(255,255,255,.05);border-radius:18px;padding:2px}
+.m-speed-btn{background:transparent;border:none;color:#94A3B8;font-size:9px;font-weight:800;padding:4px 8px;border-radius:13px;cursor:pointer;font-family:inherit;transition:all .2s}
+.m-speed-btn.active{background:var(--green);color:#000}
+.m-speed-btn:hover:not(.active){color:#FFFFFF}
+.m-dots span{background:rgba(255,255,255,.2)}
+.m-dots span.active{background:var(--green)}
+
+/* status dots */
+.sd{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.sd.g{background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.8s infinite}
+.sd.a{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.sd.r{background:var(--red);box-shadow:0 0 6px var(--red);animation:blink 1.8s infinite}
+@keyframes blink{50%{opacity:.3}}
+
+/* AI card mobile */
+.aic{background:linear-gradient(135deg,#0A1525,#132342);border:1px solid rgba(56,189,248,.2);border-radius:10px;padding:12px;margin-bottom:8px}
+.aic-h{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.aic-dot{width:7px;height:7px;border-radius:50%;background:#38BDF8;box-shadow:0 0 8px rgba(56,189,248,.7);animation:blink 1.6s infinite}
+.aic-score{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px}
+.aic-circle{width:44px;height:44px;border-radius:50%;border:3px solid #10B981;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#10B981;font-family:'DM Mono',monospace;flex-shrink:0}
+.aic-ins{background:rgba(255,255,255,.04);border-radius:6px;padding:7px 9px;margin-bottom:5px;opacity:0;animation:slide .45s forwards}
+.aic-ins:nth-child(3){animation-delay:.3s}.aic-ins:nth-child(4){animation-delay:.6s}.aic-ins:nth-child(5){animation-delay:.9s}
+.aic-tag{font-size:8px;font-weight:800;text-transform:uppercase;color:#60A5FA;margin-bottom:2px}
+.aic-tag.a{color:var(--amber)}.aic-tag.g{color:var(--green)}
+.aic-txt{font-size:10px;color:rgba(226,232,240,.7);line-height:1.5}
+@keyframes slide{to{opacity:1}}
+</style>
+</head>
+<body>
+
+<div class="phone-stage">
+  <div class="m-label" id="mLabel"><span class="live-dot"></span><span id="mLabelTxt">Dashboard</span></div>
+  <div class="phone-frame">
+    <div class="phone-island"></div>
+    <div class="phone-screen">
+      <div class="m-progress"><i id="mProg"></i></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <div class="statusbar-icons">
+          <svg width="13" height="9" viewBox="0 0 13 9" fill="currentColor"><rect x="0" y="3" width="2" height="6" rx="0.5" opacity=".5"/><rect x="3" y="2" width="2" height="7" rx="0.5" opacity=".7"/><rect x="6" y="1" width="2" height="8" rx="0.5" opacity=".85"/><rect x="9" y="0" width="2" height="9" rx="0.5"/></svg>
+          <svg width="14" height="9" viewBox="0 0 14 9" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.8" width="11.5" height="7.4" rx="1.6"/><rect x="1.4" y="1.6" width="9" height="5.8" rx="1" fill="currentColor"/><path d="M12.5 3h.9a.3.3 0 0 1 .3.3v2.4a.3.3 0 0 1-.3.3h-.9" fill="currentColor"/></svg>
+        </div>
+      </div>
+
+      <div class="mtoast" id="toast"></div>
+
+      <div class="mscreen" id="mscreen">
+
+<!-- ═══ PAGE 0: DASHBOARD ═══ -->
+<div class="mpage active" data-page="0" data-label="Dashboard">
+  <div class="m-header">
+    <div><div class="m-title">Dashboard</div><div class="m-sub">Apr 2026</div></div>
+    <div class="m-avatar">GD</div>
+  </div>
+  <div class="m-body">
+    <div class="mk-grid">
+      <div class="mk green"><div class="mk-lbl">Monthly Income</div><div class="mk-val" data-count="133653" data-prefix="£">£0</div><div class="mk-sub">161 tenants</div></div>
+      <div class="mk green"><div class="mk-lbl">Net Profit/mo</div><div class="mk-val" data-count="51452" data-prefix="£">£0</div><div class="mk-sub">after costs</div></div>
+      <div class="mk green"><div class="mk-lbl">Collected</div><div class="mk-val" data-count="38974" data-prefix="£">£0</div><div class="mk-sub">197 payments</div></div>
+      <div class="mk"><div class="mk-lbl">Occupancy</div><div class="mk-val">97%</div><div class="mk-sub">160/165 rooms</div><div class="mk-bar"><i style="--w:97%"></i></div></div>
+    </div>
+    <div class="section-lbl">📊 6-Month Cash Flow</div>
+    <div class="cfm">
+      <div class="cfm-col"><div class="cfm-bars"><div class="cfm-bar" style="background:rgba(0,216,151,.35);height:55%;animation-delay:.1s"></div><div class="cfm-bar" style="background:rgba(255,82,82,.35);height:40%;animation-delay:.15s"></div></div><div class="cfm-lbl">Nov</div></div>
+      <div class="cfm-col"><div class="cfm-bars"><div class="cfm-bar" style="background:rgba(0,216,151,.35);height:60%;animation-delay:.2s"></div><div class="cfm-bar" style="background:rgba(255,82,82,.35);height:44%;animation-delay:.25s"></div></div><div class="cfm-lbl">Dec</div></div>
+      <div class="cfm-col"><div class="cfm-bars"><div class="cfm-bar" style="background:rgba(0,216,151,.35);height:68%;animation-delay:.3s"></div><div class="cfm-bar" style="background:rgba(255,82,82,.35);height:48%;animation-delay:.35s"></div></div><div class="cfm-lbl">Jan</div></div>
+      <div class="cfm-col"><div class="cfm-bars"><div class="cfm-bar" style="background:rgba(0,216,151,.35);height:74%;animation-delay:.4s"></div><div class="cfm-bar" style="background:rgba(255,82,82,.35);height:52%;animation-delay:.45s"></div></div><div class="cfm-lbl">Feb</div></div>
+      <div class="cfm-col"><div class="cfm-bars"><div class="cfm-bar" style="background:rgba(0,216,151,.35);height:85%;animation-delay:.5s"></div><div class="cfm-bar" style="background:rgba(255,82,82,.35);height:56%;animation-delay:.55s"></div></div><div class="cfm-lbl">Mar</div></div>
+      <div class="cfm-col active"><div class="cfm-bars"><div class="cfm-bar" style="background:var(--green);height:58%;animation-delay:.6s;box-shadow:0 0 8px rgba(0,216,151,.5)"></div><div class="cfm-bar" style="background:var(--red);height:100%;animation-delay:.65s"></div><div class="cfm-bar" style="background:var(--green);height:42%;animation-delay:.7s"></div></div><div class="cfm-lbl">Apr</div></div>
+    </div>
+    <div class="section-lbl">This Month</div>
+    <div class="row"><div class="row-av" style="background:rgba(0,216,151,.12);color:var(--green)">✓</div><div class="row-info"><div class="row-nm">Active Tenants</div><div class="row-meta">97% occupancy</div></div><div class="row-val"><div class="v" style="color:var(--green)">161</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(255,82,82,.12);color:var(--red)"><span class="sd r"></span></div><div class="row-info"><div class="row-nm">In Arrears</div><div class="row-meta">£211,690 outstanding</div></div><div class="row-val"><div class="v" style="color:var(--red)">153</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(245,166,35,.12);color:var(--amber)"><span class="sd a"></span></div><div class="row-info"><div class="row-nm">Open Maintenance</div><div class="row-meta">3 urgent</div></div><div class="row-val"><div class="v" style="color:var(--amber)">7</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(75,158,255,.12);color:var(--blue)">🏠</div><div class="row-info"><div class="row-nm">Vacant Rooms</div><div class="row-meta">across 2 properties</div></div><div class="row-val"><div class="v">5</div></div></div>
+  </div>
+  <div class="bnav"><div class="bn-it active"><span class="ic">📊</span>Dashboard</div><div class="bn-it"><span class="ic">🏠</span>Properties</div><div class="bn-it"><span class="ic">👥</span>Tenants</div><div class="bn-it"><span class="ic">💷</span>Rent</div></div>
+</div>
+
+<!-- ═══ PAGE 1: RENT ═══ -->
+<div class="mpage" data-page="1" data-label="Rent Collection">
+  <div class="m-header">
+    <div><div class="m-title">Rent</div><div class="m-sub">92 due today</div></div>
+    <button class="m-btn m-btn-g">📲 Chase</button>
+  </div>
+  <div class="m-body">
+    <div class="mchips"><div class="mchip active">Month</div><div class="mchip">Week</div><div class="mchip">YTD</div></div>
+    <div class="mk-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="mk green"><div class="mk-lbl">Collected</div><div class="mk-val" data-count="38974" data-prefix="£">£0</div><div class="mk-sub">197 pmts</div></div>
+      <div class="mk red"><div class="mk-lbl">Unpaid</div><div class="mk-val" data-count="32015" data-prefix="£">£0</div><div class="mk-sub">164 sched.</div></div>
+      <div class="mk"><div class="mk-lbl">Expected</div><div class="mk-val" data-count="133653" data-prefix="£">£0</div><div class="mk-sub">29% rate</div></div>
+    </div>
+    <div class="mk-grid">
+      <div class="bc bank"><div class="bc-i">🏦</div><div><div class="bc-lbl">Bank</div><div class="bc-val">£35,120</div><div class="mk-sub">178 pmts</div></div></div>
+      <div class="bc cash"><div class="bc-i">💵</div><div><div class="bc-lbl">Cash</div><div class="bc-val">£3,854</div><div class="mk-sub">19 pmts</div></div></div>
+    </div>
+    <div class="banner"><div><div class="banner-l">⚠️ Total Arrears</div><div class="banner-s">153 tenants</div></div><div class="banner-v">£211,690</div></div>
+    <div class="section-lbl">Due today</div>
+    <div class="row"><div class="row-av" style="background:rgba(245,166,35,.12);color:var(--amber)">Q</div><div class="row-info"><div class="row-nm">Quentin Marsh</div><div class="row-meta">10 Thornton Hth · Rm 3</div></div><div class="row-val"><div class="v" style="color:var(--green)">£165</div><div class="s">Bank</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(245,166,35,.12);color:var(--amber)">S</div><div class="row-info"><div class="row-nm">Stanley Gibbs</div><div class="row-meta">10 Thornton Hth · Rm 5</div></div><div class="row-val"><div class="v" style="color:var(--green)">£170</div><div class="s">Bank</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(245,166,35,.12);color:var(--amber)">H</div><div class="row-info"><div class="row-nm">Harriet Dean</div><div class="row-meta">18 Balham High Rd · Rm 2</div></div><div class="row-val"><div class="v" style="color:var(--green)">£190</div><div class="s">Bank</div></div></div>
+  </div>
+  <div class="bnav"><div class="bn-it"><span class="ic">📊</span>Dashboard</div><div class="bn-it"><span class="ic">🏠</span>Properties</div><div class="bn-it"><span class="ic">👥</span>Tenants</div><div class="bn-it active"><span class="ic">💷</span>Rent</div></div>
+</div>
+
+<!-- ═══ PAGE 2: TENANTS ═══ -->
+<div class="mpage" data-page="2" data-label="Tenants">
+  <div class="m-header">
+    <div><div class="m-title">Tenants</div><div class="m-sub">161 active · 153 arrears</div></div>
+    <button class="m-btn m-btn-g">+ Add</button>
+  </div>
+  <div class="m-body">
+    <div class="mk-grid">
+      <div class="mk green"><div class="mk-lbl">Active</div><div class="mk-val">161</div><div class="mk-sub">97% occupancy</div><div class="mk-bar"><i style="--w:97%"></i></div></div>
+      <div class="mk green" style="background:rgba(0,216,151,.06);border-color:rgba(0,216,151,.2)"><div class="mk-lbl" style="color:var(--green)">Rent Roll</div><div class="mk-val">£134,628</div><div class="mk-sub">162 tenants</div></div>
+    </div>
+    <div class="sp-grid">
+      <div class="sp" style="background:rgba(245,166,35,.05)"><div class="sp-v" style="color:var(--amber)">1</div><div class="sp-l" style="color:var(--amber)">Notice</div></div>
+      <div class="sp" style="background:rgba(255,82,82,.05)"><div class="sp-v" style="color:var(--red)">153</div><div class="sp-l" style="color:var(--red)">Arrears</div></div>
+      <div class="sp"><div class="sp-v" style="color:var(--dim)">4</div><div class="sp-l">Archived</div></div>
+    </div>
+    <div class="section-lbl">Room types</div>
+    <div class="sp-grid" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
+      <div class="sp"><div class="sp-v" style="color:var(--blue);font-size:11px">152/157</div><div class="sp-l">🛏 Single</div></div>
+      <div class="sp"><div class="sp-v" style="color:var(--green);font-size:11px">3/3</div><div class="sp-l">🛏🛏 Dbl</div></div>
+      <div class="sp"><div class="sp-v" style="color:var(--amber);font-size:11px">2/2</div><div class="sp-l">✨ Suite</div></div>
+      <div class="sp"><div class="sp-v" style="color:var(--dim);font-size:11px">0/0</div><div class="sp-l">🏠 Stu</div></div>
+      <div class="sp"><div class="sp-v" style="color:var(--green);font-size:11px">3/3</div><div class="sp-l">🏡 Whole</div></div>
+    </div>
+    <div class="section-lbl">Recent</div>
+    <div class="row"><div class="row-av" style="background:rgba(0,216,151,.15);color:var(--green)">JK</div><div class="row-info"><div class="row-nm">James Kelly</div><div class="row-meta">22 Elm Grove · Rm 5</div></div><div class="row-val"><div class="v" style="color:var(--green)">£200</div><div class="s">per week</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(255,82,82,.15);color:var(--red)">SM</div><div class="row-info"><div class="row-nm">Sarah Mitchell</div><div class="row-meta">22 Elm Grove · Rm 2 · Arrears</div></div><div class="row-val"><div class="v" style="color:var(--red)">£370</div><div class="s">overdue</div></div></div>
+    <div class="row"><div class="row-av" style="background:rgba(75,158,255,.15);color:var(--blue)">MR</div><div class="row-info"><div class="row-nm">Marcus Reynolds</div><div class="row-meta">45 Lavender Hill · Rm 1</div></div><div class="row-val"><div class="v" style="color:var(--green)">£235</div><div class="s">per week</div></div></div>
+  </div>
+  <div class="bnav"><div class="bn-it"><span class="ic">📊</span>Dashboard</div><div class="bn-it"><span class="ic">🏠</span>Properties</div><div class="bn-it active"><span class="ic">👥</span>Tenants</div><div class="bn-it"><span class="ic">💷</span>Rent</div></div>
+</div>
+
+<!-- ═══ PAGE 3: PROPERTIES ═══ -->
+<div class="mpage" data-page="3" data-label="Properties">
+  <div class="m-header">
+    <div><div class="m-title">Properties</div><div class="m-sub">39 of 39 active</div></div>
+    <button class="m-btn m-btn-g">+ Add</button>
+  </div>
+  <div class="m-body">
+    <div class="mchips"><div class="mchip active">All</div><div class="mchip">🏠 Owned</div><div class="mchip">🤝 Managed</div><div class="mchip">Vacancies</div></div>
+    <div class="mk-grid">
+      <div class="mk"><div class="mk-lbl">Portfolio</div><div class="mk-val">39</div><div class="mk-sub">165 rooms · 5 vacant</div></div>
+      <div class="mk green"><div class="mk-lbl">Net Profit</div><div class="mk-val">£61,127</div><div class="mk-sub">per month</div></div>
+    </div>
+    <div class="pc"><div class="pc-h"><div><div class="pc-nm">27 Vassall Road</div><div class="pc-ad">London SW9 · HMO · 4/4</div></div><span class="pc-chip">100%</span></div><div class="pc-kpis"><div class="pc-kpi"><div class="pc-kpi-l">In</div><div class="pc-kpi-v" style="color:var(--green)">£3,250</div></div><div class="pc-kpi"><div class="pc-kpi-l">Out</div><div class="pc-kpi-v" style="color:var(--red)">£1,900</div></div><div class="pc-kpi"><div class="pc-kpi-l">Profit</div><div class="pc-kpi-v" style="color:var(--green)">£1,350</div></div></div></div>
+    <div class="pc"><div class="pc-h"><div><div class="pc-nm">10 Thornton Heath</div><div class="pc-ad">CR7 · HMO · 5/5</div></div><span class="pc-chip">100%</span></div><div class="pc-kpis"><div class="pc-kpi"><div class="pc-kpi-l">In</div><div class="pc-kpi-v" style="color:var(--green)">£3,580</div></div><div class="pc-kpi"><div class="pc-kpi-l">Out</div><div class="pc-kpi-v" style="color:var(--red)">£2,100</div></div><div class="pc-kpi"><div class="pc-kpi-l">Profit</div><div class="pc-kpi-v" style="color:var(--green)">£1,480</div></div></div></div>
+    <div class="pc" style="border-left:3px solid var(--amber)"><div class="pc-h"><div><div class="pc-nm">18 Balham High Rd</div><div class="pc-ad">SW12 · HMO · 5/6</div></div><span class="pc-chip" style="background:rgba(245,166,35,.12);color:var(--amber)">83%</span></div><div class="pc-kpis"><div class="pc-kpi"><div class="pc-kpi-l">In</div><div class="pc-kpi-v" style="color:var(--green)">£4,120</div></div><div class="pc-kpi"><div class="pc-kpi-l">Out</div><div class="pc-kpi-v" style="color:var(--red)">£2,400</div></div><div class="pc-kpi"><div class="pc-kpi-l">Profit</div><div class="pc-kpi-v" style="color:var(--green)">£1,720</div></div></div></div>
+    <div class="pc"><div class="pc-h"><div><div class="pc-nm">22 Elm Grove</div><div class="pc-ad">Brixton SW2 · HMO · 6/6</div></div><span class="pc-chip">100%</span></div><div class="pc-kpis"><div class="pc-kpi"><div class="pc-kpi-l">In</div><div class="pc-kpi-v" style="color:var(--green)">£5,200</div></div><div class="pc-kpi"><div class="pc-kpi-l">Out</div><div class="pc-kpi-v" style="color:var(--red)">£2,400</div></div><div class="pc-kpi"><div class="pc-kpi-l">Profit</div><div class="pc-kpi-v" style="color:var(--green)">£2,800</div></div></div></div>
+  </div>
+  <div class="bnav"><div class="bn-it"><span class="ic">📊</span>Dashboard</div><div class="bn-it active"><span class="ic">🏠</span>Properties</div><div class="bn-it"><span class="ic">👥</span>Tenants</div><div class="bn-it"><span class="ic">💷</span>Rent</div></div>
+</div>
+
+<!-- ═══ PAGE 4: AI AGENT ═══ -->
+<div class="mpage" data-page="4" data-label="AI Agent">
+  <div class="m-header">
+    <div><div class="m-title">🤖 AI Agent</div><div class="m-sub">Portfolio intelligence</div></div>
+    <div class="m-avatar">GD</div>
+  </div>
+  <div class="m-body">
+    <div class="aic">
+      <div class="aic-h"><div class="aic-dot"></div><div style="font-size:12px;font-weight:800">Portfolio Health</div><div style="margin-left:auto;font-size:9px;color:rgba(255,255,255,.4)">Just now</div></div>
+      <div class="aic-score"><div class="aic-circle">82</div><div><div style="font-size:12px;font-weight:800;color:#10B981">Strong</div><div style="font-size:9px;color:rgba(226,232,240,.55);margin-top:1px">39 props · 97% · £51.5k net</div></div></div>
+      <div class="aic-ins"><div class="aic-tag a">⚠ Attention</div><div class="aic-txt"><strong>153 tenants in arrears</strong> — £211,690. Send rent reminders to recover <strong>£28–34k</strong> in 7 days.</div></div>
+      <div class="aic-ins"><div class="aic-tag g">📈 Trend</div><div class="aic-txt">Income <strong>+12% MoM</strong>. On track for <strong>£1.8M</strong> run-rate by Q4 2026.</div></div>
+      <div class="aic-ins"><div class="aic-tag">💡 Opportunity</div><div class="aic-txt">Brixton properties show <strong>28% higher margin</strong>. Focus acquisition in SW2/SW9.</div></div>
+    </div>
+    <div style="display:flex;gap:6px"><button class="m-btn m-btn-g" style="flex:1;justify-content:center">📲 Send chase to 92</button><button class="m-btn" style="flex:1;background:rgba(56,189,248,.1);color:#7DD3FC;justify-content:center">💬 Ask</button></div>
+  </div>
+  <div class="bnav"><div class="bn-it"><span class="ic">📊</span>Dashboard</div><div class="bn-it"><span class="ic">🏠</span>Properties</div><div class="bn-it"><span class="ic">👥</span>Tenants</div><div class="bn-it"><span class="ic">💷</span>Rent</div></div>
+</div>
+
+      </div><!-- /mscreen -->
+      <div class="home-bar"></div>
+    </div>
+  </div>
+  <div class="m-dots" id="mDots"></div>
+  <div class="m-controls">
+    <div class="m-speed" id="mSpeed">
+      <button class="m-speed-btn" data-speed="10000">SLOW</button>
+      <button class="m-speed-btn active" data-speed="6500">1×</button>
+      <button class="m-speed-btn" data-speed="4000">FAST</button>
+    </div>
+    <button class="m-ctl-btn" id="mPrev" aria-label="Previous">←</button>
+    <button class="m-ctl-btn" id="mPause" aria-label="Pause">⏸</button>
+    <button class="m-ctl-btn" id="mNext" aria-label="Next">→</button>
+  </div>
+</div>
+
+<script>
+const MPAGES=['Dashboard','Rent','Tenants','Properties','AI Agent'];
+const TOASTS=[
+  {icon:'💷',title:'Bank Confirmed',body:'Quentin M. · 10 Thornton Hth',val:'+£165',col:'var(--green)'},
+  {icon:'⚠️',title:'Rent Overdue',body:'Sarah M. · 22 Elm Grove',val:'£370',col:'var(--red)'},
+  {icon:'🔧',title:'New Maintenance',body:'Leaking tap · Elm Grove',val:'',col:'var(--amber)'},
+  {icon:'👥',title:'New Tenant',body:'James Kelly signed up',val:'',col:'var(--green)'},
+  {icon:'🤖',title:'AI Insight',body:'92 rent chases available',val:'',col:'#38BDF8'}
+];
+let MDUR=6500;
+let midx=0,mpaused=false,mprogStart=Date.now();
+
+const mpages=document.querySelectorAll('.mpage');
+const mLabel=document.getElementById('mLabelTxt');
+const mProg=document.getElementById('mProg');
+const mDots=document.getElementById('mDots');
+const toastEl=document.getElementById('toast');
+
+MPAGES.forEach((p,i)=>{
+  const d=document.createElement('span');
+  d.addEventListener('click',()=>mGoTo(i));
+  mDots.appendChild(d);
+});
+const dots=mDots.querySelectorAll('span');
+
+function mCountUp(el){
+  const t=parseInt(el.dataset.count,10);
+  const pre=el.dataset.prefix||'',suf=el.dataset.suffix||'';
+  const dur=900,start=performance.now();
+  function tick(n){const p=Math.min(1,(n-start)/dur);const eased=1-Math.pow(1-p,3);el.textContent=pre+Math.round(t*eased).toLocaleString()+suf;if(p<1)requestAnimationFrame(tick)}
+  requestAnimationFrame(tick);
+}
+
+function mRestart(page){
+  page.querySelectorAll('.cfm-bar,.mk-bar i').forEach(b=>{b.style.animation='none';b.offsetHeight;b.style.animation=''});
+  page.querySelectorAll('.aic-ins').forEach(b=>{b.style.animation='none';b.offsetHeight;b.style.animation=''});
+  page.querySelectorAll('[data-count]').forEach(mCountUp);
+}
+
+function showToast(t){
+  const {icon,title,body,val,col}=t;
+  toastEl.innerHTML=`<span style="font-size:16px">${icon}</span><div style="flex:1;min-width:0"><div style="font-size:10px;font-weight:800">${title}</div><div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:1px">${body}</div></div>${val?`<span style="font-size:11px;font-weight:800;color:${col}">${val}</span>`:''}`;
+  toastEl.style.animation='none';toastEl.offsetHeight;toastEl.style.animation='tst 8s ease-in-out infinite';
+}
+
+function mGoTo(n){
+  midx=(n+MPAGES.length)%MPAGES.length;
+  mpages.forEach((p,i)=>p.classList.toggle('active',i===midx));
+  dots.forEach((d,i)=>d.classList.toggle('active',i===midx));
+  mLabel.textContent=MPAGES[midx];
+  mRestart(mpages[midx]);
+  showToast(TOASTS[midx]);
+  mprogStart=Date.now();
+  mProg.style.width='0%';
+  const body=mpages[midx].querySelector('.m-body');if(body)body.scrollTop=0;
+}
+
+function mTick(){
+  if(mpaused)return;
+  const e=Date.now()-mprogStart;
+  mProg.style.width=Math.min(100,(e/MDUR)*100)+'%';
+  if(e>=MDUR)mGoTo(midx+1);
+}
+
+setInterval(mTick,50);
+
+// Wire controls
+document.getElementById('mPrev').addEventListener('click',()=>mGoTo(midx-1));
+document.getElementById('mNext').addEventListener('click',()=>mGoTo(midx+1));
+const mPauseBtn=document.getElementById('mPause');
+mPauseBtn.addEventListener('click',()=>{
+  mpaused=!mpaused;
+  mPauseBtn.textContent=mpaused?'▶':'⏸';
+  if(!mpaused)mprogStart=Date.now()-(parseFloat(mProg.style.width)/100)*MDUR;
+});
+document.querySelectorAll('.m-speed-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    MDUR=parseInt(btn.dataset.speed,10);
+    document.querySelectorAll('.m-speed-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mprogStart=Date.now();mProg.style.width='0%';
+  });
+});
+
+// postMessage deep-link
+window.addEventListener('message',e=>{
+  if(e.data&&typeof e.data.goToMobilePage==='number')mGoTo(e.data.goToMobilePage);
+  if(e.data&&e.data.demo==='pauseMobile')mpaused=true;
+  if(e.data&&e.data.demo==='playMobile')mpaused=false;
+});
+
+mGoTo(0);
+</script>
+</body>
+</html>

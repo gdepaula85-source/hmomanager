@@ -1,0 +1,34 @@
+# ─── UTF-8 default charset ─────────────────────────────────────────────
+# Forces Apache to serve text assets as UTF-8 so emoji characters in
+# WhatsApp / email messages don't arrive as "?" on the receiver's side.
+# Hostinger's default can fall back to ISO-8859-1 which mangles 4-byte
+# UTF-8 sequences (emoji) during browser decode.
+
+AddDefaultCharset UTF-8
+AddCharset UTF-8 .html .htm .js .css .json .svg .xml .txt
+
+# Serve .js and .html explicitly with charset in Content-Type so proxies
+# and browsers that ignore AddDefaultCharset still see UTF-8.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|html|htm|css|json)$">
+    Header set Content-Type "application/javascript; charset=utf-8" env=IS_JS
+    SetEnvIf Request_URI "\.js$"    IS_JS
+  </FilesMatch>
+  <FilesMatch "\.(html|htm)$">
+    Header set Content-Type "text/html; charset=utf-8"
+  </FilesMatch>
+  <FilesMatch "\.css$">
+    Header set Content-Type "text/css; charset=utf-8"
+  </FilesMatch>
+</IfModule>
+
+# ─── Caching: long for the bundle (it's versioned via ?v=), short for HTML ─
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css               "access plus 1 year"
+  ExpiresByType image/svg+xml          "access plus 1 year"
+  ExpiresByType image/png              "access plus 30 days"
+  ExpiresByType image/jpeg             "access plus 30 days"
+  ExpiresByType text/html              "access plus 0 seconds"
+</IfModule>

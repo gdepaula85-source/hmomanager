@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<!--
+  POST TEMPLATE — copy this file to /blog/<your-slug>.html, then:
+    1. Change every *** placeholder below (title, description, canonical, date, category, etc.)
+    2. Write the article inside <article class="post"> ... </article>
+    3. Add a matching card to /blog/index.html's post-grid (copy the starter-post card)
+    4. Keep the slug kebab-case: "hmo-licensing-2026.html" not "HMO Licensing 2026.html"
+
+  Meta tags matter for SEO — always set:
+    - <title> (≤ 60 chars, include primary keyword)
+    - <meta name="description"> (≤ 160 chars, first-sentence-strong)
+    - <link rel="canonical"> (absolute URL, no trailing slash unless the live URL has one)
+    - OG tags (title, description, url) — same content, different casing is fine
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>*** Post title *** | LandlordApp.io Blog</title>
+<meta name="description" content="*** 1-2 sentence description, include the primary keyword. Keep under 160 characters so Google doesn't truncate. ***">
+<link rel="canonical" href="https://landlordapp.io/blog/***slug***.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="*** Post title ***">
+<meta property="og:description" content="*** Same as meta description ***">
+<meta property="og:url" content="https://landlordapp.io/blog/***slug***.html">
+<meta property="og:image" content="https://landlordapp.io/og-image.svg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+<meta property="article:published_time" content="2026-04-25">
+<meta property="article:author" content="Gleydson">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="*** Post title ***">
+<meta name="twitter:description" content="*** Same as meta description ***">
+<meta name="twitter:image" content="https://landlordapp.io/og-image.svg">
+
+<!-- Per-post structured data — Article schema. Replace fields when publishing. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "*** Post title ***",
+  "description": "*** 1-2 sentence description ***",
+  "image": "https://landlordapp.io/og-image.svg",
+  "url": "https://landlordapp.io/blog/***slug***.html",
+  "datePublished": "2026-04-25",
+  "author": { "@type": "Person", "name": "Gleydson" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "LandlordApp.io",
+    "logo": { "@type": "ImageObject", "url": "https://landlordapp.io/favicon.svg" }
+  },
+  "mainEntityOfPage": "https://landlordapp.io/blog/***slug***.html"
+}
+</script>
+
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/blog/_blog-base.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container-wide nav-inner">
+    <a class="nav-brand" href="/">
+      <span class="dot">🏠</span><span>LandlordApp<span style="color:var(--green)">.io</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#pricing">Pricing</a>
+      <a href="/blog/">Blog</a>
+      <a class="cta" href="/app">Open app →</a>
+    </div>
+  </div>
+</nav>
+
+<article class="post">
+  <div class="container">
+
+    <!-- Meta chips: category + date + read-time -->
+    <div class="post-meta">
+      <span class="chip">*** Category ***</span>
+      <span>Published 2026-04-25</span>
+      <span>·</span>
+      <span>*** X min read ***</span>
+      <span>·</span>
+      <span>By Gleydson</span>
+    </div>
+
+    <!-- H1 — only ONE per page. Use <em>...</em> on 1-3 words to highlight in accent colour. -->
+    <h1>*** Your headline, with <em>italic accent</em> on the key phrase. ***</h1>
+
+    <!-- Lede paragraph. Set the problem, the reader, and the payoff of reading in 2-3 sentences. -->
+    <p class="lede">
+      *** Opening paragraph. Write it like a newspaper lede — who is this for, what problem
+      does it solve, and why should they keep reading. Keep under 60 words. ***
+    </p>
+
+    <!-- Optional hero image. Comment out if not needed. -->
+    <!--
+    <img src="/blog/images/your-image.jpg" alt="Descriptive alt text (important for SEO + accessibility)">
+    -->
+
+    <!-- ── BODY CONTENT ─────────────────────────────────────────── -->
+
+    <h2>Use H2 for the main sections of the post</h2>
+
+    <p>
+      Write paragraphs like a human. Short sentences. Strong opinions. Specific numbers.
+      Avoid "In today's fast-paced world" and every AI-slop opener. Readers can smell it.
+    </p>
+
+    <p>
+      When referencing features, link directly — e.g. check our
+      <a href="/operators/hmo-landlords.html">HMO landlord tools</a> or
+      <a href="/operators/service-accommodation.html">Service Accommodation module</a>.
+      Inbound links between blog posts and operator pages help SEO.
+    </p>
+
+    <h3>Use H3 for subsections inside a section</h3>
+
+    <p>
+      You can use <strong>bold</strong> for emphasis inside a paragraph, but sparingly.
+      <code>inline code</code> works if you're writing anything technical.
+    </p>
+
+    <ul>
+      <li>Bullet lists break up dense text — great for feature enumerations or steps.</li>
+      <li>Keep each bullet one line where possible. Two at most.</li>
+      <li>Three to seven bullets reads best; longer lists become noise.</li>
+    </ul>
+
+    <blockquote>
+      Pull-quotes are for the single best line of the post. Use them once, sparingly.
+      They work well under a heading to set a section's tone.
+    </blockquote>
+
+    <h2>A good post ends with a clear takeaway</h2>
+
+    <p>
+      Close with the one thing you want the reader to do or believe. If they only skim,
+      the closing paragraph is what they'll actually read.
+    </p>
+
+    <!-- ── CTA BOX AT END ─────────────────────────────────────────── -->
+    <div class="post-cta">
+      <h3>Want this in one dashboard?</h3>
+      <p>LandlordApp.io is free forever for up to 3 properties. No credit card, no trial clock.</p>
+      <a class="btn" href="/app">Open the app</a>
+    </div>
+
+    <!-- ── RELATED POSTS ─────────────────────────────────────────── -->
+    <div class="related-posts">
+      <h4>Keep reading</h4>
+      <div class="post-grid">
+        <!-- Replace these with 2-3 actual related posts. Remove the block if you don't have any yet. -->
+        <a class="post-card" href="/operators/hmo-landlords.html">
+          <div class="cover">🏘️</div>
+          <div class="body">
+            <span class="category">HMO landlords</span>
+            <h3>How LandlordApp helps HMO operators</h3>
+            <p class="excerpt">Room-first portfolio tracking, compliance calendar, contractor workflows.</p>
+          </div>
+        </a>
+        <a class="post-card" href="/operators/service-accommodation.html">
+          <div class="cover">🛏️</div>
+          <div class="body">
+            <span class="category">Service Accommodation</span>
+            <h3>Hybrid SA + HMO, finally in one place</h3>
+            <p class="excerpt">Track Airbnb income alongside tenancy rent on the same P&amp;L.</p>
+          </div>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</article>
+
+<footer class="ft">
+  <div class="container-wide">
+    <div class="ft-grid">
+      <div class="ft-col">
+        <div class="ft-brand"><span class="dot">🏠</span><span>LandlordApp.io</span></div>
+        <p style="color:rgba(255,255,255,.55);font-size:.88rem;max-width:320px">Built for HMO &amp; R2R operators who mean business. Free forever for up to 3 properties.</p>
+      </div>
+      <div class="ft-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="/#features">Features</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+          <li><a href="/#how">How it works</a></li>
+          <li><a href="/app">Live demo</a></li>
+        </ul>
+      </div>
+      <div class="ft-col">
+        <h4>Operators</h4>
+        <ul>
+          <li><a href="/operators/hmo-landlords.html">HMO Landlords</a></li>
+          <li><a href="/operators/r2r-operators.html">R2R Operators</a></li>
+          <li><a href="/operators/letting-agents.html">Letting Agents</a></li>
+          <li><a href="/operators/portfolio-managers.html">Portfolio Managers</a></li>
+          <li><a href="/operators/service-accommodation.html">Service Accommodation</a></li>
+        </ul>
+      </div>
+      <div class="ft-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/blog/">Blog</a></li>
+          <li><a href="mailto:support@landlordapp.io">Support</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="ft-bottom">
+      <span>© LandlordApp.io — all rights reserved.</span>
+      <span>Built by operators, for operators.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

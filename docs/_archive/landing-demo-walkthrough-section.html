@@ -1,0 +1,110 @@
+<!--
+  ARCHIVED: Live Walkthrough section from public/propmanager-landing.html
+  Archived: 2026-05-05
+  Replaced by: YouTube embed in the same <section id="preview">
+
+  HOW TO RESTORE:
+    1. Open public/propmanager-landing.html
+    2. Find <section id="preview"> and replace the entire section (until </section>)
+       with the markup below.
+    3. The standalone walkthrough page itself still lives at public/demo-walkthrough.html
+       — restoring this section is enough; no other file needs to be touched.
+
+  The section below is the verbatim markup that lived between the comment
+  "<!-- ── LIVE DEMO ── -->" and the closing "</section>" tag (originally
+  propmanager-landing.html lines 1119-1211).
+-->
+
+<!-- ── LIVE DEMO ─────────────────────────────────────────────── -->
+<section id="preview" style="background:linear-gradient(180deg,#0a1510 0%,#0d1c14 100%);padding:80px 0 0;position:relative;overflow:hidden;">
+
+  <!-- Subtle top glow -->
+  <div style="position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(0,184,148,.18) 0%,transparent 70%);pointer-events:none;"></div>
+
+  <div style="max-width:860px;margin:0 auto;padding:0 clamp(20px,5vw,48px);position:relative;z-index:1;">
+    <div class="section-header fade-up" style="margin-bottom:44px;">
+      <div class="t-eyebrow" style="color:var(--green);">Live walkthrough</div>
+      <h2 class="t-section" style="color:#fff;">See the whole platform <em>in action.</em></h2>
+      <p class="t-sub" style="margin:0 auto;color:rgba(255,255,255,.6);">Auto-playing tour — Dashboard, Properties, Tenants, Rent Collection, Reports, and the AI Agent.</p>
+    </div>
+  </div>
+
+  <!-- Desktop: interactive walkthrough iframe rendered at native width.
+       Mobile: same desktop walkthrough, rendered at fixed desktop width (1280px)
+       then scaled down via CSS transform so the entire desktop UI fits the mobile
+       viewport without cropping. Gives mobile visitors a miniature of the real
+       desktop experience rather than a second mobile-shaped mockup. -->
+  <div class="fade-up" id="walkthrough-wrap" style="position:relative;margin-top:8px;overflow:hidden;">
+    <div id="walkthrough-scaler" style="transform-origin:top left;">
+      <iframe
+        id="walkthrough-iframe"
+        src="about:blank"
+        data-desktop-src="/demo-walkthrough.html"
+        style="border:none;display:block;box-shadow:0 -8px 40px rgba(0,0,0,.4);"
+        title="LandlordApp Live Demo"
+        loading="lazy"
+        allow="autoplay">
+      </iframe>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var wrap    = document.getElementById('walkthrough-wrap');
+      var scaler  = document.getElementById('walkthrough-scaler');
+      var iframe  = document.getElementById('walkthrough-iframe');
+      if(!iframe || !wrap || !scaler) return;
+
+      // Native dimensions of the desktop walkthrough at full size.
+      var NATIVE_W = 1280;
+      var NATIVE_H = 760;
+
+      var _srcLoaded = false;
+      function loadIframeSrcIfNeeded(){
+        if(_srcLoaded) return;
+        var desired = iframe.dataset.desktopSrc;
+        var currentPath = '';
+        try { currentPath = new URL(iframe.src, location.href).pathname; } catch(e) {}
+        if(currentPath !== desired) iframe.src = desired;
+        _srcLoaded = true;
+      }
+      // Only fetch the heavy walkthrough HTML when the user is near the preview section —
+      // keeps TTI fast for visitors who never scroll past the hero.
+      if('IntersectionObserver' in window){
+        var io = new IntersectionObserver(function(entries){
+          entries.forEach(function(e){
+            if(e.isIntersecting){ loadIframeSrcIfNeeded(); io.disconnect(); }
+          });
+        }, { rootMargin: '400px 0px' });
+        io.observe(wrap);
+      } else {
+        // Fallback: load on first scroll.
+        var onScrollOnce = function(){ loadIframeSrcIfNeeded(); window.removeEventListener('scroll', onScrollOnce); };
+        window.addEventListener('scroll', onScrollOnce, { passive: true, once: true });
+      }
+
+      function sync(){
+        var isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+        if(isMobile){
+          // Render at native desktop size, scale to fit viewport width.
+          var wrapW  = wrap.clientWidth || window.innerWidth;
+          var scale  = Math.min(1, wrapW / NATIVE_W);
+          iframe.style.width  = NATIVE_W + 'px';
+          iframe.style.height = NATIVE_H + 'px';
+          scaler.style.transform = 'scale(' + scale + ')';
+          // Container height = scaled iframe height (scale consumes visual space only, not layout).
+          wrap.style.height = Math.round(NATIVE_H * scale) + 'px';
+        } else {
+          // Desktop: iframe at 100% width, clamped height. No scaling.
+          iframe.style.width  = '100%';
+          iframe.style.height = 'clamp(480px, 58vw, 720px)';
+          scaler.style.transform = 'none';
+          wrap.style.height = 'auto';
+        }
+      }
+      sync();
+      var t;
+      window.addEventListener('resize', function(){ clearTimeout(t); t = setTimeout(sync, 120); });
+    })();
+  </script>
+</section>

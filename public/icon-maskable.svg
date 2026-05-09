@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LandlordApp.io">
+  <!-- Maskable icon — house shrunk into the inner 80% safe zone (per W3C
+       maskable-icon spec) so Chrome / Android can clip to any adaptive shape
+       (circle, squircle, rounded square) without losing the logo. -->
+  <rect width="512" height="512" fill="#0B0D12"/>
+  <!-- Subtle radial brand glow so the green background isn't completely flat. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="55%" r="60%">
+      <stop offset="0%" stop-color="#16252A"/>
+      <stop offset="100%" stop-color="#0B0D12"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- House icon centered in the inner 60% of the canvas (256px wide). -->
+  <g transform="translate(128 128)">
+    <path d="M0 120 L128 16 L256 120 V232 C256 244 246 254 234 254 H22 C10 254 0 244 0 232 V120 Z" fill="#00D897"/>
+    <rect x="98" y="160" width="60" height="94" rx="10" fill="#0B0D12"/>
+    <rect x="42" y="142" width="40" height="40" rx="6" fill="#0B0D12"/>
+    <rect x="174" y="142" width="40" height="40" rx="6" fill="#0B0D12"/>
+  </g>
+</svg>

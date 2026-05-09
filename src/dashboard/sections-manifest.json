@@ -1,0 +1,209 @@
+{
+  "generatedFrom": "public/js/dashboard-app.js",
+  "sections": [
+    {
+      "file": "sections/01-restore-persisted-user-data-immediately-before-async-loadsta.js",
+      "title": "Restore persisted user data immediately (before async loadState)"
+    },
+    {
+      "file": "sections/02-helpers.js",
+      "title": "HELPERS"
+    },
+    {
+      "file": "sections/03-nav.js",
+      "title": "NAV"
+    },
+    {
+      "file": "sections/04-auth-org-provisioning.js",
+      "title": "Auth & Org provisioning"
+    },
+    {
+      "file": "sections/05-row-app-object-mappers.js",
+      "title": "Row → App object mappers"
+    },
+    {
+      "file": "sections/06-app-object-row-mappers.js",
+      "title": "App object → Row mappers"
+    },
+    {
+      "file": "sections/07-delete-helper.js",
+      "title": "Delete helper"
+    },
+    {
+      "file": "sections/08-data-attribute-bridge-functions-avoid-onclick-quoting-issues.js",
+      "title": "Data-attribute bridge functions (avoid onclick quoting issues)"
+    },
+    {
+      "file": "sections/09-room-media-bridge-functions-id-based-avoids-quoting-issues.js",
+      "title": "Room media bridge functions (id-based, avoids quoting issues)"
+    },
+    {
+      "file": "sections/10-dashboard.js",
+      "title": "DASHBOARD"
+    },
+    {
+      "file": "sections/11-tenants.js",
+      "title": "TENANTS"
+    },
+    {
+      "file": "sections/12-rent.js",
+      "title": "RENT"
+    },
+    {
+      "file": "sections/13-maintenance.js",
+      "title": "MAINTENANCE"
+    },
+    {
+      "file": "sections/14-actions.js",
+      "title": "ACTIONS"
+    },
+    {
+      "file": "sections/15-modals.js",
+      "title": "MODALS"
+    },
+    {
+      "file": "sections/16-property-detail-modal.js",
+      "title": "PROPERTY DETAIL MODAL"
+    },
+    {
+      "file": "sections/17-maintenance-edit.js",
+      "title": "MAINTENANCE EDIT"
+    },
+    {
+      "file": "sections/18-payment-edit.js",
+      "title": "PAYMENT EDIT"
+    },
+    {
+      "file": "sections/19-deal-analyzer.js",
+      "title": "DEAL ANALYZER"
+    },
+    {
+      "file": "sections/20-room-photo-sync-runs-in-background-does-not-block-startup.js",
+      "title": "Room photo sync — runs in background, does NOT block startup"
+    },
+    {
+      "file": "sections/21-landlords-page.js",
+      "title": "LANDLORDS PAGE"
+    },
+    {
+      "file": "sections/22-landlord-payment-schedule.js",
+      "title": "LANDLORD PAYMENT SCHEDULE"
+    },
+    {
+      "file": "sections/23-rooms-page.js",
+      "title": "ROOMS PAGE"
+    },
+    {
+      "file": "sections/24-import-page.js",
+      "title": "IMPORT PAGE"
+    },
+    {
+      "file": "sections/25-properties-import.js",
+      "title": "PROPERTIES IMPORT"
+    },
+    {
+      "file": "sections/26-tenants-import.js",
+      "title": "TENANTS IMPORT"
+    },
+    {
+      "file": "sections/27-file-handlers.js",
+      "title": "FILE HANDLERS"
+    },
+    {
+      "file": "sections/28-confirm-imports.js",
+      "title": "CONFIRM IMPORTS"
+    },
+    {
+      "file": "sections/29-users-page.js",
+      "title": "USERS PAGE"
+    },
+    {
+      "file": "sections/30-void-tracker.js",
+      "title": "VOID TRACKER"
+    },
+    {
+      "file": "sections/31-tenancy-agreement.js",
+      "title": "TENANCY AGREEMENT"
+    },
+    {
+      "file": "sections/32-excluded-licence-agreement.js",
+      "title": "EXCLUDED LICENCE AGREEMENT"
+    },
+    {
+      "file": "sections/33-room-media-helpers.js",
+      "title": "ROOM MEDIA HELPERS"
+    },
+    {
+      "file": "sections/34-tenant-document-vault.js",
+      "title": "TENANT DOCUMENT VAULT"
+    },
+    {
+      "file": "sections/35-export-import.js",
+      "title": "EXPORT / IMPORT"
+    },
+    {
+      "file": "sections/36-ai-portfolio-agent.js",
+      "title": "AI PORTFOLIO AGENT"
+    },
+    {
+      "file": "sections/37-deal-analyzer-local-scoring-engine.js",
+      "title": "DEAL ANALYZER: local scoring engine"
+    },
+    {
+      "file": "sections/38-shared-render-for-local-deal-output.js",
+      "title": "Shared render for local deal output"
+    },
+    {
+      "file": "sections/39-dashboard-local-portfolio-intelligence-engine.js",
+      "title": "DASHBOARD: local portfolio intelligence engine"
+    },
+    {
+      "file": "sections/40-global-search.js",
+      "title": "GLOBAL SEARCH"
+    },
+    {
+      "file": "sections/41-reports-page.js",
+      "title": "REPORTS PAGE"
+    },
+    {
+      "file": "sections/42-p-l-report.js",
+      "title": "P&L Report"
+    },
+    {
+      "file": "sections/43-arrears-report.js",
+      "title": "Arrears Report"
+    },
+    {
+      "file": "sections/44-cash-flow-report.js",
+      "title": "Cash Flow Report"
+    },
+    {
+      "file": "sections/45-forecast-report.js",
+      "title": "Forecast Report"
+    },
+    {
+      "file": "sections/46-csv-export.js",
+      "title": "CSV Export"
+    },
+    {
+      "file": "sections/47-persistence.js",
+      "title": "PERSISTENCE"
+    },
+    {
+      "file": "sections/48-savestate-debounced-upsert-to-supabase.js",
+      "title": "saveState: debounced upsert to Supabase"
+    },
+    {
+      "file": "sections/49-loadstate-fetch-all-data-from-supabase.js",
+      "title": "loadState: fetch all data from Supabase"
+    },
+    {
+      "file": "sections/50-send-maintenance-job-to-contractor.js",
+      "title": "Send maintenance job to contractor"
+    },
+    {
+      "file": "sections/51-export-import.js",
+      "title": "EXPORT / IMPORT"
+    }
+  ]
+}

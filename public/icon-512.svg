@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LandlordApp.io">
+  <!-- Full-bleed badge — used for "any" purpose icons. -->
+  <rect width="512" height="512" rx="112" fill="#0B0D12"/>
+  <path d="M96 240 L256 112 L416 240 V400 C416 417.6 401.6 432 384 432 H128 C110.4 432 96 417.6 96 400 V240 Z" fill="#00D897"/>
+  <rect x="216" y="296" width="80" height="136" rx="14" fill="#0B0D12"/>
+  <rect x="144" y="272" width="56" height="56" rx="9" fill="#0B0D12"/>
+  <rect x="312" y="272" width="56" height="56" rx="9" fill="#0B0D12"/>
+</svg>
